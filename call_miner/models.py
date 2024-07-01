@@ -3,6 +3,8 @@ from django.utils.text import slugify
 
 
 class SlugMixin(models.Model):
+    """Abstract model with a slug field"""
+
     slug = models.SlugField(default="", unique=True, null=False)
     name = models.CharField(max_length=100)
 
@@ -10,6 +12,7 @@ class SlugMixin(models.Model):
         abstract = True
 
     def save(self, *args, **kwargs):
+        """Defines the slug making sure that no duplicates within the organization exist"""
         if not self.slug:
             if hasattr(self, 'organization') and self.organization:
                 base_slug = slugify(f'{self.name}-{self.organization}')
@@ -24,8 +27,11 @@ class SlugMixin(models.Model):
         super().save(*args, **kwargs)
 
 
-# Organization: Separates the app data according to the company making use of the app
 class Organization(SlugMixin, models.Model):
+    """
+    Organization: One of the many organizations that make use of the app. Separates the data for every group of users
+    """
+
     name = models.CharField(max_length=100, unique=True, null=False)
 
     def __str__(self):
@@ -36,6 +42,11 @@ class Organization(SlugMixin, models.Model):
 
 
 class Topic(models.Model):
+    """
+    Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
+    multi-label classification task.
+    """
+
     name = models.CharField(max_length=100)
     description = models.TextField()
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='topics')
@@ -50,10 +61,8 @@ class Topic(models.Model):
         ]
 
 
-
-
-# Agent: One of the many agents belonging to an organization
 class Agent(SlugMixin, models.Model):
+    """Agent: One of the many agents belonging to an organization. In charge of making the calls"""
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='agents')
 
     def __str__(self):
@@ -66,9 +75,11 @@ class Agent(SlugMixin, models.Model):
         ]
 
 
-# Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
-# Calls act as a bridge between agents and customers
 class Customer(SlugMixin, models.Model):
+    """
+    Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
+    Calls act as a bridge between agents and customers
+    """
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
 
     class Meta:
@@ -81,28 +92,28 @@ class Customer(SlugMixin, models.Model):
         return self.name
 
 
-# Call: One of the many calls belonging to a customer and an agent.
-# Among its attributes, it contains the path to the call recording, the call date and time, the call duration, the call
-# transcript, the call topics mentioned, and the call sentiment
-class Call(models.Model):
+class Conversation(models.Model):
+    """
+    Conversation: One of the many calls belonging to a customer and an agent.
+    Among its attributes, it contains the path to the call recording, the call date and time, the call duration,
+    the call transcript, the call topics mentioned, and the call sentiment
+    """
     path = models.CharField(max_length=100)
     date = models.DateTimeField(auto_now_add=True)
     duration = models.FloatField()
     transcript = models.TextField()
     sentiment = models.FloatField(max_length=100)
     summary = models.TextField(blank=True)
-    topics = models.ManyToManyField(Topic, related_name='calls')
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='calls')
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='calls')
+    topics = models.ManyToManyField(Topic, related_name='conversations')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='conversations')
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='conversations')
 
     def __str__(self):
         return self.path
 
     class Meta:
-        verbose_name_plural = "Calls"
+        verbose_name_plural = "Conversations"
         indexes = [
             models.Index(fields=['customer']),
             models.Index(fields=['agent']),
         ]
-
-
