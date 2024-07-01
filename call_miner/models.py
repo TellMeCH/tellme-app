@@ -92,9 +92,9 @@ class Customer(SlugMixin, models.Model):
         return self.name
 
 
-class Call(models.Model):
+class Conversation(models.Model):
     """
-    Call: One of the many calls belonging to a customer and an agent.
+    Conversation: One of the many calls belonging to a customer and an agent.
     Among its attributes, it contains the path to the call recording, the call date and time, the call duration,
     the call transcript, the call topics mentioned, and the call sentiment
     """
@@ -104,15 +104,15 @@ class Call(models.Model):
     transcript = models.TextField()
     sentiment = models.FloatField(max_length=100)
     summary = models.TextField(blank=True)
-    topics = models.ManyToManyField(Topic, related_name='calls')
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='calls')
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='calls')
+    topics = models.ManyToManyField(Topic, related_name='conversations')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='conversations')
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='conversations')
 
     def __str__(self):
         return self.path
 
     class Meta:
-        verbose_name_plural = "Calls"
+        verbose_name_plural = "Conversations"
         indexes = [
             models.Index(fields=['customer']),
             models.Index(fields=['agent']),

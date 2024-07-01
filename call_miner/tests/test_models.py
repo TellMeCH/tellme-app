@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from call_miner.models import Organization, Topic, Agent, Customer, Call
+from call_miner.models import Organization, Topic, Agent, Customer, Conversation
 
 
 class TestOrganization(TestCase):
@@ -114,8 +114,8 @@ class TestCall(TestCase):
         self.customer = Customer.objects.create(name="Test Customer", organization=self.organization)
         self.topic = Topic.objects.create(name="Test Topic", description="Test Description",
                                           organization=self.organization)
-        self.call = Call.objects.create(path="Test Call", duration=60, transcript="Test transcript",
-                                        sentiment=0.5, customer=self.customer, agent=self.agent)
+        self.call = Conversation.objects.create(path="Test Call", duration=60, transcript="Test transcript",
+                                                sentiment=0.5, customer=self.customer, agent=self.agent)
         self.call.topics.add(self.topic)
 
     def test_call_creation(self):
@@ -125,8 +125,8 @@ class TestCall(TestCase):
 
     def test_call_validation(self):
         """Test that the object is created when an organization is provided"""
-        call = Call(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                    customer=self.customer, agent=self.agent)
+        call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
+                            customer=self.customer, agent=self.agent)
         call.full_clean()
 
     def test_call_str(self):
@@ -135,14 +135,14 @@ class TestCall(TestCase):
 
     def test_call_customer_required(self):
         """Test that the call requires a customer to be defined"""
-        call = Call(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                    agent=self.agent)
+        call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
+                            agent=self.agent)
         with self.assertRaises(ValidationError):
             call.full_clean()
 
     def test_call_agent_required(self):
         """Test that the call requires an agent to be defined"""
-        call = Call(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                    customer=self.customer)
+        call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
+                            customer=self.customer)
         with self.assertRaises(ValidationError):
             call.full_clean()
