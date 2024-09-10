@@ -6,7 +6,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from call_miner.utils.summary_mining import condense_summaries
 
 
-class SlugMixin(models.Model):
+class SlugAbstractModel(models.Model):
     """Abstract model with a slug field"""
 
     slug = models.SlugField(default="", unique=True, null=False)
@@ -63,7 +63,7 @@ class MetaSummaryMixin:
         return meta_summary.get_summary()
 
 
-class Organization(SlugMixin, models.Model):
+class Organization(SlugAbstractModel):
     """
     Organization: One of the many organizations that make use of the app. Separates the data for every group of users
     """
@@ -77,7 +77,7 @@ class Organization(SlugMixin, models.Model):
         verbose_name_plural = "Organizations"
 
 
-class Topic(SlugMixin, MetaSummaryMixin, models.Model):
+class Topic(SlugAbstractModel, MetaSummaryMixin):
     """
     Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
     multi-label classification task.
@@ -133,7 +133,7 @@ class Manager(models.Model):
         ]
 
 
-class Agent(SlugMixin, MetaSummaryMixin, models.Model):
+class Agent(SlugAbstractModel, MetaSummaryMixin):
     """
     Agent: One of the many agents belonging to an organization. In charge of making the calls.
     Each agent belongs to one or more managers.
@@ -150,7 +150,7 @@ class Agent(SlugMixin, MetaSummaryMixin, models.Model):
         ]
 
 
-class Customer(SlugMixin, MetaSummaryMixin, models.Model):
+class Customer(SlugAbstractModel, MetaSummaryMixin):
     """
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
