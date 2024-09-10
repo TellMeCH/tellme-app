@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Detail</title>
+    <style>
+        .agent-message {
+            color: blue;  /* Color for agent's messages */
+            font-weight: bold;
+        }
+        .customer-message {
+            color: green;  /* Color for customer's messages */
+            font-weight: bold;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Title: Agent, Customer and Call Date -->
+    <h1>Call between {{ agent.name }} (Agent) and {{ customer.name }} (Customer) on {{ date|date:"F j, Y" }}</h1>
+
+    <!-- Call Summary -->
+    <section>
+        <h2>Summary</h2>
+        <p>{{ summary }}</p>
+    </section>
+
+    <!-- Topics Discussed -->
+    <section>
+        <h2>Topics Discussed</h2>
+        <ul>
+            {% for topic in topics %}
+                <li>{{ topic.name }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    <!-- Transcript -->
+    <section>
+        <h2>Transcript</h2>
+        <div>
+            {% for entry in transcript %}
+                <div class="message {{ entry.class }}">
+                    <span>{{ entry.speaker }}</span>
+                    <span>{{ entry.message }}</span>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+</body>
+</html>
