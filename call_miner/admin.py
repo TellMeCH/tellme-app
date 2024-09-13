@@ -5,12 +5,14 @@ from .models import Organization, Topic, Analyst, Manager, Agent, Customer, Conv
 class OrganizationAdmin(admin.ModelAdmin):
     list_display = ['name']  # Only the name is available
     search_fields = ['name']  # Allow searching by name
+    readonly_fields = ['slug']
 
 
 class TopicAdmin(admin.ModelAdmin):
     list_display = ['name', 'organization', 'description']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
+    readonly_fields = ['slug']
 
 
 class AnalystAdmin(admin.ModelAdmin):
@@ -26,15 +28,17 @@ class ManagerAdmin(admin.ModelAdmin):
 
 
 class AgentAdmin(admin.ModelAdmin):
-    list_display = ['name', 'organization', 'slug']
+    list_display = ['name', 'organization']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
+    readonly_fields = ['slug']
 
 
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['name', 'organization', 'slug']
+    list_display = ['name', 'organization']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
+    readonly_fields = ['slug']
 
 
 class ConversationAdmin(admin.ModelAdmin):

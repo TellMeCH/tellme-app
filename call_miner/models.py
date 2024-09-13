@@ -9,7 +9,7 @@ from call_miner.utils.summary_mining import condense_summaries
 class SlugAbstractModel(models.Model):
     """Abstract model with a slug field"""
 
-    slug = models.SlugField(default="", unique=True, null=False)
+    slug = models.SlugField(default="", unique=True, null=True)
     name = models.CharField(max_length=100)
 
     class Meta:
