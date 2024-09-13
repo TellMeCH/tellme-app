@@ -1,148 +1,227 @@
-from django.test import TestCase
+import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from call_miner.models import Organization, Topic, Agent, Customer, Conversation
+from call_miner.models import Organization, Topic, Agent, Customer, Conversation, Manager, MetaSummary
+from django.contrib.contenttypes.models import ContentType
 
 
-class TestOrganization(TestCase):
+class TestCaseMixin:
     def setUp(self):
+        """Shared setup method for creating base objects"""
+        self.organization = Organization.objects.create(name="Test Organization")
+        self.agent = Agent.objects.create(name="Test Agent", organization=self.organization)
+        self.customer = Customer.objects.create(name="Test Customer", organization=self.organization)
+        self.call = Conversation.objects.create(
+            path="Test Call",
+            duration=60,
+            transcript="Test transcript",
+            sentiment=0.5,
+            summary="Test Summary",
+            customer=self.customer,
+            agent=self.agent,
+            input_tokens=10,
+            output_tokens=20
+        )
+
+
+@pytest.mark.django_db
+class TestOrganization:
+    def setup_method(self):
         self.organization = Organization.objects.create(name="Test Organization")
 
     def test_organization_creation(self):
         """Test the adequate creation of organization attributes"""
-        self.assertEqual(self.organization.name, "Test Organization")
-        self.assertEqual(self.organization.slug, "test-organization")
+        assert self.organization.name == "Test Organization"
+        assert self.organization.slug == 'test-organization'
 
     def test_organization_name_uniqueness(self):
         """Test the error raised when two organizations have the same name"""
-        with self.assertRaises(IntegrityError):
+        with pytest.raises(IntegrityError):
             Organization.objects.create(name="Test Organization")
 
 
-class TestTopic(TestCase):
-    def setUp(self):
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.topic = Topic.objects.create(name="Test Topic", description="Test Description",
-                                          organization=self.organization)
+@pytest.mark.django_db
+class TestTopic(TestCaseMixin):
+    def setup_method(self):
+        self.setUp()
+        self.topic = Topic.objects.create(
+            name="Test Topic",
+            description="Test Description",
+            organization=self.organization
+        )
+        self.call.topics.add(self.topic)
 
     def test_topic_creation(self):
         """Test the adequate creation of topic attributes"""
-        self.assertEqual(self.topic.name, "Test Topic")
-        self.assertEqual(self.topic.description, "Test Description")
-        self.assertEqual(str(self.topic), "Test Topic")
+        assert self.topic.name == "Test Topic"
+        assert self.topic.description == "Test Description"
+        assert self.topic.slug == 'topic-test-topic-test-organization'
+        assert str(self.topic) == "Test Topic"
 
     def test_topic_unique_together(self):
         """Test that two topics cannot have the same name in the same organization"""
-        with self.assertRaises(IntegrityError):
+        with pytest.raises(IntegrityError):
             Topic.objects.create(name="Test Topic", description="Another Description", organization=self.organization)
 
+    def test_topic_meta_summary_creation(self, mocker):
+        """Test that the MetaSummary for the topic can be created or retrieved if it has associated calls"""
+        # Mock the `condense_summaries` function
+        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
+        summary = self.topic.get_or_create_meta_summary()
+        assert summary == "Mocked Summary"
 
-# Test all the basic functionalities of the Agent model
-class TestAgent(TestCase):
-    def setUp(self):
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.agent = Agent.objects.create(name="Test Agent", organization=self.organization)
+
+@pytest.mark.django_db
+class TestAgent(TestCaseMixin):
+    def setup_method(self):
+        self.setUp()
 
     def test_agent_organization_required(self):
         """Test that an organization is required in order to create an agent"""
         agent = Agent(name="Test Agent")
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             agent.full_clean()
 
     def test_agent_str(self):
         """Test that the name of the agent is used in the str representation of the object"""
-        self.assertEqual(str(self.agent), "Test Agent")
+        assert str(self.agent) == "Test Agent"
 
     def test_agent_creation(self):
         """Test that the object is created when an organization is provided"""
-        self.assertEqual(self.agent.name, "Test Agent")
-        self.assertEqual(self.agent.slug, "test-agent-test-organization")
+        assert self.agent.name == "Test Agent"
+        assert self.agent.slug == 'agent-test-agent-test-organization'
 
     def test_agent_duplicate_slugs(self):
         """Test that the slug of two agents in the same organization with the same name are not the same"""
         agent_2 = Agent.objects.create(name="Test Agent", organization=self.organization)
-        self.assertEqual(agent_2.slug, "test-agent-test-organization-1")
+        assert agent_2.slug == 'agent-test-agent-test-organization-1'
 
     def test_agent_slugs_with_different_organizations(self):
         """
         Test the agent slugs created when multiple instances with the same name and different organization are created
         """
-        org2 = Organization.objects.create(name="Test Organization 2")
+        org2 = Organization.objects.create(name="Test Organization 1")
         agent_2 = Agent.objects.create(name="Test Agent", organization=org2)
-        self.assertEqual(agent_2.slug, "test-agent-test-organization-2")
+        assert agent_2.slug == 'agent-test-agent-test-organization-1'
+
+        agent_3 = Agent.objects.create(name="Test Agent", organization=self.organization)
+        assert agent_3.slug == 'agent-test-agent-test-organization-2'
+
+        agent_4 = Agent.objects.create(name="Test Agent", organization=org2)
+        assert agent_4.slug == 'agent-test-agent-test-organization-1-1'
+
+    def test_agent_meta_summary_creation(self, mocker):
+        """Test that the MetaSummary for the agent can be created or retrieved if it has associated calls"""
+        # Mock the `condense_summaries` function
+        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
+        summary = self.agent.get_or_create_meta_summary()
+        assert summary == "Mocked Summary"
 
 
-class TestCustomer(TestCase):
-    def setUp(self):
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.customer = Customer.objects.create(name="Test Customer", organization=self.organization)
+@pytest.mark.django_db
+class TestCustomer(TestCaseMixin):
+    def setup_method(self):
+        self.setUp()
 
     def test_customer_organization_required(self):
         """Test that it is necessary for a customer to have an organization to be created"""
         customer = Customer(name="Test Customer")
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             customer.full_clean()
 
     def test_customer_creation(self):
         """Test that the object is created when an organization is provided"""
-        self.assertEqual(self.customer.name, "Test Customer")
-        self.assertEqual(self.customer.slug, "test-customer-test-organization")
+        assert self.customer.name == "Test Customer"
+        assert self.customer.slug == 'customer-test-customer-test-organization'
 
     def test_customer_str(self):
         """Test that the name of the customer is used in the str representation of the object"""
-        self.assertEqual(str(self.customer), "Test Customer")
+        assert str(self.customer) == "Test Customer"
 
     def test_customer_duplicate_slugs(self):
         """Test that the slug of two customers in the same organization with the same name are not the same"""
         customer_2 = Customer.objects.create(name="Test Customer", organization=self.organization)
-        self.assertEqual(customer_2.slug, "test-customer-test-organization-1")
+        assert customer_2.slug == 'customer-test-customer-test-organization-1'
 
     def test_customer_slugs_with_different_organizations(self):
         """
-        Test the customer slugs created when multiple instances with the same name and different organization are
-        created
+        Test the customer slugs created when multiple instances with the same name and different organization are created
         """
         org2 = Organization.objects.create(name="Test Organization 2")
         customer_2 = Customer.objects.create(name="Test Customer", organization=org2)
-        self.assertEqual(customer_2.slug, "test-customer-test-organization-2")
+        assert customer_2.slug == 'customer-test-customer-test-organization-2'
+
+    def test_customer_meta_summary_creation(self, mocker):
+        """Test that the MetaSummary for the customer can be created or retrieved if it has associated calls"""
+        # Mock the `condense_summaries` function
+        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
+        summary = self.customer.get_or_create_meta_summary()
+        assert summary == "Mocked Summary"
 
 
-class TestCall(TestCase):
-    def setUp(self):
+@pytest.mark.django_db
+class TestManager:
+    def setup_method(self):
         self.organization = Organization.objects.create(name="Test Organization")
-        self.agent = Agent.objects.create(name="Test Agent", organization=self.organization)
-        self.customer = Customer.objects.create(name="Test Customer", organization=self.organization)
-        self.topic = Topic.objects.create(name="Test Topic", description="Test Description",
-                                          organization=self.organization)
-        self.call = Conversation.objects.create(path="Test Call", duration=60, transcript="Test transcript",
-                                                sentiment=0.5, customer=self.customer, agent=self.agent)
+        self.manager = Manager.objects.create(name="Test Manager", organization=self.organization)
+
+    def test_manager_creation(self):
+        """Test that the object is created when an organization is provided"""
+        assert self.manager.name == "Test Manager"
+        assert str(self.manager) == "Test Manager"
+
+
+@pytest.mark.django_db
+class TestCall(TestCaseMixin):
+    def setup_method(self):
+        self.setUp()
+        self.topic = Topic.objects.create(name="Test Topic", description="Test Description", organization=self.organization)
         self.call.topics.add(self.topic)
 
     def test_call_creation(self):
         """Test that the object is created when an organization is provided"""
-        self.assertEqual(self.call.path, "Test Call")
-        self.assertIn(self.topic, self.call.topics.all())
+        assert self.call.path == "Test Call"
+        assert self.topic in self.call.topics.all()
 
     def test_call_validation(self):
         """Test that the object is created when an organization is provided"""
         call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                            customer=self.customer, agent=self.agent)
+                            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10,
+                            output_tokens=20)
         call.full_clean()
 
     def test_call_str(self):
         """Test that the name of the call is used in the str representation"""
-        self.assertEqual(str(self.call), "Test Call")
+        assert str(self.call) == "Test Call"
 
     def test_call_customer_required(self):
         """Test that the call requires a customer to be defined"""
         call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                            agent=self.agent)
-        with self.assertRaises(ValidationError):
+                            summary="Valid Summary", input_tokens=10, output_tokens=20, agent=self.agent)
+        with pytest.raises(ValidationError):
             call.full_clean()
 
     def test_call_agent_required(self):
         """Test that the call requires an agent to be defined"""
         call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                            customer=self.customer)
-        with self.assertRaises(ValidationError):
+                            summary="Valid Summary", input_tokens=10, output_tokens=20, customer=self.customer)
+        with pytest.raises(ValidationError):
             call.full_clean()
+
+
+@pytest.mark.django_db
+class TestMetaSummary(TestCaseMixin):
+    def setup_method(self):
+        self.setUp()
+
+    def test_meta_summary_creation_for_agent(self):
+        """Test that a MetaSummary can be created and associated with an agent"""
+        content_type = ContentType.objects.get_for_model(Agent)
+        meta_summary = MetaSummary.objects.create(content_type=content_type, object_id=self.agent.id)
+        assert isinstance(meta_summary, MetaSummary)
+
+    def test_meta_summary_get_summary(self, mocker):
+        """Test that MetaSummary's get_summary method works when calls are associated"""
+        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
+        summary_text = self.agent.get_or_create_meta_summary()
+        assert summary_text == "Mocked Summary"
