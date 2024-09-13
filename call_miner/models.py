@@ -1,3 +1,4 @@
+import re
 from django.db import models
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
@@ -253,9 +254,7 @@ class Conversation(models.Model):
     output_tokens = models.IntegerField()
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='conversations')
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='conversations')
-
-    def __str__(self):
-        return self.path
+    processed_messages = models.JSONField(default=list, blank=True)
 
     class Meta:
         verbose_name_plural = "Conversations"
@@ -263,3 +262,33 @@ class Conversation(models.Model):
             models.Index(fields=['customer']),
             models.Index(fields=['agent']),
         ]
+
+    def __str__(self):
+        return self.path
+
+    def process_transcript(self):
+        """
+        This method processes the call transcript to separate it into messages.
+        """
+
+        # Split the transcript on "Agent:" and "Customer:", while keeping the labels as part of the results
+        # This regex will split the transcript based on "Agent:" or "Customer:" while preserving these words
+        messages = re.split(r'(?=(<agent>:|<customer>:))', self.transcript)
+
+        # Pair up the message and assign the appropriate class (agent or customer) for coloring
+        processed_messages = []
+        for i in range(1, len(messages), 2):  # We start at 1 because 0 is an empty string from the split
+            speaker = messages[i].strip()  # Either "Agent:" or "Customer:"
+            message_text = messages[i + 1][len(speaker):].strip()  # The message following the speaker identifier
+            processed_messages.append({
+                'message': message_text,
+                'class': 'agent-message' if speaker == '<agent>:' else 'customer-message'
+            })
+        self.processed_messages = processed_messages
+
+    def save(self, *args, **kwargs):
+        """
+        Add process_transcript to the default saving routine
+        """
+        self.process_transcript()
+        super().save(*args, **kwargs)

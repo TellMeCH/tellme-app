@@ -172,10 +172,11 @@ class TestManager:
 
 
 @pytest.mark.django_db
-class TestCall(TestCaseMixin):
+class TestConversation(TestCaseMixin):
     def setup_method(self):
         self.setUp()
-        self.topic = Topic.objects.create(name="Test Topic", description="Test Description", organization=self.organization)
+        self.topic = Topic.objects.create(name="Test Topic", description="Test Description",
+                                          organization=self.organization)
         self.call.topics.add(self.topic)
 
     def test_call_creation(self):
@@ -207,6 +208,62 @@ class TestCall(TestCaseMixin):
                             summary="Valid Summary", input_tokens=10, output_tokens=20, customer=self.customer)
         with pytest.raises(ValidationError):
             call.full_clean()
+
+    def test_process_transcript(self):
+        """Test that the process_transcript method correctly processes the transcript"""
+        transcript = "<agent>: Hello, how can I help you today? <customer>: I need help with my order."
+        call = Conversation(
+            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
+            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
+        )
+        call.process_transcript()
+
+        expected_processed_messages = [
+            {'message': 'Hello, how can I help you today?', 'class': 'agent-message'},
+            {'message': 'I need help with my order.', 'class': 'customer-message'}
+        ]
+
+        assert call.processed_messages == expected_processed_messages
+
+    def test_call_save_process_transcript(self):
+        """Test that the transcript is processed and saved with processed_messages when save is called"""
+        transcript = "<agent>: Hello. <customer>: Hi, I need help."
+        call = Conversation(
+            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
+            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
+        )
+        call.save()
+
+        assert call.processed_messages == [
+            {'message': 'Hello.', 'class': 'agent-message'},
+            {'message': 'Hi, I need help.', 'class': 'customer-message'}
+        ]
+
+    def test_process_transcript_invalid_format(self):
+        """Test how process_transcript handles transcripts with no Agent or Customer labels"""
+        transcript = "This is an invalid format message."
+        call = Conversation(
+            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
+            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
+        )
+        call.process_transcript()
+
+        assert call.processed_messages == []  # Ensure it handles the case with no Agent/Customer properly
+
+    def test_process_transcript_partial_labels(self):
+        """Test processing when there is only one speaker label"""
+        transcript = "<agent>: Hello, how can I assist you? No customer response here."
+        call = Conversation(
+            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
+            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
+        )
+        call.process_transcript()
+
+        expected_processed_messages = [
+            {'message': 'Hello, how can I assist you? No customer response here.', 'class': 'agent-message'}
+        ]
+
+        assert call.processed_messages == expected_processed_messages
 
 
 @pytest.mark.django_db
