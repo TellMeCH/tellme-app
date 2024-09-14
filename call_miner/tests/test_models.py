@@ -1,8 +1,7 @@
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from call_miner.models import Organization, Topic, Agent, Customer, Conversation, Manager, MetaSummary
-from django.contrib.contenttypes.models import ContentType
+from call_miner.models import Organization, Topic, Agent, Customer, Conversation, Manager
 
 
 class TestCaseMixin:
@@ -67,8 +66,11 @@ class TestTopic(TestCaseMixin):
         """Test that the MetaSummary for the topic can be created or retrieved if it has associated calls"""
         # Mock the `condense_summaries` function
         mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        summary = self.topic.get_or_create_meta_summary()
-        assert summary == "Mocked Summary"
+        self.topic.get_or_create_summary()
+
+        assert self.topic.summary == "Mocked Summary"
+        assert self.topic.summary_call_count == 1
+        assert self.topic.summary_date == self.call.date
 
 
 @pytest.mark.django_db
@@ -114,8 +116,11 @@ class TestAgent(TestCaseMixin):
         """Test that the MetaSummary for the agent can be created or retrieved if it has associated calls"""
         # Mock the `condense_summaries` function
         mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        summary = self.agent.get_or_create_meta_summary()
-        assert summary == "Mocked Summary"
+        self.agent.get_or_create_summary()
+
+        assert self.agent.summary == "Mocked Summary"
+        assert self.agent.summary_call_count == 1
+        assert self.agent.summary_date == self.call.date
 
 
 @pytest.mark.django_db
@@ -155,8 +160,11 @@ class TestCustomer(TestCaseMixin):
         """Test that the MetaSummary for the customer can be created or retrieved if it has associated calls"""
         # Mock the `condense_summaries` function
         mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        summary = self.customer.get_or_create_meta_summary()
-        assert summary == "Mocked Summary"
+        self.customer.get_or_create_summary()
+
+        assert self.customer.summary == "Mocked Summary"
+        assert self.customer.summary_call_count == 1
+        assert self.customer.summary_date == self.call.date
 
 
 @pytest.mark.django_db
@@ -264,21 +272,3 @@ class TestConversation(TestCaseMixin):
         ]
 
         assert call.processed_messages == expected_processed_messages
-
-
-@pytest.mark.django_db
-class TestMetaSummary(TestCaseMixin):
-    def setup_method(self):
-        self.setUp()
-
-    def test_meta_summary_creation_for_agent(self):
-        """Test that a MetaSummary can be created and associated with an agent"""
-        content_type = ContentType.objects.get_for_model(Agent)
-        meta_summary = MetaSummary.objects.create(content_type=content_type, object_id=self.agent.id)
-        assert isinstance(meta_summary, MetaSummary)
-
-    def test_meta_summary_get_summary(self, mocker):
-        """Test that MetaSummary's get_summary method works when calls are associated"""
-        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        summary_text = self.agent.get_or_create_meta_summary()
-        assert summary_text == "Mocked Summary"

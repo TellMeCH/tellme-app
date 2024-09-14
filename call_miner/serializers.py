@@ -7,6 +7,3 @@ class ConversationSerializer(serializers.HyperlinkedModelSerializer):
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'transcript', 'sentiment', 'summary', 'input_tokens',
                   'output_tokens', 'processed_messages']
-
-
-# What if the metasummary could be an abstract model for the topic, agent, and cusotmer models?

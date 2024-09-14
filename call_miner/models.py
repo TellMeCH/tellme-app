@@ -1,9 +1,7 @@
 import re
 from django.db import models
 from django.utils.text import slugify
-from django.core.exceptions import ValidationError
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
 from call_miner.utils.summary_mining import condense_summaries
 
 
@@ -33,35 +31,45 @@ class SlugAbstractModel(models.Model):
         super().save(*args, **kwargs)
 
 
-class MetaSummaryMixin:
+class MetaSummaryAbstractModel(models.Model):
     """
-    A Mixin that handles the creation and retrieval of MetaSummary objects for the model.
-    Applicable to Agent, Customer, and Topic models.
+    An abstract model that handles the creation and retrieval of summaries objects for Agent, Customer, and Topic models
     """
+    summary = models.TextField(blank=True)
+    summary_date = models.DateTimeField(auto_now_add=True, blank=True)
+    summary_call_count = models.IntegerField(default=0)
 
-    def get_or_create_meta_summary(self):
-        # Get the ContentType for the current model
-        content_type = ContentType.objects.get_for_model(self.__class__)
+    # Deviation Threshold (in %) for Re-calculation
+    DEVIATION_THRESHOLD = 10
 
-        # Check if MetaSummary already exists for this instance
-        meta_summary, created = MetaSummary.objects.get_or_create(
-            content_type=content_type,
-            object_id=self.id,
-            defaults={
-                'text': '',
-                'call_count': 0
-            }
-        )
+    def get_or_create_summary(self):
+        """
+        Extract all of the object's related conversations, as well as their summaries. If enough new summaries have
+        been produced, condense them into a new meta-summary for the object.
+        """
+        relevant_summaries = [conv.summary for conv in self.conversations.order_by('-date')]
+        latest_date = self.conversations.aggregate(latest_date=models.Max('date'))['latest_date']
+        actual_call_count = len(relevant_summaries)
 
-        # Safely access the 'name' field using getattr, providing a default value
-        model_name = getattr(self, 'name', 'Unnamed')
+        # Compare the count with the Summary object's count field
+        if self.is_deviation_significant(actual_call_count):
+            # Call the external function with the list of summaries
+            new_summary_text = condense_summaries(relevant_summaries)
+            self.summary = new_summary_text
+            self.summary_call_count = actual_call_count
+            self.summary_date = latest_date
+            self.save()  # Save the updated MetaSummary with the new data
 
-        # If the MetaSummary was just created, print a message (or handle initialization logic)
-        if created:
-            print(f"Created new MetaSummary for {self.__class__.__name__} {model_name}")
-
-        # Call the get_summary() method of the MetaSummary
-        return meta_summary.get_summary()
+    def is_deviation_significant(self, actual_count):
+        """
+        Determine whether enough new calls have been created associated to the agent/customer/topic to warrant a
+        summary re-calculation
+        """
+        # Calculate the percentage deviation
+        if self.summary_call_count == 0:  # Prevent division by zero
+            return True
+        deviation = abs((actual_count - self.summary_call_count) / self.summary_call_count) * 100
+        return deviation > self.DEVIATION_THRESHOLD
 
 
 class Organization(SlugAbstractModel):
@@ -78,7 +86,7 @@ class Organization(SlugAbstractModel):
         verbose_name_plural = "Organizations"
 
 
-class Topic(SlugAbstractModel, MetaSummaryMixin):
+class Topic(SlugAbstractModel, MetaSummaryAbstractModel):
     """
     Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
     multi-label classification task.
@@ -134,7 +142,7 @@ class Manager(models.Model):
         ]
 
 
-class Agent(SlugAbstractModel, MetaSummaryMixin):
+class Agent(SlugAbstractModel, MetaSummaryAbstractModel):
     """
     Agent: One of the many agents belonging to an organization. In charge of making the calls.
     Each agent belongs to one or more managers.
@@ -151,7 +159,7 @@ class Agent(SlugAbstractModel, MetaSummaryMixin):
         ]
 
 
-class Customer(SlugAbstractModel, MetaSummaryMixin):
+class Customer(SlugAbstractModel, MetaSummaryAbstractModel):
     """
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
@@ -166,75 +174,6 @@ class Customer(SlugAbstractModel, MetaSummaryMixin):
 
     def __str__(self):
         return self.name
-
-
-class MetaSummary(models.Model):
-    """
-    MetaSummary: Summary of call summaries, related to an agent, customer or topic. Only created whenever a summary
-    view is triggered. Results are stored to avoid further re-calculations.
-    """
-    text = models.TextField(blank=True)
-    date = models.DateTimeField(auto_now_add=True)
-    call_count = models.IntegerField(default=0)
-
-    # Generic foreign key fields
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    object_id = models.PositiveIntegerField()
-    content_object = GenericForeignKey('content_type', 'object_id')
-
-    # Deviation Threshold (in %) for Re-calculation
-    DEVIATION_THRESHOLD = 10
-
-    def save(self, *args, **kwargs):
-        # Call full_clean() to trigger validation before saving
-        self.full_clean()
-        super().save(*args, **kwargs)
-
-    def clean(self):
-        # Get ContentType for allowed models
-        allowed_models = [Agent, Customer, Topic]
-        allowed_content_types = ContentType.objects.get_for_models(*allowed_models).values()
-
-        # Validate that content_type is in the allowed content types
-        if self.content_type not in allowed_content_types:
-            raise ValidationError(f"Invalid content type: {self.content_type}. Must be Agent, Customer or Topic.")
-
-    def get_summary(self):
-        # Collect summaries of the relevant calls
-        summaries = self.get_relevant_summaries()
-
-        # Count the number of calls
-        actual_call_count = len(summaries)
-
-        # Compare the count with the Summary object's count field
-        if self.is_deviation_significant(actual_call_count):
-            # Call the external function with the list of summaries
-            new_summary_text = condense_summaries(summaries)
-            self.text = new_summary_text
-            self.call_count = actual_call_count
-            self.save()  # Save the updated MetaSummary with the new data
-        return self.text
-
-    def get_relevant_summaries(self):
-        # Retrieve the relevant call summaries based on content_type (Agent, Customer, or Topic)
-        if isinstance(self.content_object, Agent):
-            calls = Conversation.objects.filter(agent=self.content_object).order_by('-date')
-        elif isinstance(self.content_object, Customer):
-            calls = Conversation.objects.filter(customer=self.content_object).order_by('-date')
-        elif isinstance(self.content_object, Topic):
-            calls = Conversation.objects.filter(topics=self.content_object).order_by('-date')
-        else:
-            raise ValidationError("Invalid content type for Summary")
-
-        # Assuming each Conversation object has a 'summary' field
-        return [call.summary for call in calls]
-
-    def is_deviation_significant(self, actual_count):
-        # Calculate the percentage deviation
-        if self.call_count == 0:  # Prevent division by zero
-            return True
-        deviation = abs((actual_count - self.call_count) / self.call_count) * 100
-        return deviation > self.DEVIATION_THRESHOLD
 
 
 class Conversation(models.Model):

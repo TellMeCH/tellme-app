@@ -12,7 +12,7 @@ class TopicAdmin(admin.ModelAdmin):
     list_display = ['name', 'organization', 'description']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
-    readonly_fields = ['slug']
+    readonly_fields = ['slug', 'summary', 'summary_date', 'summary_call_count']
 
 
 class AnalystAdmin(admin.ModelAdmin):
@@ -31,14 +31,14 @@ class AgentAdmin(admin.ModelAdmin):
     list_display = ['name', 'organization']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
-    readonly_fields = ['slug']
+    readonly_fields = ['slug', 'summary', 'summary_date', 'summary_call_count']
 
 
 class CustomerAdmin(admin.ModelAdmin):
     list_display = ['name', 'organization']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
-    readonly_fields = ['slug']
+    readonly_fields = ['slug', 'summary', 'summary_date', 'summary_call_count']
 
 
 class ConversationAdmin(admin.ModelAdmin):
