@@ -247,14 +247,14 @@ class Conversation(models.Model):
     date = models.DateTimeField(auto_now_add=True)
     duration = models.FloatField()
     transcript = models.TextField()
+    processed_messages = models.JSONField(default=list, blank=True)
     sentiment = models.FloatField(max_length=100, blank=True)
     summary = models.TextField()
-    topics = models.ManyToManyField(Topic, related_name='conversations')
     input_tokens = models.IntegerField()
     output_tokens = models.IntegerField()
+    topics = models.ManyToManyField(Topic, related_name='conversations')
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='conversations')
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='conversations')
-    processed_messages = models.JSONField(default=list, blank=True)
 
     class Meta:
         verbose_name_plural = "Conversations"
