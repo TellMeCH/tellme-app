@@ -45,7 +45,6 @@ class ConversationAdmin(admin.ModelAdmin):
     list_display = ['path', 'date', 'agent', 'customer', 'duration', 'sentiment']
     search_fields = ['path', 'agent__name', 'customer__name']
     list_filter = ['date', 'agent', 'customer']
-    readonly_fields = ['processed_messages']
 
 
 # Register the models and their customized admin interfaces

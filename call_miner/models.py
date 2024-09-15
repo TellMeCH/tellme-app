@@ -44,7 +44,7 @@ class MetaSummaryAbstractModel(models.Model):
 
     def get_or_create_summary(self):
         """
-        Extract all of the object's related conversations, as well as their summaries. If enough new summaries have
+        Extract all the object's related conversations, as well as their summaries. If enough new summaries have
         been produced, condense them into a new meta-summary for the object.
         """
         relevant_summaries = [conv.summary for conv in self.conversations.order_by('-date')]
@@ -72,6 +72,23 @@ class MetaSummaryAbstractModel(models.Model):
         return deviation > self.DEVIATION_THRESHOLD
 
 
+class ConversationTrendMixin:
+    """
+    A very simple Mixin containing the trends of the conversations associated to a given object
+    """
+    def get_conversation_trend(self):
+        """
+        This simple method returns the evolution of the number of calls with time
+        """
+        conversations_per_day = (
+            self.conversations
+            .values('date__date')
+            .annotate(count=models.Count('id'))
+            .order_by('date__date')
+        )
+        return list(conversations_per_day)
+
+
 class Organization(SlugAbstractModel):
     """
     Organization: One of the many organizations that make use of the app. Separates the data for every group of users
@@ -86,7 +103,7 @@ class Organization(SlugAbstractModel):
         verbose_name_plural = "Organizations"
 
 
-class Topic(SlugAbstractModel, MetaSummaryAbstractModel):
+class Topic(SlugAbstractModel, MetaSummaryAbstractModel, ConversationTrendMixin):
     """
     Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
     multi-label classification task.
@@ -142,7 +159,7 @@ class Manager(models.Model):
         ]
 
 
-class Agent(SlugAbstractModel, MetaSummaryAbstractModel):
+class Agent(SlugAbstractModel, MetaSummaryAbstractModel, ConversationTrendMixin):
     """
     Agent: One of the many agents belonging to an organization. In charge of making the calls.
     Each agent belongs to one or more managers.
@@ -159,7 +176,7 @@ class Agent(SlugAbstractModel, MetaSummaryAbstractModel):
         ]
 
 
-class Customer(SlugAbstractModel, MetaSummaryAbstractModel):
+class Customer(SlugAbstractModel, MetaSummaryAbstractModel, ConversationTrendMixin):
     """
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
@@ -186,7 +203,6 @@ class Conversation(models.Model):
     date = models.DateTimeField(auto_now_add=True)
     duration = models.FloatField()
     transcript = models.TextField()
-    processed_messages = models.JSONField(default=list, blank=True)
     sentiment = models.FloatField(max_length=100, blank=True)
     summary = models.TextField()
     input_tokens = models.IntegerField()
@@ -223,11 +239,4 @@ class Conversation(models.Model):
                 'message': message_text,
                 'class': 'agent-message' if speaker == '<agent>:' else 'customer-message'
             })
-        self.processed_messages = processed_messages
-
-    def save(self, *args, **kwargs):
-        """
-        Add process_transcript to the default saving routine
-        """
-        self.process_transcript()
-        super().save(*args, **kwargs)
+        return processed_messages
