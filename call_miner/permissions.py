@@ -35,4 +35,4 @@ class IsAnalyst(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         # If the object is a Conversation, check the organization of its agent
-        return hasattr(request.user, 'analyst')
+        return hasattr(request.user.employee, 'analyst')
