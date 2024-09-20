@@ -1,274 +1,404 @@
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from call_miner.models import Organization, Topic, Agent, Customer, Conversation, Manager
+from django.contrib.auth.models import User
+from call_miner.models import Organization, Topic, Customer, Conversation, Employee, Analyst, Agent
+from django.utils import timezone
 
 
-class TestCaseMixin:
-    def setUp(self):
-        """Shared setup method for creating base objects"""
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.agent = Agent.objects.create(name="Test Agent", organization=self.organization)
-        self.customer = Customer.objects.create(name="Test Customer", organization=self.organization)
-        self.call = Conversation.objects.create(
-            path="Test Call",
-            duration=60,
-            transcript="Test transcript",
-            sentiment=0.5,
-            summary="Test Summary",
-            customer=self.customer,
-            agent=self.agent,
-            input_tokens=10,
-            output_tokens=20
-        )
+@pytest.fixture
+def organization():
+    return Organization.objects.create(name="Test Organization")
+
+
+@pytest.fixture
+def user(organization):
+    return User.objects.create_user(username="testuser", password="testpass")
+
+
+@pytest.fixture
+def employee(organization, user):
+    return Employee.objects.create(organization=organization, user=user)
+
+
+@pytest.fixture
+def analyst(organization, user):
+    return Analyst.objects.create(organization=organization, user=user)
+
+
+@pytest.fixture
+def agent(user, organization):
+    return Agent.objects.create(user=user, organization=organization)
+
+
+@pytest.fixture
+def customer(organization):
+    return Customer.objects.create(name="Test Customer", organization=organization)
+
+
+@pytest.fixture
+def topic(organization):
+    return Topic.objects.create(name="Test Topic", description="Test Description", organization=organization)
+
+
+@pytest.fixture
+def conversation(agent, customer, topic):
+    conv = Conversation.objects.create(
+        path="Test Call",
+        date=timezone.now(),
+        duration=60,
+        transcript="Test transcript",
+        sentiment=0.5,
+        summary="Test Summary",
+        customer=customer,
+        agent=agent,
+        input_tokens=10,
+        output_tokens=20
+    )
+    conv.topics.add(topic)
+    return conv
 
 
 @pytest.mark.django_db
 class TestOrganization:
-    def setup_method(self):
-        self.organization = Organization.objects.create(name="Test Organization")
+    def test_organization_creation(self, organization):
+        """
+        Test that an Organization instance is created with the correct name.
+        """
+        assert organization.name == "Test Organization"
 
-    def test_organization_creation(self):
-        """Test the adequate creation of organization attributes"""
-        assert self.organization.name == "Test Organization"
-        assert self.organization.slug == 'test-organization'
-
-    def test_organization_name_uniqueness(self):
-        """Test the error raised when two organizations have the same name"""
+    def test_organization_name_uniqueness(self, organization):
+        """
+        Test that creating an Organization with a duplicate name raises an IntegrityError.
+        """
         with pytest.raises(IntegrityError):
             Organization.objects.create(name="Test Organization")
 
+    def test_organization_str(self, organization):
+        """
+        Test that the string representation of an Organization is its name.
+        """
+        assert str(organization) == "Test Organization"
+
+    def test_organization_verbose_name_plural(self):
+        """
+        Test that the verbose name plural for Organization is "Organizations".
+        """
+        assert Organization._meta.verbose_name_plural == "Organizations"
+
 
 @pytest.mark.django_db
-class TestTopic(TestCaseMixin):
-    def setup_method(self):
-        self.setUp()
-        self.topic = Topic.objects.create(
-            name="Test Topic",
-            description="Test Description",
-            organization=self.organization
-        )
-        self.call.topics.add(self.topic)
+class TestTopic:
+    def test_topic_creation(self, topic, organization):
+        """
+        Test that a Topic instance is created with the correct attributes.
+        """
+        assert topic.name == "Test Topic"
+        assert topic.description == "Test Description"
+        assert topic.organization == organization
+        assert str(topic) == "Test Topic"
 
-    def test_topic_creation(self):
-        """Test the adequate creation of topic attributes"""
-        assert self.topic.name == "Test Topic"
-        assert self.topic.description == "Test Description"
-        assert self.topic.slug == 'topic-test-topic-test-organization'
-        assert str(self.topic) == "Test Topic"
-
-    def test_topic_unique_together(self):
-        """Test that two topics cannot have the same name in the same organization"""
+    def test_topic_unique_together(self, topic, organization):
+        """
+        Test that creating a Topic with a duplicate name in the same organization raises an IntegrityError.
+        """
         with pytest.raises(IntegrityError):
-            Topic.objects.create(name="Test Topic", description="Another Description", organization=self.organization)
+            Topic.objects.create(name="Test Topic", description="Another Description", organization=organization)
 
-    def test_topic_meta_summary_creation(self, mocker):
-        """Test that the MetaSummary for the topic can be created or retrieved if it has associated calls"""
-        # Mock the `condense_summaries` function
+    def test_topic_meta_summary_creation(self, topic, conversation, mocker):
+        """
+        Test that get_or_create_summary method creates a summary for the Topic.
+        """
         mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        self.topic.get_or_create_summary()
+        topic.get_or_create_summary()
+        assert topic.summary == "Mocked Summary"
+        assert topic.summary_call_count == 1
+        assert topic.summary_date == conversation.date
 
-        assert self.topic.summary == "Mocked Summary"
-        assert self.topic.summary_call_count == 1
-        assert self.topic.summary_date == self.call.date
+    def test_topic_get_conversation_trend(self, topic, conversation):
+        """
+        Test that get_conversation_trend method returns the correct trend data for the Topic.
+        """
+        trend = topic.get_conversation_trend()
+        assert len(trend) == 1
+        assert trend[0]['count'] == 1
+
+    def test_topic_is_deviation_significant(self, topic):
+        """
+        Test the is_deviation_significant method for various scenarios.
+        """
+        topic.summary_call_count = 100
+        topic.save()
+        assert topic.is_deviation_significant(111)
+        assert topic.is_deviation_significant(89)
+        assert not topic.is_deviation_significant(110)
+        assert not topic.is_deviation_significant(90)
+        assert not topic.is_deviation_significant(100)
+        topic.summary_call_count = 0
+        topic.save()
+        assert topic.is_deviation_significant(1)
+        assert topic.is_deviation_significant(0)
 
 
 @pytest.mark.django_db
-class TestAgent(TestCaseMixin):
-    def setup_method(self):
-        self.setUp()
+class TestEmployee:
+    def test_employee_creation(self, employee, organization, user):
+        """
+        Test that an Employee instance is created with the correct attributes.
+        """
+        assert employee.organization == organization
+        assert employee.user == user
+        assert str(employee) == user.username
 
-    def test_agent_organization_required(self):
-        """Test that an organization is required in order to create an agent"""
-        agent = Agent(name="Test Agent")
+    def test_employee_unique_together(self, employee, organization):
+        """
+        Test that creating an Employee with a duplicate user in the same organization raises an IntegrityError.
+        """
+        with pytest.raises(IntegrityError):
+            new_user = User.objects.create_user(username="testuser", password="newpass")
+            Employee.objects.create(user=new_user, organization=organization)
+
+
+@pytest.mark.django_db
+class TestAnalyst:
+    def test_analyst_creation(self, analyst, organization, user):
+        """
+        Test that an Analyst instance is created with the correct attributes.
+        """
+        assert analyst.organization == organization
+        assert analyst.user == user
+        assert str(analyst) == user.username
+
+    def test_analyst_unique_together(self, analyst, organization):
+        """
+        Test that creating an Employee with a duplicate user in the same organization raises an IntegrityError.
+        """
+        with pytest.raises(IntegrityError):
+            new_user = User.objects.create_user(username="testuser", password="newpass")
+            Analyst.objects.create(user=new_user, organization=organization)
+
+
+@pytest.mark.django_db
+class TestAgent:
+    def test_agent_creation(self, agent, organization, user):
+        """
+        Test that an Agent instance is created with the correct attributes.
+        """
+        assert agent.organization == organization
+        assert agent.user == user
+        assert agent.manager is None
+
+    def test_agent_manager_assignment(self, agent, organization):
+        """
+        Test that an Agent can be assigned a manager from the same organization.
+        """
+        manager = Agent.objects.create(
+            user=User.objects.create_user(username="manager", password="managerpass"),
+            organization=organization
+        )
+        agent.manager = manager
+        agent.save()
+        assert agent.manager == manager
+
+    def test_agent_self_manager_assignment(self, agent):
+        """
+        Test that an Agent cannot be assigned as their own manager.
+        """
         with pytest.raises(ValidationError):
-            agent.full_clean()
+            agent.manager = agent
+            agent.save()
 
-    def test_agent_str(self):
-        """Test that the name of the agent is used in the str representation of the object"""
-        assert str(self.agent) == "Test Agent"
-
-    def test_agent_creation(self):
-        """Test that the object is created when an organization is provided"""
-        assert self.agent.name == "Test Agent"
-        assert self.agent.slug == 'agent-test-agent-test-organization'
-
-    def test_agent_duplicate_slugs(self):
-        """Test that the slug of two agents in the same organization with the same name are not the same"""
-        agent_2 = Agent.objects.create(name="Test Agent", organization=self.organization)
-        assert agent_2.slug == 'agent-test-agent-test-organization-1'
-
-    def test_agent_slugs_with_different_organizations(self):
+    def test_agent_different_organization_manager(self, agent):
         """
-        Test the agent slugs created when multiple instances with the same name and different organization are created
+        Test that an Agent cannot be assigned a manager from a different organization.
         """
-        org2 = Organization.objects.create(name="Test Organization 1")
-        agent_2 = Agent.objects.create(name="Test Agent", organization=org2)
-        assert agent_2.slug == 'agent-test-agent-test-organization-1'
+        other_org = Organization.objects.create(name="Other Organization")
+        other_manager = Agent.objects.create(
+            user=User.objects.create_user(username="other_manager", password="otherpass"),
+            organization=other_org
+        )
+        with pytest.raises(ValueError):
+            agent.manager = other_manager
+            agent.save()
 
-        agent_3 = Agent.objects.create(name="Test Agent", organization=self.organization)
-        assert agent_3.slug == 'agent-test-agent-test-organization-2'
-
-        agent_4 = Agent.objects.create(name="Test Agent", organization=org2)
-        assert agent_4.slug == 'agent-test-agent-test-organization-1-1'
-
-    def test_agent_meta_summary_creation(self, mocker):
-        """Test that the MetaSummary for the agent can be created or retrieved if it has associated calls"""
-        # Mock the `condense_summaries` function
+    def test_agent_meta_summary_creation(self, agent, conversation, mocker):
+        """
+        Test that get_or_create_summary method creates a summary for the Agent.
+        """
         mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        self.agent.get_or_create_summary()
+        agent.get_or_create_summary()
+        assert agent.summary == "Mocked Summary"
+        assert agent.summary_call_count == 1
+        assert agent.summary_date == conversation.date
 
-        assert self.agent.summary == "Mocked Summary"
-        assert self.agent.summary_call_count == 1
-        assert self.agent.summary_date == self.call.date
+    def test_agent_get_conversation_trend(self, agent, conversation):
+        """
+        Test that get_conversation_trend method returns the correct trend data for the Agent.
+        """
+        trend = agent.get_conversation_trend()
+        assert len(trend) == 1
+        assert trend[0]['count'] == 1
+
+    def test_agent_is_deviation_significant(self, agent):
+        """
+        Test the is_deviation_significant method for various scenarios.
+        """
+        agent.summary_call_count = 100
+        agent.save()
+        assert agent.is_deviation_significant(111)
+        assert agent.is_deviation_significant(89)
+        assert not agent.is_deviation_significant(110)
+        assert not agent.is_deviation_significant(90)
+        assert not agent.is_deviation_significant(100)
+        agent.summary_call_count = 0
+        agent.save()
+        assert agent.is_deviation_significant(1)
+        assert agent.is_deviation_significant(0)
 
 
 @pytest.mark.django_db
-class TestCustomer(TestCaseMixin):
-    def setup_method(self):
-        self.setUp()
-
-    def test_customer_organization_required(self):
-        """Test that it is necessary for a customer to have an organization to be created"""
-        customer = Customer(name="Test Customer")
-        with pytest.raises(ValidationError):
-            customer.full_clean()
-
-    def test_customer_creation(self):
-        """Test that the object is created when an organization is provided"""
-        assert self.customer.name == "Test Customer"
-        assert self.customer.slug == 'customer-test-customer-test-organization'
-
-    def test_customer_str(self):
-        """Test that the name of the customer is used in the str representation of the object"""
-        assert str(self.customer) == "Test Customer"
-
-    def test_customer_duplicate_slugs(self):
-        """Test that the slug of two customers in the same organization with the same name are not the same"""
-        customer_2 = Customer.objects.create(name="Test Customer", organization=self.organization)
-        assert customer_2.slug == 'customer-test-customer-test-organization-1'
-
-    def test_customer_slugs_with_different_organizations(self):
+class TestCustomer:
+    def test_customer_creation(self, customer, organization):
         """
-        Test the customer slugs created when multiple instances with the same name and different organization are created
+        Test that a Customer instance is created with the correct attributes.
         """
-        org2 = Organization.objects.create(name="Test Organization 2")
-        customer_2 = Customer.objects.create(name="Test Customer", organization=org2)
-        assert customer_2.slug == 'customer-test-customer-test-organization-2'
+        assert customer.name == "Test Customer"
+        assert customer.organization == organization
 
-    def test_customer_meta_summary_creation(self, mocker):
-        """Test that the MetaSummary for the customer can be created or retrieved if it has associated calls"""
-        # Mock the `condense_summaries` function
+    def test_customer_str(self, customer):
+        """
+        Test that the string representation of a Customer is its name.
+        """
+        assert str(customer) == "Test Customer"
+
+    def test_customer_unique_together(self, customer, organization):
+        """
+        Test that creating a Customer with a duplicate name in the same organization raises an IntegrityError.
+        """
+        with pytest.raises(IntegrityError):
+            Customer.objects.create(name="Test Customer", organization=organization)
+
+    def test_customer_meta_summary_creation(self, customer, conversation, mocker):
+        """
+        Test that get_or_create_summary method creates a summary for the Customer.
+        """
         mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        self.customer.get_or_create_summary()
+        customer.get_or_create_summary()
+        assert customer.summary == "Mocked Summary"
+        assert customer.summary_call_count == 1
+        assert customer.summary_date == conversation.date
 
-        assert self.customer.summary == "Mocked Summary"
-        assert self.customer.summary_call_count == 1
-        assert self.customer.summary_date == self.call.date
+    def test_customer_get_conversation_trend(self, customer, conversation):
+        """
+        Test that get_conversation_trend method returns the correct trend data for the Customer.
+        """
+        trend = customer.get_conversation_trend()
+        assert len(trend) == 1
+        assert trend[0]['count'] == 1
+
+    def test_customer_is_deviation_significant(self, customer):
+        """
+        Test the is_deviation_significant method for various scenarios.
+        """
+        customer.summary_call_count = 100
+        customer.save()
+        assert customer.is_deviation_significant(111)
+        assert customer.is_deviation_significant(89)
+        assert not customer.is_deviation_significant(110)
+        assert not customer.is_deviation_significant(90)
+        assert not customer.is_deviation_significant(100)
+        customer.summary_call_count = 0
+        customer.save()
+        assert customer.is_deviation_significant(1)
+        assert customer.is_deviation_significant(0)
 
 
 @pytest.mark.django_db
-class TestManager:
-    def setup_method(self):
-        self.organization = Organization.objects.create(name="Test Organization")
-        self.manager = Manager.objects.create(name="Test Manager", organization=self.organization)
+class TestConversation:
+    def test_conversation_creation(self, conversation, agent, customer, topic):
+        """
+        Test that a Conversation instance is created with the correct attributes.
+        """
+        assert conversation.path == "Test Call"
+        assert conversation.agent == agent
+        assert conversation.customer == customer
+        assert topic in conversation.topics.all()
+        assert conversation.input_tokens == 10
+        assert conversation.output_tokens == 20
 
-    def test_manager_creation(self):
-        """Test that the object is created when an organization is provided"""
-        assert self.manager.name == "Test Manager"
-        assert str(self.manager) == "Test Manager"
+    def test_conversation_str(self, conversation):
+        """
+        Test that the string representation of a Conversation is its path.
+        """
+        assert str(conversation) == "Test Call"
 
+    def test_conversation_organization_consistency(self, agent, topic):
+        """
+        Test that a Conversation cannot be created with a customer from a different organization than the agent.
+        """
+        other_org = Organization.objects.create(name="Other Organization")
+        other_customer = Customer.objects.create(name="Other Customer", organization=other_org)
 
-@pytest.mark.django_db
-class TestConversation(TestCaseMixin):
-    def setup_method(self):
-        self.setUp()
-        self.topic = Topic.objects.create(name="Test Topic", description="Test Description",
-                                          organization=self.organization)
-        self.call.topics.add(self.topic)
+        with pytest.raises(ValueError):
+            Conversation.objects.create(
+                path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
+                summary="Valid Summary", customer=other_customer, agent=agent, input_tokens=10, output_tokens=20
+            )
 
-    def test_call_creation(self):
-        """Test that the object is created when an organization is provided"""
-        assert self.call.path == "Test Call"
-        assert self.topic in self.call.topics.all()
+    def test_conversation_topic_organization_consistency(self, conversation, organization):
+        """
+        Test that a Topic from a different organization cannot be added to a Conversation.
+        """
+        other_org = Organization.objects.create(name="Other Organization")
+        other_topic = Topic.objects.create(name="Other Topic", description="Other Description", organization=other_org)
 
-    def test_call_validation(self):
-        """Test that the object is created when an organization is provided"""
-        call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10,
-                            output_tokens=20)
-        call.full_clean()
-
-    def test_call_str(self):
-        """Test that the name of the call is used in the str representation"""
-        assert str(self.call) == "Test Call"
-
-    def test_call_customer_required(self):
-        """Test that the call requires a customer to be defined"""
-        call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                            summary="Valid Summary", input_tokens=10, output_tokens=20, agent=self.agent)
-        with pytest.raises(ValidationError):
-            call.full_clean()
-
-    def test_call_agent_required(self):
-        """Test that the call requires an agent to be defined"""
-        call = Conversation(path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                            summary="Valid Summary", input_tokens=10, output_tokens=20, customer=self.customer)
-        with pytest.raises(ValidationError):
-            call.full_clean()
+        with pytest.raises(ValueError):
+            conversation.topics.add(other_topic)
 
     def test_process_transcript(self):
-        """Test that the process_transcript method correctly processes the transcript"""
+        """
+        Test that the process_transcript method correctly processes a valid transcript.
+        """
         transcript = "<agent>: Hello, how can I help you today? <customer>: I need help with my order."
-        call = Conversation(
+        conversation = Conversation(
             path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
-            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
+            summary="Valid Summary", customer=Customer(), agent=Agent(), input_tokens=10, output_tokens=20
         )
-        call.process_transcript()
+        processed_messages = conversation.process_transcript()
 
         expected_processed_messages = [
             {'message': 'Hello, how can I help you today?', 'class': 'agent-message'},
             {'message': 'I need help with my order.', 'class': 'customer-message'}
         ]
 
-        assert call.processed_messages == expected_processed_messages
-
-    def test_call_save_process_transcript(self):
-        """Test that the transcript is processed and saved with processed_messages when save is called"""
-        transcript = "<agent>: Hello. <customer>: Hi, I need help."
-        call = Conversation(
-            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
-            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
-        )
-        call.save()
-
-        assert call.processed_messages == [
-            {'message': 'Hello.', 'class': 'agent-message'},
-            {'message': 'Hi, I need help.', 'class': 'customer-message'}
-        ]
+        assert processed_messages == expected_processed_messages
 
     def test_process_transcript_invalid_format(self):
-        """Test how process_transcript handles transcripts with no Agent or Customer labels"""
+        """
+        Test that the process_transcript method handles an invalid transcript format correctly.
+        """
         transcript = "This is an invalid format message."
-        call = Conversation(
+        conversation = Conversation(
             path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
-            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
+            summary="Valid Summary", customer=Customer(), agent=Agent(), input_tokens=10, output_tokens=20
         )
-        call.process_transcript()
+        processed_messages = conversation.process_transcript()
 
-        assert call.processed_messages == []  # Ensure it handles the case with no Agent/Customer properly
+        assert processed_messages == []
 
     def test_process_transcript_partial_labels(self):
-        """Test processing when there is only one speaker label"""
+        """
+        Test that the process_transcript method correctly handles a transcript with only one speaker label.
+        """
         transcript = "<agent>: Hello, how can I assist you? No customer response here."
-        call = Conversation(
+        conversation = Conversation(
             path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
-            summary="Valid Summary", customer=self.customer, agent=self.agent, input_tokens=10, output_tokens=20
+            summary="Valid Summary", customer=Customer(), agent=Agent(), input_tokens=10, output_tokens=20
         )
-        call.process_transcript()
+        processed_messages = conversation.process_transcript()
 
         expected_processed_messages = [
             {'message': 'Hello, how can I assist you? No customer response here.', 'class': 'agent-message'}
         ]
 
-        assert call.processed_messages == expected_processed_messages
+        assert processed_messages == expected_processed_messages

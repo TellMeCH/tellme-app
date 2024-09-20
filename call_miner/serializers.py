@@ -21,10 +21,9 @@ class TopicSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'slug', 'summary', 'summary_date', 'summary_call_count',
+        fields = ['url', 'name', 'description', 'summary', 'summary_date', 'summary_call_count',
                   'conversations', 'conversation_trend']
 
     @staticmethod
     def get_conversation_trend(obj):
         return obj.get_conversation_trend()
-

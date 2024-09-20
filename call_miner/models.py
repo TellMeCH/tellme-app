@@ -1,46 +1,25 @@
 import re
 from django.db import models
-from django.utils.text import slugify
+from django.dispatch import receiver
+from django.contrib.auth.models import AbstractUser
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
-
-
-class SlugAbstractModel(models.Model):
-    """Abstract model with a slug field"""
-
-    slug = models.SlugField(default="", unique=True, null=True)
-    name = models.CharField(max_length=100)
-
-    class Meta:
-        abstract = True
-
-    def save(self, *args, **kwargs):
-        """Defines the slug making sure that no duplicates within the organization exist"""
-        if not self.slug:
-            if hasattr(self, 'organization') and self.organization:
-                object_type = self.__class__.__name__.lower()
-                base_slug = slugify(f'{object_type}-{self.name}-{self.organization}')
-            else:
-                base_slug = slugify(self.name)
-            unique_slug = base_slug
-            num = 1
-            while self.__class__.objects.filter(slug=unique_slug).exists():
-                unique_slug = f'{base_slug}-{num}'
-                num += 1
-            self.slug = unique_slug
-        super().save(*args, **kwargs)
+from django.core.exceptions import ValidationError
 
 
 class MetaSummaryAbstractModel(models.Model):
     """
     An abstract model that handles the creation and retrieval of summaries objects for Agent, Customer, and Topic models
     """
-    summary = models.TextField(blank=True)
-    summary_date = models.DateTimeField(auto_now_add=True, blank=True)
+    summary = models.TextField(null=True)
+    summary_date = models.DateTimeField(auto_now_add=True, null=True)
     summary_call_count = models.IntegerField(default=0)
 
     # Deviation Threshold (in %) for Re-calculation
     DEVIATION_THRESHOLD = 10
+
+    class Meta:
+        abstract = True
 
     def get_or_create_summary(self):
         """
@@ -89,7 +68,7 @@ class ConversationTrendMixin:
         return list(conversations_per_day)
 
 
-class Organization(SlugAbstractModel):
+class Organization(models.Model):
     """
     Organization: One of the many organizations that make use of the app. Separates the data for every group of users
     """
@@ -103,12 +82,12 @@ class Organization(SlugAbstractModel):
         verbose_name_plural = "Organizations"
 
 
-class Topic(SlugAbstractModel, MetaSummaryAbstractModel, ConversationTrendMixin):
+class Topic(MetaSummaryAbstractModel, ConversationTrendMixin):
     """
     Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
     multi-label classification task.
     """
-
+    name = models.CharField(max_length=100, null=False)
     description = models.TextField()
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='topics')
 
@@ -122,68 +101,64 @@ class Topic(SlugAbstractModel, MetaSummaryAbstractModel, ConversationTrendMixin)
         ]
 
 
-class Analyst(models.Model):
+class Employee(models.Model):
     """
-    Analyst: Each analyst belongs to a single organization and has access to all conversations in that organization.
+    A versatile role. An employee can be an analyst, an agent, or a manager. Contains the basic attributes that all
+    these user types inherit.
+    - An analyst is a simple employee. Basically, a user with an organization label
+    - An agent is an employee that can be tagged in Conversations
+    - A manager is an agent that is related to another agent in a hierarchical relationship. Managers can hold calls.
     """
-
-    name = models.CharField(max_length=100)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='analysts')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='employees')
+    user = models.OneToOneField('auth.User', related_name='employee', on_delete=models.CASCADE)
 
     def __str__(self):
-        return self.name
+        return self.user.username
 
+    class Meta:
+        unique_together = ('user', 'organization')
+        verbose_name_plural = "Employees"
+
+
+class Analyst(Employee):
     class Meta:
         verbose_name_plural = "Analysts"
-        indexes = [
-            models.Index(fields=['organization', 'name']),
-        ]
 
 
-class Manager(models.Model):
-    """
-    Manager: Each manager supervises multiple agents within an organization.
-    """
+class Agent(Employee, MetaSummaryAbstractModel, ConversationTrendMixin):
+    manager = models.ForeignKey(
+        'self',
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name='agents'
+    )
 
-    name = models.CharField(max_length=100)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='managers')
-    agents = models.ManyToManyField('Agent', related_name='managers')
+    def save(self, *args, **kwargs):
+        # Ensure that an agent is not assigned as their own manager.
+        if self.manager == self:
+            raise ValidationError("An agent cannot be their own manager.")
 
-    def __str__(self):
-        return self.name
+        # Ensure that the manager is correctly specified
+        if self.manager:
+            if self.organization != self.manager.organization:
+                raise ValueError("The assigned manager must be associated with the same organization.")
 
-    class Meta:
-        verbose_name_plural = "Managers"
-        indexes = [
-            models.Index(fields=['organization', 'name']),
-        ]
-
-
-class Agent(SlugAbstractModel, MetaSummaryAbstractModel, ConversationTrendMixin):
-    """
-    Agent: One of the many agents belonging to an organization. In charge of making the calls.
-    Each agent belongs to one or more managers.
-    """
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='agents')
-
-    def __str__(self):
-        return self.name
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name_plural = "Agents"
-        indexes = [
-            models.Index(fields=['organization', 'name']),
-        ]
 
 
-class Customer(SlugAbstractModel, MetaSummaryAbstractModel, ConversationTrendMixin):
+class Customer(MetaSummaryAbstractModel, ConversationTrendMixin):
     """
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
     """
+    name = models.CharField(max_length=100, null=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
 
     class Meta:
+        unique_together = ('name', 'organization')
         verbose_name_plural = "Customers"
         indexes = [
             models.Index(fields=['organization', 'name']),
@@ -203,7 +178,7 @@ class Conversation(models.Model):
     date = models.DateTimeField(auto_now_add=True)
     duration = models.FloatField()
     transcript = models.TextField()
-    sentiment = models.FloatField(max_length=100, blank=True)
+    sentiment = models.FloatField(max_length=100)
     summary = models.TextField()
     input_tokens = models.IntegerField()
     output_tokens = models.IntegerField()
@@ -220,6 +195,15 @@ class Conversation(models.Model):
 
     def __str__(self):
         return self.path
+
+    def save(self, *args, **kwargs):
+        """
+        Save applying checks to the given associated objects
+        """
+        # Ensure that agent and customer have the same associated organization
+        if self.customer.organization != self.agent.organization:
+            raise ValueError("The assigned customer and agent must be associated with the same organization.")
+        super().save(*args, **kwargs)
 
     def process_transcript(self):
         """
@@ -240,3 +224,21 @@ class Conversation(models.Model):
                 'class': 'agent-message' if speaker == '<agent>:' else 'customer-message'
             })
         return processed_messages
+
+
+@receiver(models.signals.m2m_changed, sender=Conversation.topics.through)
+def validate_topics_organization(sender, instance, action, **kwargs):
+    """
+    This function checks that all associated topics belong to the same organization as the conversation's agent
+    whenever the topics are added, updated, or cleared.
+    """
+    # Check if topics were added or changed
+    if action == 'post_add' or action == 'post_clear' or action == 'post_remove':
+        conversation_organization = instance.agent.organization
+
+        # Validate that all topics belong to the same organization as the customer and agent
+        for topic in instance.topics.all():
+            if topic.organization != conversation_organization:
+                raise ValueError(
+                    f"Topic '{topic.name}' is not associated with the same organization as the customer and agent."
+                )
