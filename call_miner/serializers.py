@@ -59,10 +59,9 @@ class ConversationSerializer(serializers.HyperlinkedModelSerializer):
 class ConversationRelationshipSerializer(serializers.HyperlinkedModelSerializer):
     conversations = serializers.SerializerMethodField()
     conversation_trend = serializers.SerializerMethodField()
-
-    @staticmethod
-    def get_conversation_trend(obj):
-        return obj.get_conversation_trend()
+    conversation_topic_trend = serializers.SerializerMethodField()
+    duration_trend = serializers.SerializerMethodField()
+    sentiment_trend = serializers.SerializerMethodField()
 
     def get_conversations(self, obj):
         conversation_titles = []
@@ -77,12 +76,29 @@ class ConversationRelationshipSerializer(serializers.HyperlinkedModelSerializer)
             )
         return conversation_titles
 
+    @staticmethod
+    def get_conversation_trend(obj):
+        return obj.get_conversation_trend()
+
+    @staticmethod
+    def get_conversation_topic_trend(obj):
+        return obj.get_conversation_trend_per_topic()
+
+    @staticmethod
+    def get_duration_trend(obj):
+        return obj.get_avg_duration()
+
+    @staticmethod
+    def get_sentiment_trend(obj):
+        return obj.get_avg_sentiment()
+
 
 class TopicSerializer(ConversationRelationshipSerializer):
     class Meta:
         model = Topic
         fields = ['url', 'name', 'description', 'summary', 'summary_date', 'summary_call_count',
-                  'conversations', 'conversation_trend']
+                  'conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
+                  'sentiment_trend']
 
 
 class AgentSerializer(ConversationRelationshipSerializer):
@@ -93,10 +109,12 @@ class AgentSerializer(ConversationRelationshipSerializer):
     class Meta:
         model = Agent
         fields = ['url', 'username', 'manager', 'manager_username', 'summary', 'summary_date', 'summary_call_count',
-                  'conversations', 'conversation_trend']
+                  'conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
+                  'sentiment_trend']
 
 
 class CustomerSerializer(ConversationRelationshipSerializer):
     class Meta:
         model = Customer
-        fields = ['url', 'name', 'summary', 'summary_date', 'summary_call_count', 'conversations', 'conversation_trend']
+        fields = ['url', 'name', 'summary', 'summary_date', 'summary_call_count', 'conversations', 'conversation_trend',
+                  'conversation_topic_trend', 'duration_trend', 'sentiment_trend']

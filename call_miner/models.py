@@ -53,11 +53,27 @@ class MetaSummaryAbstractModel(models.Model):
 
 class ConversationTrendMixin:
     """
-    A very simple Mixin containing the trends of the conversations associated to a given object
+    Mixin containing the trends of the conversations associated with a given object, now including
+    average call duration and sentiment.
     """
+
+    @property
+    def conversations(self):
+        """
+        Retrieves the conversation set depending on the type of object.
+        If it's an Organization, it fetches all conversations from its associated agents.
+        Otherwise, it assumes the object has a direct relationship to conversations.
+        """
+        if isinstance(self, Organization):
+            # Get all conversations for the organization's agents
+            return Conversation.objects.filter(agent__organization=self)
+        else:
+            # Assume the object has a direct relationship with conversations
+            return self.conversations.all()
+
     def get_conversation_trend(self):
         """
-        This simple method returns the evolution of the number of calls with time
+        Returns the evolution of the number of calls with time.
         """
         conversations_per_day = (
             self.conversations
@@ -66,6 +82,54 @@ class ConversationTrendMixin:
             .order_by('date__date')
         )
         return list(conversations_per_day)
+
+    def get_conversation_trend_per_topic(self):
+        """
+        Returns the number of conversations per topic per day.
+        """
+        conversations_per_topic_per_day = (
+            self.conversations
+            .values('topics__name', 'date__date')
+            .annotate(count=models.Count('id'))
+            .order_by('topics__name', 'date__date')
+        )
+        return list(conversations_per_topic_per_day)
+
+    def get_avg_for_periods(self, field):
+        """
+        Generic function to calculate the average of a given field (duration or sentiment)
+        for daily, weekly, and monthly periods.
+        """
+        periods = {
+            'daily': models.functions.TruncDay('date'),
+            'weekly': models.functions.TruncWeek('date'),
+            'monthly': models.functions.TruncMonth('date'),
+        }
+
+        results = {}
+        for period_name, period_trunc in periods.items():
+            avg_per_period = (
+                self.conversations
+                .annotate(period=period_trunc)
+                .values('period')
+                .annotate(avg_value=models.Avg(field))
+                .order_by('period')
+            )
+            results[period_name] = list(avg_per_period)
+
+        return results
+
+    def get_avg_duration(self):
+        """
+        Returns a dictionary with the average call duration per day, week, and month.
+        """
+        return self.get_avg_for_periods('duration')
+
+    def get_avg_sentiment(self):
+        """
+        Returns a dictionary with the average sentiment score per day, week, and month.
+        """
+        return self.get_avg_for_periods('sentiment')
 
 
 class Organization(models.Model):
