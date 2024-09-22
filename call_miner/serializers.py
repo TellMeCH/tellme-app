@@ -11,7 +11,7 @@ class ConversationSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'sentiment', 'topics',
+        fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
                   'agent', 'customer', 'input_tokens', 'output_tokens', 'processed_transcript']
 
     def __init__(self, *args, **kwargs):
@@ -56,45 +56,47 @@ class ConversationSerializer(serializers.HyperlinkedModelSerializer):
         return obj.process_transcript()
 
 
-class TopicSerializer(serializers.HyperlinkedModelSerializer):
-    conversations = serializers.HyperlinkedRelatedField(many=True, view_name='conversation-detail', read_only=True)
+class ConversationRelationshipSerializer(serializers.HyperlinkedModelSerializer):
+    conversations = serializers.SerializerMethodField()
     conversation_trend = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Topic
-        fields = ['url', 'name', 'description', 'summary', 'summary_date', 'summary_call_count',
-                  'conversations', 'conversation_trend']
 
     @staticmethod
     def get_conversation_trend(obj):
         return obj.get_conversation_trend()
 
+    def get_conversations(self, obj):
+        conversation_titles = []
+        for conversation in obj.conversations.all():
+            conversation_titles.append(
+                {
+                    'title': conversation.title,
+                    'url': self.context['request'].build_absolute_uri(
+                        reverse('conversation-detail', args=[conversation.pk])
+                    )
+                }
+            )
+        return conversation_titles
 
-class AgentSerializer(serializers.HyperlinkedModelSerializer):
+
+class TopicSerializer(ConversationRelationshipSerializer):
+    class Meta:
+        model = Topic
+        fields = ['url', 'name', 'description', 'summary', 'summary_date', 'summary_call_count',
+                  'conversations', 'conversation_trend']
+
+
+class AgentSerializer(ConversationRelationshipSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
-    conversations = serializers.HyperlinkedRelatedField(many=True, view_name='conversation-detail', read_only=True)
     manager = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
     manager_username = serializers.CharField(source='manager.user.username', read_only=True)
-    conversation_trend = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
         fields = ['url', 'username', 'manager', 'manager_username', 'summary', 'summary_date', 'summary_call_count',
                   'conversations', 'conversation_trend']
 
-    @staticmethod
-    def get_conversation_trend(obj):
-        return obj.get_conversation_trend()
 
-
-class CustomerSerializer(serializers.HyperlinkedModelSerializer):
-    conversations = serializers.HyperlinkedRelatedField(many=True, view_name='conversation-detail', read_only=True)
-    conversation_trend = serializers.SerializerMethodField()
-
+class CustomerSerializer(ConversationRelationshipSerializer):
     class Meta:
         model = Customer
         fields = ['url', 'name', 'summary', 'summary_date', 'summary_call_count', 'conversations', 'conversation_trend']
-
-    @staticmethod
-    def get_conversation_trend(obj):
-        return obj.get_conversation_trend()

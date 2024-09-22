@@ -50,6 +50,7 @@ def conversation(agent, customer, topic):
         transcript="Test transcript",
         sentiment=0.5,
         summary="Test Summary",
+        title='Test Title',
         customer=customer,
         agent=agent,
         input_tokens=10,

@@ -180,6 +180,7 @@ class Conversation(models.Model):
     transcript = models.TextField()
     sentiment = models.FloatField(max_length=100)
     summary = models.TextField()
+    title = models.TextField()
     input_tokens = models.IntegerField()
     output_tokens = models.IntegerField()
     topics = models.ManyToManyField(Topic, related_name='conversations')

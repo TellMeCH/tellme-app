@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from call_miner.models import Organization, Analyst, Agent, Topic, Customer, Conversation
 
 COMMON_PASSWORD = 'tell_me_long'
+CALL_TITLE = 'Snake found in pickles'
 CALL_TRANSCRIPT = """
 <agent>: Good afternoon, what can I do for you?
 <customer>: Hello, there is a snake in my pickles!
@@ -115,6 +116,7 @@ class Command(BaseCommand):
                 duration=15,
                 transcript=CALL_TRANSCRIPT,
                 sentiment=0.8,
+                title=CALL_TITLE,
                 summary=CALL_SUMMARY,
                 input_tokens=50,
                 output_tokens=15,
