@@ -127,12 +127,26 @@ class AgentSerializer(ConversationRelationshipSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     manager = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
     manager_username = serializers.CharField(source='manager.user.username', read_only=True)
+    agents = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
         fields = ['url', 'username', 'manager', 'manager_username', 'summary', 'summary_date', 'summary_call_count',
-                  'conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
+                  'agents', 'conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                   'sentiment_trend']
+
+    def get_agents(self, obj):
+        # Return a list of a manager's agents
+        agents = []
+        for agent in obj.agents.all():
+            agents.append(
+                {
+                    'name': agent.user.username,
+                    'summary': agent.summary,
+                    'url': self.context['request'].build_absolute_uri(reverse('agent-detail', args=[agent.pk]))
+                }
+            )
+        return agents
 
 
 class CustomerSerializer(ConversationRelationshipSerializer):
