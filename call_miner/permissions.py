@@ -34,5 +34,24 @@ class IsAnalyst(permissions.BasePermission):
         return request.user and request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
-        # If the object is a Conversation, check the organization of its agent
+        # Only allow access if the user is an analyst
         return hasattr(request.user.employee, 'analyst')
+
+
+class IsManager(permissions.BasePermission):
+    """
+    Custom permission to allow access to objects only for managers.
+    """
+    def has_permission(self, request, view):
+        # Check if the user is authenticated
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        # Check if the user is an agent (and therefore can be a manager)
+        if hasattr(request.user.employee, 'agent'):
+            # Retrieve the agents managed by the current user
+            managed_agents = request.user.employee.agent.agents.all()
+            # Allow access if the object is one of the agents managed by the user
+            return (obj in managed_agents) or (obj == request.user.employee.agent)
+        # Return False if the user is not an agent or does not manage any agents
+        return False

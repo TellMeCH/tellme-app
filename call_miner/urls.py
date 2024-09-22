@@ -6,6 +6,8 @@ from call_miner import views
 router = DefaultRouter()
 router.register(r'conversations', views.ConversationViewSet, basename='conversation')
 router.register(r'topics', views.TopicViewSet, basename='topic')
+router.register(r'agents', views.AgentViewSet, basename='agent')
+router.register(r'customers', views.CustomerViewSet, basename='customer')
 
 # The API URLs are now determined automatically by the router.
 urlpatterns = [
