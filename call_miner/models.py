@@ -244,7 +244,7 @@ class Conversation(models.Model):
     the call transcript, the call topics mentioned, and the call sentiment
     """
     path = models.CharField(max_length=100)
-    date = models.DateTimeField(auto_now_add=True)
+    date = models.DateTimeField()
     duration = models.FloatField()
     transcript = models.TextField()
     sentiment = models.FloatField(max_length=100)

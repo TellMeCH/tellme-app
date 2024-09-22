@@ -403,3 +403,192 @@ class TestConversation:
         ]
 
         assert processed_messages == expected_processed_messages
+
+
+@pytest.mark.django_db
+class TestConversationTrendMixin:
+
+    def test_conversations_scope_organization(self, organization, agent, customer, conversation):
+        """
+        Test that the conversations_scope method retrieves all conversations for an organization.
+        """
+        assert conversation in organization.conversations_scope
+
+    def test_conversations_scope_agent_manager(self, organization, user, agent, customer, conversation):
+        """
+        Test that the conversations_scope method retrieves all conversations for a manager and their team.
+        """
+        manager = Agent.objects.create(
+            user=User.objects.create_user(username="manager", password="managerpass"),
+            organization=organization
+        )
+        agent.manager = manager
+        agent.save()
+        assert conversation in manager.conversations_scope
+        assert conversation in agent.conversations_scope
+
+    def test_conversations_scope_agent_non_manager(self, agent, customer, conversation):
+        """
+        Test that the conversations_scope method retrieves only the agent's own conversations if they are not a manager.
+        """
+        assert conversation in agent.conversations_scope
+
+    def test_conversations_scope_direct_relationship(self, customer, conversation):
+        """
+        Test that the conversations_scope method retrieves the conversations directly related to a customer.
+        """
+        assert conversation in customer.conversations_scope
+
+    def test_get_conversation_trend_empty(self, topic):
+        """
+        Test that get_conversation_trend returns an empty list when there are no conversations.
+        """
+        trend = topic.get_conversation_trend()
+        assert trend == []
+
+    def test_get_conversation_trend_single_conversation(self, topic, conversation):
+        """
+        Test that get_conversation_trend returns the correct trend for a single conversation.
+        """
+        trend = topic.get_conversation_trend()
+        assert len(trend) == 1
+        assert trend[0]['count'] == 1
+
+    def test_get_conversation_trend_multiple_conversations(self, topic, conversation):
+        """
+        Test that get_conversation_trend returns the correct trend for multiple conversations on different dates.
+        """
+        another_conversation = Conversation.objects.create(
+            path="Another Test Call",
+            date=timezone.now() - timezone.timedelta(days=1),
+            duration=45,
+            transcript="Another test transcript",
+            sentiment=0.6,
+            summary="Another Summary",
+            title='Another Test Title',
+            customer=conversation.customer,
+            agent=conversation.agent,
+            input_tokens=5,
+            output_tokens=15
+        )
+        another_conversation.topics.add(topic)
+        another_conversation.save()
+        trend = topic.get_conversation_trend()
+        assert len(trend) == 2
+
+    def test_get_conversation_trend_per_topic_empty(self, topic):
+        """
+        Test that get_conversation_trend_per_topic returns an empty list when there are no conversations.
+        """
+        trend = topic.get_conversation_trend_per_topic()
+        assert trend == []
+
+    def test_get_conversation_trend_per_topic_single_conversation(self, topic, conversation):
+        """
+        Test that get_conversation_trend_per_topic returns the correct trend for a single conversation.
+        """
+        trend = topic.get_conversation_trend_per_topic()
+        assert len(trend) == 1
+        assert trend[0]['count'] == 1
+        assert trend[0]['topics__name'] == topic.name
+
+    def test_get_conversation_trend_per_topic_multiple_conversations(self, topic, conversation):
+        """
+        Test that get_conversation_trend_per_topic returns the correct trend for multiple conversations with different topics.
+        """
+        another_topic = Topic.objects.create(
+            name="Another Topic",
+            description="Another Description",
+            organization=topic.organization
+        )
+        another_conversation = Conversation.objects.create(
+            path="Another Test Call",
+            date=timezone.now() - timezone.timedelta(days=1),
+            duration=45,
+            transcript="Another test transcript",
+            sentiment=0.6,
+            summary="Another Summary",
+            title='Another Test Title',
+            customer=conversation.customer,
+            agent=conversation.agent,
+            input_tokens=5,
+            output_tokens=15
+        )
+        another_conversation.topics.add(another_topic)
+
+        trend = topic.get_conversation_trend_per_topic()
+        assert len(trend) == 1
+
+    def test_get_avg_duration_empty(self, topic):
+        """
+        Test that get_avg_duration returns empty results when there are no conversations.
+        """
+        avg_duration = topic.get_avg_duration()
+        assert all(len(period) == 0 for period in avg_duration.values())
+
+    def test_get_avg_duration_single_conversation(self, topic, conversation):
+        """
+        Test that get_avg_duration returns the correct average duration for a single conversation.
+        """
+        avg_duration = topic.get_avg_duration()
+        assert len(avg_duration['daily']) == 1
+        assert avg_duration['daily'][0]['avg_value'] == conversation.duration
+
+    def test_get_avg_duration_multiple_conversations(self, topic, conversation):
+        """
+        Test that get_avg_duration returns the correct average duration for multiple conversations over different days.
+        """
+        another_conversation = Conversation.objects.create(
+            path="Another Test Call",
+            date=timezone.now() - timezone.timedelta(days=1),
+            duration=45,
+            transcript="Another test transcript",
+            sentiment=0.6,
+            summary="Another Summary",
+            title='Another Test Title',
+            customer=conversation.customer,
+            agent=conversation.agent,
+            input_tokens=5,
+            output_tokens=15
+        )
+        another_conversation.topics.add(topic)
+        another_conversation.save()
+        avg_duration = topic.get_avg_duration()
+        assert len(avg_duration['daily']) == 2
+
+    def test_get_avg_sentiment_empty(self, topic):
+        """
+        Test that get_avg_sentiment returns empty results when there are no conversations.
+        """
+        avg_sentiment = topic.get_avg_sentiment()
+        assert all(len(period) == 0 for period in avg_sentiment.values())
+
+    def test_get_avg_sentiment_single_conversation(self, topic, conversation):
+        """
+        Test that get_avg_sentiment returns the correct average sentiment for a single conversation.
+        """
+        avg_sentiment = topic.get_avg_sentiment()
+        assert len(avg_sentiment['daily']) == 1
+        assert avg_sentiment['daily'][0]['avg_value'] == conversation.sentiment
+
+    def test_get_avg_sentiment_multiple_conversations(self, topic, conversation):
+        """
+        Test that get_avg_sentiment returns the correct average sentiment for multiple conversations over different days.
+        """
+        another_conversation = Conversation.objects.create(
+            path="Another Test Call",
+            date=timezone.now() - timezone.timedelta(days=1),
+            duration=45,
+            transcript="Another test transcript",
+            sentiment=0.6,
+            summary="Another Summary",
+            title='Another Test Title',
+            customer=conversation.customer,
+            agent=conversation.agent,
+            input_tokens=5,
+            output_tokens=15
+        )
+        another_conversation.topics.add(topic)
+        another_conversation.save()
+        avg_sentiment = topic.get_avg_sentiment()
+        assert len(avg_sentiment['daily']) == 2
