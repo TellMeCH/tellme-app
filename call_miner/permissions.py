@@ -1,4 +1,5 @@
 from rest_framework import permissions
+from call_miner.models import Organization
 
 
 class IsOrganizationMember(permissions.BasePermission):
@@ -17,6 +18,8 @@ class IsOrganizationMember(permissions.BasePermission):
             necessary_org = obj.agent.organization
         elif hasattr(obj, 'organization'):  # Otherwise get the object's organization
             necessary_org = obj.organization
+        elif isinstance(obj, Organization):
+            necessary_org = obj
         else:
             raise ValueError('IsOrganizationMember was applied to an incorrect Viewset')
 

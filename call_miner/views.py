@@ -1,5 +1,6 @@
-from .models import Conversation, Topic, Agent, Customer
-from call_miner.serializers import ConversationSerializer, TopicSerializer, AgentSerializer, CustomerSerializer
+from .models import Conversation, Organization, Topic, Agent, Customer
+from call_miner.serializers import (ConversationSerializer, OrganizationSerializer, TopicSerializer, AgentSerializer,
+                                    CustomerSerializer)
 from call_miner.permissions import IsOrganizationMember, IsAnalyst, IsManager
 from rest_framework import viewsets
 from rest_framework import permissions
@@ -9,10 +10,11 @@ from rest_framework import status
 
 """
 Breaking down desired behavior on ViewSet Access:
-- ConversationViewSet: viewable by anyone. Anyone can view the details of a single call
-- TopicViewSet: topics can be listed by anyone, but only Analysts can view and alter the details of a topic
-- AgentViewSet: agents can be listed by anyone, but only an agent or its manager can view the details of the agent
-- CustomerViewSet: viewable by anyone. Anyone can view the details of a single customer 
+- ConversationViewSet: viewable by anyone in the org. Anyone can view the details of a single call
+- OrganizationViewSet: Users can only list and view their own organization
+- TopicViewSet: topics can be listed by anyone in the org, but only Analysts can view and alter the details of a topic
+- AgentViewSet: agents can be listed by anyone in the org, but only an agent or its manager can view the details of the agent
+- CustomerViewSet: viewable by anyone in the org. Anyone can view the details of a single customer 
 """
 
 
@@ -24,10 +26,23 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Return conversations that belong to the user's organization
         """
-        print(self.request.user.employee.__dict__)
         if self.request.user.employee.organization:
             return Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
         return Conversation.objects.none()
+
+    def get_serializer_context(self):
+        # Ensure the request context is passed to the serializer
+        return {'request': self.request}
+
+
+class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = OrganizationSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember]
+
+    def get_queryset(self):
+        if self.request.user.employee.organization:
+            return Organization.objects.filter(pk=self.request.user.employee.organization.pk)
+        return Organization.objects.none()
 
     def get_serializer_context(self):
         # Ensure the request context is passed to the serializer
@@ -57,6 +72,10 @@ class TopicViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(topic)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def get_serializer_context(self):
+        # Ensure the request context is passed to the serializer
+        return {'request': self.request}
+
 
 class AgentViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AgentSerializer
@@ -81,6 +100,10 @@ class AgentViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(agent)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def get_serializer_context(self):
+        # Ensure the request context is passed to the serializer
+        return {'request': self.request}
+
 
 class CustomerViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CustomerSerializer
@@ -104,4 +127,8 @@ class CustomerViewSet(viewsets.ReadOnlyModelViewSet):
         # Serialize the topic and return the response
         serializer = self.get_serializer(customer)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def get_serializer_context(self):
+        # Ensure the request context is passed to the serializer
+        return {'request': self.request}
 

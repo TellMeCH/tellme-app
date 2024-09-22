@@ -1,6 +1,6 @@
 from django.urls import reverse
 from rest_framework import serializers
-from call_miner.models import Conversation, Topic, Agent, Customer
+from call_miner.models import Conversation, Organization, Topic, Agent, Customer
 
 
 class ConversationSerializer(serializers.HyperlinkedModelSerializer):
@@ -91,6 +91,28 @@ class ConversationRelationshipSerializer(serializers.HyperlinkedModelSerializer)
     @staticmethod
     def get_sentiment_trend(obj):
         return obj.get_avg_sentiment()
+
+
+class OrganizationSerializer(ConversationRelationshipSerializer):
+    topics = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Organization
+        fields = ['url', 'name', 'topics', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
+                  'sentiment_trend']
+
+    def get_topics(self, obj):
+        # Return a list of topic names and descriptions
+        topics = []
+        for topic in obj.topics.all():
+            topics.append(
+                {
+                    'name': topic.name,
+                    'description': topic.description,
+                    'url': self.context['request'].build_absolute_uri(reverse('topic-detail', args=[topic.pk]))
+                }
+            )
+        return topics
 
 
 class TopicSerializer(ConversationRelationshipSerializer):

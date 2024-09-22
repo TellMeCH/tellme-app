@@ -58,15 +58,19 @@ class ConversationTrendMixin:
     """
 
     @property
-    def conversations(self):
+    def conversations_scope(self):
         """
         Retrieves the conversation set depending on the type of object.
         If it's an Organization, it fetches all conversations from its associated agents.
+        If it's an Agent that is a manager, it fetches all the team's conversations.
         Otherwise, it assumes the object has a direct relationship to conversations.
         """
         if isinstance(self, Organization):
             # Get all conversations for the organization's agents
             return Conversation.objects.filter(agent__organization=self)
+        elif isinstance(self, Agent):
+            # If the agent is a manager, get their own conversations and those of their team
+            return Conversation.objects.filter(agent__in=self.agents.all() | Agent.objects.filter(id=self.id))
         else:
             # Assume the object has a direct relationship with conversations
             return self.conversations.all()
@@ -76,7 +80,7 @@ class ConversationTrendMixin:
         Returns the evolution of the number of calls with time.
         """
         conversations_per_day = (
-            self.conversations
+            self.conversations_scope
             .values('date__date')
             .annotate(count=models.Count('id'))
             .order_by('date__date')
@@ -88,7 +92,7 @@ class ConversationTrendMixin:
         Returns the number of conversations per topic per day.
         """
         conversations_per_topic_per_day = (
-            self.conversations
+            self.conversations_scope
             .values('topics__name', 'date__date')
             .annotate(count=models.Count('id'))
             .order_by('topics__name', 'date__date')
@@ -109,7 +113,7 @@ class ConversationTrendMixin:
         results = {}
         for period_name, period_trunc in periods.items():
             avg_per_period = (
-                self.conversations
+                self.conversations_scope
                 .annotate(period=period_trunc)
                 .values('period')
                 .annotate(avg_value=models.Avg(field))
@@ -132,7 +136,7 @@ class ConversationTrendMixin:
         return self.get_avg_for_periods('sentiment')
 
 
-class Organization(models.Model):
+class Organization(models.Model, ConversationTrendMixin):
     """
     Organization: One of the many organizations that make use of the app. Separates the data for every group of users
     """
@@ -143,6 +147,7 @@ class Organization(models.Model):
         return self.name
 
     class Meta:
+        unique_together = ('name',)
         verbose_name_plural = "Organizations"
 
 
