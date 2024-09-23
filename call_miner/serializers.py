@@ -3,7 +3,7 @@ from rest_framework import serializers
 from call_miner.models import Conversation, Organization, Topic, Agent, Customer
 
 
-class ConversationPostSerializer(serializers.HyperlinkedModelSerializer):
+class ConversationModifySerializer(serializers.ModelSerializer):
     """
     This serializer is used for POST requests creating a new Conversation instance. Note that the conversation's
     topics, agent and customer have to be specified with their primary keys.
@@ -14,7 +14,7 @@ class ConversationPostSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
+        fields = ['path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
                   'agent', 'customer', 'input_tokens', 'output_tokens']
 
 
@@ -23,37 +23,24 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
     This serializer is used for the GET requests listing all Conversation instances. Here, topics, agents and
     customers are lists with their names and hyperlinks.
     """
-    topics = serializers.SerializerMethodField()
-    agent = serializers.SerializerMethodField()
-    customer = serializers.SerializerMethodField()
+    # Retrieve the URL of the related models
+    agent = serializers.HyperlinkedRelatedField(view_name='agent-detail', queryset=Agent.objects.all())
+    customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', queryset=Customer.objects.all())
+    topics = serializers.HyperlinkedRelatedField(view_name='topic-detail', many=True, queryset=Topic.objects.all())
+
+    # Include human-readable fields for agent, customer, and topics
+    agent_name = serializers.CharField(source='agent.user.username', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
+    topic_names = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
-                  'agent', 'customer', 'input_tokens', 'output_tokens']
+                  'topic_names', 'agent', 'agent_name', 'customer', 'customer_name', 'input_tokens', 'output_tokens']
 
     @staticmethod
-    def get_topics(obj):
-        # Return a list of topic names and descriptions
-        return [{'name': topic.name, 'description': topic.description} for topic in obj.topics.all()][:3]
-
-    def get_agent(self, obj):
-        # Return the agent's name and hyperlink to their detail view
-        agent_url = self.context['request'].build_absolute_uri(reverse('agent-detail', args=[obj.agent.pk]))
-        return {
-            'name': obj.agent.user.username,
-            'url': agent_url
-        }
-
-    def get_customer(self, obj):
-        # Return the customer's name and hyperlink to their detail view
-        customer_url = self.context['request'].build_absolute_uri(
-            reverse('customer-detail', args=[obj.customer.pk])
-        )
-        return {
-            'name': obj.customer.name,
-            'url': customer_url
-        }
+    def get_topic_names(obj):
+        return [topic.name for topic in obj.topics.all()]
 
 
 class ConversationDetailSerializer(ConversationListSerializer):
@@ -67,24 +54,23 @@ class ConversationDetailSerializer(ConversationListSerializer):
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
-                  'agent', 'customer', 'input_tokens', 'output_tokens', 'processed_transcript']
-
-    @staticmethod
-    def get_topics(obj):
-        # Return a list of topic names and descriptions
-        return [{'name': topic.name, 'description': topic.description} for topic in obj.topics.all()]
+                  'topic_names', 'agent', 'agent_name', 'customer', 'customer_name', 'input_tokens', 'output_tokens',
+                  'processed_transcript']
 
     @staticmethod
     def get_processed_transcript(obj):
         return obj.process_transcript()
 
 
-class ConversationRelationshipSerializer(serializers.HyperlinkedModelSerializer):
+class ConversationRelationshipSerializer(serializers.ModelSerializer):
     conversations = serializers.SerializerMethodField()
     conversation_trend = serializers.SerializerMethodField()
     conversation_topic_trend = serializers.SerializerMethodField()
     duration_trend = serializers.SerializerMethodField()
     sentiment_trend = serializers.SerializerMethodField()
+
+    class Meta:
+        abstract = True
 
     def get_conversations(self, obj):
         conversation_titles = []
@@ -138,12 +124,55 @@ class OrganizationSerializer(ConversationRelationshipSerializer):
         return topics
 
 
-class TopicSerializer(ConversationRelationshipSerializer):
+class TopicModifySerializer(serializers.ModelSerializer):
+    """
+    This serializer is used for POST, PUT, PATCH and DELETE requests creating or modifying a Topic instance.
+    Note that the topic's organization has to be specified with its primary key.
+    """
+    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all())
+
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'summary', 'summary_date', 'summary_call_count',
-                  'conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
-                  'sentiment_trend']
+        fields = ['name', 'description', 'organization']
+
+
+class TopicListSerializer(serializers.HyperlinkedModelSerializer):
+    """
+    This serializer is used to list all instances of an organization's topics
+    """
+    organization = serializers.HyperlinkedRelatedField(view_name='organization-detail', read_only=True)
+
+    class Meta:
+        model = Topic
+        fields = ['url', 'name', 'description', 'organization']
+
+
+class MetaSummarySerializer(serializers.ModelSerializer):
+    """
+    Abstract Serializer class used to produce meta-summary data on the models that allow its creation via
+    get_or_create_summary()
+    """
+    summary_data = serializers.SerializerMethodField()
+
+    class Meta:
+        abstract = True
+
+    @staticmethod
+    def get_summary_data(obj):
+        obj.get_or_create_summary()
+        return {
+            'summary': obj.summary,
+            'summary_date': obj.summary_date,
+            'summary_call_count': obj.summary_call_count
+        }
+
+
+class TopicDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer,
+                            MetaSummarySerializer):
+    class Meta:
+        model = Topic
+        fields = ['url', 'name', 'description', 'summary_data', 'conversations', 'conversation_trend',
+                  'conversation_topic_trend', 'duration_trend', 'sentiment_trend']
 
 
 class AgentSerializer(ConversationRelationshipSerializer):

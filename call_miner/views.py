@@ -1,7 +1,7 @@
 from .models import Conversation, Organization, Topic, Agent, Customer
 from call_miner.serializers import (
-    ConversationPostSerializer, ConversationListSerializer, ConversationDetailSerializer, OrganizationSerializer,
-    TopicSerializer, AgentSerializer, CustomerSerializer
+    ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer, OrganizationSerializer,
+    TopicModifySerializer, TopicListSerializer, TopicDetailSerializer, AgentSerializer, CustomerSerializer
 )
 from call_miner.permissions import IsSuperUserToModify, IsOrganizationMember, IsAnalyst, IsManager
 from rest_framework import viewsets, mixins
@@ -28,8 +28,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
             return ConversationListSerializer
         elif self.action == 'retrieve':
             return ConversationDetailSerializer
-        elif self.request.method in ['POST', 'PUT', 'PATCH']:
-            return ConversationPostSerializer
+        elif self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+            return ConversationModifySerializer
         return ConversationListSerializer
 
     def get_queryset(self):
@@ -46,10 +46,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
 
 class OrganizationViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
-    """
-    This ViewSet is only aimed at organization members. They are only able to view their own organization with a
-    retrieve action. Modifications to the organization object should only be possible via the admin page.
-    """
     serializer_class = OrganizationSerializer
     permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
 
@@ -64,8 +60,16 @@ class OrganizationViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
 
 
 class TopicViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = TopicSerializer
     permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return TopicListSerializer
+        elif self.action == 'retrieve':
+            return TopicDetailSerializer
+        elif self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+            return TopicModifySerializer
+        return TopicListSerializer
 
     def get_queryset(self):
         """
@@ -74,17 +78,6 @@ class TopicViewSet(viewsets.ReadOnlyModelViewSet):
         if self.request.user.employee.organization:
             return Topic.objects.filter(organization=self.request.user.employee.organization)
         return Topic.objects.none()
-
-    def retrieve(self, request, *args, **kwargs):
-        # Get the instance of the Topic model
-        topic = self.get_object()
-
-        # Run the get_or_create_summary method before returning the object
-        topic.get_or_create_summary()
-
-        # Serialize the topic and return the response
-        serializer = self.get_serializer(topic)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def get_serializer_context(self):
         # Ensure the request context is passed to the serializer
