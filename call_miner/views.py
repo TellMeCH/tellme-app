@@ -1,7 +1,9 @@
 from .models import Conversation, Organization, Topic, Agent, Customer
-from call_miner.serializers import (ConversationSerializer, OrganizationSerializer, TopicSerializer, AgentSerializer,
-                                    CustomerSerializer)
-from call_miner.permissions import IsOrganizationMember, IsAnalyst, IsManager
+from call_miner.serializers import (
+    ConversationPostSerializer, ConversationListSerializer, ConversationDetailSerializer, OrganizationSerializer,
+    TopicSerializer, AgentSerializer, CustomerSerializer
+)
+from call_miner.permissions import IsSuperUserToModify, IsOrganizationMember, IsAnalyst, IsManager
 from rest_framework import viewsets
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -19,8 +21,16 @@ Breaking down desired behavior on ViewSet Access:
 
 
 class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = ConversationSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember]
+    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ConversationListSerializer
+        elif self.action == 'retrieve':
+            return ConversationDetailSerializer
+        elif self.request.method in ['POST', 'PUT', 'PATCH']:
+            return ConversationPostSerializer
+        return ConversationListSerializer
 
     def get_queryset(self):
         """
@@ -37,7 +47,7 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
 
 class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = OrganizationSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember]
+    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
 
     def get_queryset(self):
         if self.request.user.employee.organization:
@@ -79,7 +89,7 @@ class TopicViewSet(viewsets.ReadOnlyModelViewSet):
 
 class AgentViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AgentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsManager]
+    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember, IsManager]
 
     def get_queryset(self):
         """
@@ -107,7 +117,7 @@ class AgentViewSet(viewsets.ReadOnlyModelViewSet):
 
 class CustomerViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CustomerSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember]
+    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
 
     def get_queryset(self):
         """

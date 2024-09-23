@@ -3,35 +3,39 @@ from rest_framework import serializers
 from call_miner.models import Conversation, Organization, Topic, Agent, Customer
 
 
-class ConversationSerializer(serializers.HyperlinkedModelSerializer):
-    topics = serializers.SerializerMethodField()
-    agent = serializers.SerializerMethodField()
-    customer = serializers.SerializerMethodField()
-    processed_transcript = serializers.SerializerMethodField()
+class ConversationPostSerializer(serializers.HyperlinkedModelSerializer):
+    """
+    This serializer is used for POST requests creating a new Conversation instance. Note that the conversation's
+    topics, agent and customer have to be specified with their primary keys.
+    """
+    topics = serializers.PrimaryKeyRelatedField(many=True, queryset=Topic.objects.all())
+    agent = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all())
+    customer = serializers.PrimaryKeyRelatedField(queryset=Customer.objects.all())
 
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
-                  'agent', 'customer', 'input_tokens', 'output_tokens', 'processed_transcript']
+                  'agent', 'customer', 'input_tokens', 'output_tokens']
 
-    def __init__(self, *args, **kwargs):
-        super(ConversationSerializer, self).__init__(*args, **kwargs)
 
-        # Check the request method from the context
-        if self.context.get('request').method == 'POST':
-            # For POST requests, use PrimaryKeyRelatedField for topics, agent, and customer
-            self.fields['topics'] = serializers.PrimaryKeyRelatedField(many=True, queryset=Topic.objects.all())
-            self.fields['agent'] = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all())
-            self.fields['customer'] = serializers.PrimaryKeyRelatedField(queryset=Customer.objects.all())
-        else:
-            # For GET requests, return topics, agent, and customer with their names and URLs
-            self.fields['topics'] = serializers.SerializerMethodField()
-            self.fields['agent'] = serializers.SerializerMethodField()
-            self.fields['customer'] = serializers.SerializerMethodField()
+class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
+    """
+    This serializer is used for the GET requests listing all Conversation instances. Here, topics, agents and
+    customers are lists with their names and hyperlinks.
+    """
+    topics = serializers.SerializerMethodField()
+    agent = serializers.SerializerMethodField()
+    customer = serializers.SerializerMethodField()
 
-    def get_topics(self, obj):
+    class Meta:
+        model = Conversation
+        fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
+                  'agent', 'customer', 'input_tokens', 'output_tokens']
+
+    @staticmethod
+    def get_topics(obj):
         # Return a list of topic names and descriptions
-        return [{'name': topic.name, 'description': topic.description} for topic in obj.topics.all()]
+        return [{'name': topic.name, 'description': topic.description} for topic in obj.topics.all()][:3]
 
     def get_agent(self, obj):
         # Return the agent's name and hyperlink to their detail view
@@ -50,6 +54,25 @@ class ConversationSerializer(serializers.HyperlinkedModelSerializer):
             'name': obj.customer.name,
             'url': customer_url
         }
+
+
+class ConversationDetailSerializer(ConversationListSerializer):
+    """
+    This serializer is used when applying a GET detail request on a Conversation instance. Since it inherits from
+    ConversationListSerializer, topics, agent and customer are once again lists with their names and hyperlinks.
+    However, it also presents the processed transcripts on top.
+    """
+    processed_transcript = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Conversation
+        fields = ['url', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
+                  'agent', 'customer', 'input_tokens', 'output_tokens', 'processed_transcript']
+
+    @staticmethod
+    def get_topics(obj):
+        # Return a list of topic names and descriptions
+        return [{'name': topic.name, 'description': topic.description} for topic in obj.topics.all()]
 
     @staticmethod
     def get_processed_transcript(obj):

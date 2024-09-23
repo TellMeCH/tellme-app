@@ -2,6 +2,16 @@ from rest_framework import permissions
 from call_miner.models import Organization
 
 
+class IsSuperUserToModify(permissions.BasePermission):
+    """
+    Custom permission allowing POST requests only if the user is a superuser
+    """
+    def has_permission(self, request, view):
+        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return request.user.is_superuser
+        return True
+
+
 class IsOrganizationMember(permissions.BasePermission):
     """
     Custom permission to allow access to objects only for users within their own organization.
@@ -12,6 +22,10 @@ class IsOrganizationMember(permissions.BasePermission):
         return request.user and request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
+        """
+        Check if the user is authenticated for a specific object. This is not called during POST requests,
+        only during detail-level actions (like retrieve, update, or delete)
+        """
         core_check = (request.user and request.user.is_authenticated)
 
         if hasattr(obj, 'agent'):  # If the object is a Conversation, check the organization of its agent
@@ -34,7 +48,7 @@ class IsAnalyst(permissions.BasePermission):
 
     def has_permission(self, request, view):
         # Check if the user is authenticated
-        return request.user and request.user.is_authenticated
+        return request.user and request.user.is_authenticated and hasattr(request.user.employee, 'analyst')
 
     def has_object_permission(self, request, view, obj):
         # Only allow access if the user is an analyst
