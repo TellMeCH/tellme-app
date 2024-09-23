@@ -1,7 +1,8 @@
 from .models import Conversation, Organization, Topic, Agent, Customer
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer, OrganizationSerializer,
-    TopicModifySerializer, TopicListSerializer, TopicDetailSerializer, AgentSerializer, CustomerSerializer
+    TopicModifySerializer, TopicListSerializer, TopicDetailSerializer, AgentModifySerializer, AgentListSerializer,
+    AgentDetailSerializer, CustomerSerializer
 )
 from call_miner.permissions import IsSuperUserToModify, IsOrganizationMember, IsAnalyst, IsManager
 from rest_framework import viewsets, mixins
@@ -85,8 +86,16 @@ class TopicViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class AgentViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = AgentSerializer
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember, IsManager]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return AgentListSerializer
+        elif self.action == 'retrieve':
+            return AgentDetailSerializer
+        elif self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+            return AgentModifySerializer
+        return AgentListSerializer
 
     def get_queryset(self):
         """

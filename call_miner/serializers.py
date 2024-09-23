@@ -1,6 +1,6 @@
 from django.urls import reverse
 from rest_framework import serializers
-from call_miner.models import Conversation, Organization, Topic, Agent, Customer
+from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
 
 
 class ConversationModifySerializer(serializers.ModelSerializer):
@@ -24,9 +24,9 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
     customers are lists with their names and hyperlinks.
     """
     # Retrieve the URL of the related models
-    agent = serializers.HyperlinkedRelatedField(view_name='agent-detail', queryset=Agent.objects.all())
-    customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', queryset=Customer.objects.all())
-    topics = serializers.HyperlinkedRelatedField(view_name='topic-detail', many=True, queryset=Topic.objects.all())
+    agent = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
+    customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', read_only=True)
+    topics = serializers.HyperlinkedRelatedField(view_name='topic-detail', many=True, read_only=True)
 
     # Include human-readable fields for agent, customer, and topics
     agent_name = serializers.CharField(source='agent.user.username', read_only=True)
@@ -63,6 +63,7 @@ class ConversationDetailSerializer(ConversationListSerializer):
 
 
 class ConversationRelationshipSerializer(serializers.ModelSerializer):
+    conversation_count = serializers.SerializerMethodField()
     conversations = serializers.SerializerMethodField()
     conversation_trend = serializers.SerializerMethodField()
     conversation_topic_trend = serializers.SerializerMethodField()
@@ -72,8 +73,12 @@ class ConversationRelationshipSerializer(serializers.ModelSerializer):
     class Meta:
         abstract = True
 
+    @staticmethod
+    def get_conversation_count(obj):
+        return obj.conversations.count()
+
     def get_conversations(self, obj):
-        conversation_titles = []
+        conversation_titles = []  # Pagination will be necessary
         for conversation in obj.conversations.all():
             conversation_titles.append(
                 {
@@ -87,41 +92,42 @@ class ConversationRelationshipSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def get_conversation_trend(obj):
-        return obj.get_conversation_trend()
+        return obj.get_conversation_trend()  # Pagination will be necessary
 
     @staticmethod
     def get_conversation_topic_trend(obj):
-        return obj.get_conversation_trend_per_topic()
+        return obj.get_conversation_trend_per_topic()  # Pagination will be necessary
 
     @staticmethod
     def get_duration_trend(obj):
-        return obj.get_avg_duration()
+        return obj.get_avg_duration()  # Pagination will be necessary
 
     @staticmethod
     def get_sentiment_trend(obj):
-        return obj.get_avg_sentiment()
+        return obj.get_avg_sentiment()  # Pagination will be necessary
 
 
-class OrganizationSerializer(ConversationRelationshipSerializer):
-    topics = serializers.SerializerMethodField()
+class OrganizationSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
+    topics = serializers.HyperlinkedRelatedField(view_name='topic-detail', many=True, read_only=True)
+    topic_data = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
-        fields = ['url', 'name', 'topics', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
-                  'sentiment_trend']
+        fields = ['url', 'name', 'topics', 'topic_data', 'conversation_trend', 'conversation_topic_trend',
+                  'duration_trend', 'sentiment_trend']
 
-    def get_topics(self, obj):
+    @staticmethod
+    def get_topic_data(obj):
         # Return a list of topic names and descriptions
-        topics = []
+        topic_data = []
         for topic in obj.topics.all():
-            topics.append(
+            topic_data.append(
                 {
                     'name': topic.name,
                     'description': topic.description,
-                    'url': self.context['request'].build_absolute_uri(reverse('topic-detail', args=[topic.pk]))
                 }
             )
-        return topics
+        return topic_data
 
 
 class TopicModifySerializer(serializers.ModelSerializer):
@@ -136,15 +142,15 @@ class TopicModifySerializer(serializers.ModelSerializer):
         fields = ['name', 'description', 'organization']
 
 
-class TopicListSerializer(serializers.HyperlinkedModelSerializer):
+class TopicListSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
     """
     This serializer is used to list all instances of an organization's topics
     """
-    organization = serializers.HyperlinkedRelatedField(view_name='organization-detail', read_only=True)
+    conversation_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'organization']
+        fields = ['url', 'name', 'description', 'conversation_count']
 
 
 class MetaSummarySerializer(serializers.ModelSerializer):
@@ -169,36 +175,64 @@ class MetaSummarySerializer(serializers.ModelSerializer):
 
 class TopicDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer,
                             MetaSummarySerializer):
+    """
+    This serializer is used to present all topic information and statistics, focused on the retrieve() action
+    """
     class Meta:
         model = Topic
         fields = ['url', 'name', 'description', 'summary_data', 'conversations', 'conversation_trend',
                   'conversation_topic_trend', 'duration_trend', 'sentiment_trend']
 
 
-class AgentSerializer(ConversationRelationshipSerializer):
+class AgentModifySerializer(serializers.ModelSerializer):
+    """
+    This serializer is used for POST, PUT, PATCH and DELETE requests creating or modifying an Agent instance.
+    Note that the agent's organization and manager have to be specified with its primary key.
+    """
+    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all())
+    employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
+    manager = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all(), required=False)
+    agents = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all(), required=False, many=True)
+
+    class Meta:
+        model = Agent
+        fields = ['organization', 'employee', 'manager', 'agents']
+
+
+class AgentListSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
+    """
+    This serializer simply lists all existing Agents in an organization, as well as their managers and call count.
+    """
     username = serializers.CharField(source='user.username', read_only=True)
     manager = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
     manager_username = serializers.CharField(source='manager.user.username', read_only=True)
-    agents = serializers.SerializerMethodField()
+    conversation_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Agent
+        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count']
+
+
+class AgentDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer,
+                            MetaSummarySerializer):
+    """
+    This serializer shows the detail of a given agent, including all its meta-summary data and trend statistics
+    """
+    username = serializers.CharField(source='user.username', read_only=True)
+    manager = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
+    manager_username = serializers.CharField(source='manager.user.username', read_only=True)
+    agents = serializers.HyperlinkedRelatedField(view_name='agent-detail', many=True, read_only=True)  # Pagination will be necessary
+    agent_names = serializers.SerializerMethodField()  # Pagination will be necessary
 
     class Meta:
         model = Agent
         fields = ['url', 'username', 'manager', 'manager_username', 'summary', 'summary_date', 'summary_call_count',
-                  'agents', 'conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
-                  'sentiment_trend']
+                  'agents', 'agent_names', 'conversations', 'conversation_trend', 'conversation_topic_trend',
+                  'duration_trend', 'sentiment_trend']
 
-    def get_agents(self, obj):
-        # Return a list of a manager's agents
-        agents = []
-        for agent in obj.agents.all():
-            agents.append(
-                {
-                    'name': agent.user.username,
-                    'summary': agent.summary,
-                    'url': self.context['request'].build_absolute_uri(reverse('agent-detail', args=[agent.pk]))
-                }
-            )
-        return agents
+    @staticmethod
+    def get_agent_names(obj):
+        return [agent.user.username for agent in obj.agents.all()]
 
 
 class CustomerSerializer(ConversationRelationshipSerializer):
