@@ -142,6 +142,7 @@ class Organization(models.Model, ConversationTrendMixin):
     """
 
     name = models.CharField(max_length=100, unique=True, null=False)
+    max_user_count = models.IntegerField(default=10)
 
     def __str__(self):
         return self.name

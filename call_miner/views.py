@@ -4,7 +4,7 @@ from call_miner.serializers import (
     TopicSerializer, AgentSerializer, CustomerSerializer
 )
 from call_miner.permissions import IsSuperUserToModify, IsOrganizationMember, IsAnalyst, IsManager
-from rest_framework import viewsets
+from rest_framework import viewsets, mixins
 from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework import status
@@ -20,7 +20,7 @@ Breaking down desired behavior on ViewSet Access:
 """
 
 
-class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
+class ConversationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
 
     def get_serializer_class(self):
@@ -45,9 +45,13 @@ class ConversationViewSet(viewsets.ReadOnlyModelViewSet):
         return {'request': self.request}
 
 
-class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
+class OrganizationViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    This ViewSet is only aimed at organization members. They are only able to view their own organization with a
+    retrieve action. Modifications to the organization object should only be possible via the admin page.
+    """
     serializer_class = OrganizationSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
+    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
 
     def get_queryset(self):
         if self.request.user.employee.organization:
