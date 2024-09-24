@@ -235,7 +235,28 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer, Conversation
         return [agent.user.username for agent in obj.agents.all()]
 
 
-class CustomerSerializer(ConversationRelationshipSerializer):
+class CustomerModifySerializer(serializers.ModelSerializer):
+    """
+    This serializer is used for POST, PUT, PATCH and DELETE requests creating or modifying a Customer instance.
+    Note that the customer's organization has to be specified with its primary key.
+    """
+    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all())
+
+    class Meta:
+        model = Customer
+        fields = ['organization', 'name']
+
+
+class CustomerListSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
+    conversation_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Customer
+        fields = ['url', 'name', 'conversation_count']
+
+
+class CustomerDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer,
+                               MetaSummarySerializer):
     class Meta:
         model = Customer
         fields = ['url', 'name', 'summary', 'summary_date', 'summary_call_count', 'conversations', 'conversation_trend',
