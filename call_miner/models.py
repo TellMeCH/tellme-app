@@ -75,6 +75,12 @@ class ConversationTrendMixin:
             # Assume the object has a direct relationship with conversations
             return self.conversations.all()
 
+    def get_conversation_count(self):
+        """
+        Obtains the current conversation count.
+        """
+        return self.conversations_scope.count()
+
     def get_conversation_trend(self):
         """
         Returns the evolution of the number of calls with time.
@@ -84,8 +90,9 @@ class ConversationTrendMixin:
             .values('date__date')
             .annotate(count=models.Count('id'))
             .order_by('date__date')
+            .values('count', date=models.F('date__date'))
         )
-        return list(conversations_per_day)
+        return conversations_per_day
 
     def get_conversation_trend_per_topic(self):
         """
@@ -96,44 +103,35 @@ class ConversationTrendMixin:
             .values('topics__name', 'date__date')
             .annotate(count=models.Count('id'))
             .order_by('topics__name', 'date__date')
+            .values('count', date=models.F('date__date'), topic=models.F('topics__name'))
         )
-        return list(conversations_per_topic_per_day)
+        return conversations_per_topic_per_day
 
-    def get_avg_for_periods(self, field):
+    def get_avg_for_periods(self, field: str, period: str):
         """
         Generic function to calculate the average of a given field (duration or sentiment)
         for daily, weekly, and monthly periods.
         """
-        periods = {
+        if field not in ['duration', 'sentiment']:
+            raise ValueError('Currently only "duration" and "sentiment" are accepted as fields.')
+
+        period_truncs = {
             'daily': models.functions.TruncDay('date'),
             'weekly': models.functions.TruncWeek('date'),
             'monthly': models.functions.TruncMonth('date'),
         }
+        if period not in period_truncs.keys():
+            raise ValueError('Specify a period that is one of: "daily", "weekly", "monthly".')
 
-        results = {}
-        for period_name, period_trunc in periods.items():
-            avg_per_period = (
-                self.conversations_scope
-                .annotate(period=period_trunc)
-                .values('period')
-                .annotate(avg_value=models.Avg(field))
-                .order_by('period')
-            )
-            results[period_name] = list(avg_per_period)
-
-        return results
-
-    def get_avg_duration(self):
-        """
-        Returns a dictionary with the average call duration per day, week, and month.
-        """
-        return self.get_avg_for_periods('duration')
-
-    def get_avg_sentiment(self):
-        """
-        Returns a dictionary with the average sentiment score per day, week, and month.
-        """
-        return self.get_avg_for_periods('sentiment')
+        avg_per_period = (
+            self.conversations_scope
+            .annotate(period=period_truncs[period])
+            .values('period')
+            .annotate(avg_value=models.Avg(field))
+            .order_by('period')
+            .values('avg_value', date=models.F('period'))
+        )
+        return avg_per_period
 
 
 class Organization(models.Model, ConversationTrendMixin):

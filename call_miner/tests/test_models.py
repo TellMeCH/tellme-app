@@ -439,12 +439,48 @@ class TestConversationTrendMixin:
         """
         assert conversation in customer.conversations_scope
 
+    def test_conversation_count_emtpy(self, topic):
+        """
+        Test that the conversation count is 0 when there are no conversations
+        """
+        count = topic.get_conversation_count()
+        assert count == 0
+
+    def test_conversation_count_single_conversation(self, topic, conversation):
+        """
+        Test that the conversation count is 1 when there is one conversation
+        """
+        count = topic.get_conversation_count()
+        assert count == 1
+
+    def test_conversation_count_multiple_conversations(self, topic, conversation):
+        """
+        Test that multiple conversations are detected.
+        """
+        another_conversation = Conversation.objects.create(
+            path="Another Test Call",
+            date=timezone.now() - timezone.timedelta(days=1),
+            duration=45,
+            transcript="Another test transcript",
+            sentiment=0.6,
+            summary="Another Summary",
+            title='Another Test Title',
+            customer=conversation.customer,
+            agent=conversation.agent,
+            input_tokens=5,
+            output_tokens=15
+        )
+        another_conversation.topics.add(topic)
+        another_conversation.save()
+        count = topic.get_conversation_count()
+        assert count == 2
+
     def test_get_conversation_trend_empty(self, topic):
         """
         Test that get_conversation_trend returns an empty list when there are no conversations.
         """
         trend = topic.get_conversation_trend()
-        assert trend == []
+        assert len(trend) == 0
 
     def test_get_conversation_trend_single_conversation(self, topic, conversation):
         """
@@ -481,7 +517,7 @@ class TestConversationTrendMixin:
         Test that get_conversation_trend_per_topic returns an empty list when there are no conversations.
         """
         trend = topic.get_conversation_trend_per_topic()
-        assert trend == []
+        assert len(trend) == 0
 
     def test_get_conversation_trend_per_topic_single_conversation(self, topic, conversation):
         """
@@ -490,7 +526,7 @@ class TestConversationTrendMixin:
         trend = topic.get_conversation_trend_per_topic()
         assert len(trend) == 1
         assert trend[0]['count'] == 1
-        assert trend[0]['topics__name'] == topic.name
+        assert trend[0]['topic'] == topic.name
 
     def test_get_conversation_trend_per_topic_multiple_conversations(self, topic, conversation):
         """
@@ -523,16 +559,16 @@ class TestConversationTrendMixin:
         """
         Test that get_avg_duration returns empty results when there are no conversations.
         """
-        avg_duration = topic.get_avg_duration()
-        assert all(len(period) == 0 for period in avg_duration.values())
+        avg_duration = topic.get_avg_for_periods('duration', 'daily')
+        assert len(avg_duration) == 0
 
     def test_get_avg_duration_single_conversation(self, topic, conversation):
         """
         Test that get_avg_duration returns the correct average duration for a single conversation.
         """
-        avg_duration = topic.get_avg_duration()
-        assert len(avg_duration['daily']) == 1
-        assert avg_duration['daily'][0]['avg_value'] == conversation.duration
+        avg_duration = topic.get_avg_for_periods('duration', 'daily')
+        assert len(avg_duration) == 1
+        assert avg_duration[0]['avg_value'] == conversation.duration
 
     def test_get_avg_duration_multiple_conversations(self, topic, conversation):
         """
@@ -553,23 +589,23 @@ class TestConversationTrendMixin:
         )
         another_conversation.topics.add(topic)
         another_conversation.save()
-        avg_duration = topic.get_avg_duration()
-        assert len(avg_duration['daily']) == 2
+        avg_duration = topic.get_avg_for_periods('duration', 'daily')
+        assert len(avg_duration) == 2
 
     def test_get_avg_sentiment_empty(self, topic):
         """
         Test that get_avg_sentiment returns empty results when there are no conversations.
         """
-        avg_sentiment = topic.get_avg_sentiment()
-        assert all(len(period) == 0 for period in avg_sentiment.values())
+        avg_sentiment = topic.get_avg_for_periods('sentiment', 'daily')
+        assert len(avg_sentiment) == 0
 
     def test_get_avg_sentiment_single_conversation(self, topic, conversation):
         """
         Test that get_avg_sentiment returns the correct average sentiment for a single conversation.
         """
-        avg_sentiment = topic.get_avg_sentiment()
-        assert len(avg_sentiment['daily']) == 1
-        assert avg_sentiment['daily'][0]['avg_value'] == conversation.sentiment
+        avg_sentiment = topic.get_avg_for_periods('sentiment', 'monthly')
+        assert len(avg_sentiment) == 1
+        assert avg_sentiment[0]['avg_value'] == conversation.sentiment
 
     def test_get_avg_sentiment_multiple_conversations(self, topic, conversation):
         """
@@ -590,5 +626,5 @@ class TestConversationTrendMixin:
         )
         another_conversation.topics.add(topic)
         another_conversation.save()
-        avg_sentiment = topic.get_avg_sentiment()
-        assert len(avg_sentiment['daily']) == 2
+        avg_sentiment = topic.get_avg_for_periods('sentiment', 'daily')
+        assert len(avg_sentiment) == 2

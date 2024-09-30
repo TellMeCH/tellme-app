@@ -1,6 +1,178 @@
 from django.urls import reverse
 from rest_framework import serializers
 from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
+from rest_framework.pagination import CursorPagination
+from rest_framework.exceptions import NotFound
+
+
+class CustomFieldCursorPaginator(CursorPagination):
+    """
+    Custom cursor paginator that allows per-field pagination using query parameters
+    like `<field_name>_cursor` and `<field_name>_page_size`.
+    """
+    cursor_query_param = ''  # Set dynamically for each field
+    page_size_query_param = ''  # Set dynamically for each field
+    ordering = ['-date', 'id']  # Default ordering by descending date
+    page_size = 15
+
+
+def paginate_field(queryset, request, field_name):
+    """
+    Helper function to paginate a queryset using DRF's CursorPagination.
+    Allows the use of custom cursor and page_size parameters like '<field_name>_cursor'
+    and '<field_name>_page_size'.
+    """
+    paginator = CustomFieldCursorPaginator()
+
+    # Set the custom query parameters for cursor pagination
+    paginator.cursor_query_param = f"{field_name}_cursor"
+    paginator.page_size_query_param = f"{field_name}_page_size"
+
+    # Paginate the queryset using DRF's cursor paginator
+    paginated_qs = paginator.paginate_queryset(queryset, request)
+    return paginated_qs, paginator
+
+
+class ConversationStatsSerializer(serializers.ModelSerializer):
+    conversation_count = serializers.SerializerMethodField()
+    conversations = serializers.SerializerMethodField()
+    conversation_trend = serializers.SerializerMethodField()
+    conversation_topic_trend = serializers.SerializerMethodField()
+    duration_trend = serializers.SerializerMethodField()
+    sentiment_trend = serializers.SerializerMethodField()
+
+    class Meta:
+        abstract = True
+
+    @staticmethod
+    def get_conversation_count(obj):
+        return obj.get_conversation_count()
+
+    def get_conversations(self, obj):
+        """
+        Retrieve conversations related to the object and paginate the results.
+        This approach retrieves only necessary fields and paginates efficiently.
+        """
+        # Ensure request is available in the context
+        request = self.context.get('request')
+        if not request:
+            raise NotFound("Request context is missing")
+        # Optimize by only fetching the fields needed and paginating
+        conversations_qs, paginator = paginate_field(
+            obj.conversations_scope.all()
+            .order_by('-date')  # Order by descending date
+            .values('id', 'title', 'date'),  # Fetch only the needed fields
+            self.context['request'],
+            'conversations'
+        )
+
+        if conversations_qs is None:
+            return []
+
+        # Build the response format (including URLs)
+        conversation_titles = [
+            {
+                'title': conversation['title'],
+                'date': conversation['date'],
+                'url': self.context['request'].build_absolute_uri(
+                    reverse('conversation-detail', args=[conversation['id']])
+                )
+            }
+            for conversation in conversations_qs
+        ]
+        return {
+            'results': conversation_titles,
+            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
+            'previous': paginator.get_previous_link()
+        }
+
+    def get_conversation_trend(self, obj):
+        conversation_trend = obj.get_conversation_trend()
+        paginated_qs, paginator = paginate_field(
+            conversation_trend,
+            self.context['request'],
+            'conversation_trend'
+        )
+        return {
+            'results': conversation_trend,
+            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
+            'previous': paginator.get_previous_link()
+        }
+
+    def get_conversation_topic_trend(self, obj):
+        topic_trend = obj.get_conversation_trend_per_topic()
+        paginated_qs, paginator = paginate_field(
+            topic_trend,
+            self.context['request'],
+            'conversation_topic_trend'
+        )
+        return {
+            'results': topic_trend,
+            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
+            'previous': paginator.get_previous_link()
+        }
+
+    def get_duration_trend(self, obj):
+        """
+        Determines the trend period based on the query parameter 'trend_period'.
+        Defaults to 'daily' if no parameter is provided.
+        """
+        request = self.context.get('request')
+        trend_period = request.query_params.get('trend_period', 'daily')  # Default to daily
+
+        # Fetch the appropriate trend based on the period
+        duration_trend = obj.get_avg_for_periods('duration', trend_period)
+        paginated_qs, paginator = paginate_field(
+            duration_trend,
+            self.context['request'],
+            'duration_trend'
+        )
+        return {
+            'results': duration_trend,
+            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
+            'previous': paginator.get_previous_link()
+        }
+
+    def get_sentiment_trend(self, obj):
+        """
+        Determines the trend period based on the query parameter 'trend_period'.
+        Defaults to 'daily' if no parameter is provided.
+        """
+        request = self.context.get('request')
+        trend_period = request.query_params.get('trend_period', 'daily')  # Default to daily
+
+        # Fetch the appropriate trend based on the period
+        sentiment_trend = obj.get_avg_for_periods('sentiment', trend_period)
+        paginated_qs, paginator = paginate_field(
+            sentiment_trend,
+            self.context['request'],
+            'sentiment_trend'
+        )
+        return {
+            'results': sentiment_trend,
+            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
+            'previous': paginator.get_previous_link()
+        }
+
+
+class MetaSummarySerializer(serializers.ModelSerializer):
+    """
+    Abstract Serializer class used to produce meta-summary data on the models that allow its creation via
+    get_or_create_summary()
+    """
+    summary_data = serializers.SerializerMethodField()
+
+    class Meta:
+        abstract = True
+
+    @staticmethod
+    def get_summary_data(obj):
+        obj.get_or_create_summary()
+        return {
+            'summary': obj.summary,
+            'summary_date': obj.summary_date,
+            'summary_call_count': obj.summary_call_count
+        }
 
 
 class ConversationModifySerializer(serializers.ModelSerializer):
@@ -62,69 +234,22 @@ class ConversationDetailSerializer(ConversationListSerializer):
         return obj.process_transcript()
 
 
-class ConversationRelationshipSerializer(serializers.ModelSerializer):
-    conversation_count = serializers.SerializerMethodField()
-    conversations = serializers.SerializerMethodField()
-    conversation_trend = serializers.SerializerMethodField()
-    conversation_topic_trend = serializers.SerializerMethodField()
-    duration_trend = serializers.SerializerMethodField()
-    sentiment_trend = serializers.SerializerMethodField()
-
-    class Meta:
-        abstract = True
-
-    @staticmethod
-    def get_conversation_count(obj):
-        return obj.conversations.count()
-
-    def get_conversations(self, obj):
-        conversation_titles = []  # Pagination will be necessary
-        for conversation in obj.conversations.all():
-            conversation_titles.append(
-                {
-                    'title': conversation.title,
-                    'url': self.context['request'].build_absolute_uri(
-                        reverse('conversation-detail', args=[conversation.pk])
-                    )
-                }
-            )
-        return conversation_titles
-
-    @staticmethod
-    def get_conversation_trend(obj):
-        return obj.get_conversation_trend()  # Pagination will be necessary
-
-    @staticmethod
-    def get_conversation_topic_trend(obj):
-        return obj.get_conversation_trend_per_topic()  # Pagination will be necessary
-
-    @staticmethod
-    def get_duration_trend(obj):
-        return obj.get_avg_duration()  # Pagination will be necessary
-
-    @staticmethod
-    def get_sentiment_trend(obj):
-        return obj.get_avg_sentiment()  # Pagination will be necessary
-
-
-class OrganizationSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
-    topics = serializers.HyperlinkedRelatedField(view_name='topic-detail', many=True, read_only=True)
-    topic_data = serializers.SerializerMethodField()
-
+class OrganizationDetailSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Organization
-        fields = ['url', 'name', 'topics', 'topic_data', 'conversation_trend', 'conversation_topic_trend',
-                  'duration_trend', 'sentiment_trend']
+        fields = ['url', 'name']
 
-    @staticmethod
-    def get_topic_data(obj):
+    def get_topic_data(self, obj):
         # Return a list of topic names and descriptions
         topic_data = []
-        for topic in obj.topics.all():
+        for i, topic in enumerate(obj.topics.all()):
             topic_data.append(
                 {
                     'name': topic.name,
                     'description': topic.description,
+                    'url': self.context['request'].build_absolute_uri(
+                        reverse('topic-detail', args=[topic.id])
+                    ),
                 }
             )
         return topic_data
@@ -142,7 +267,7 @@ class TopicModifySerializer(serializers.ModelSerializer):
         fields = ['name', 'description', 'organization']
 
 
-class TopicListSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
+class TopicListSerializer(serializers.HyperlinkedModelSerializer, ConversationStatsSerializer):
     """
     This serializer is used to list all instances of an organization's topics
     """
@@ -153,35 +278,13 @@ class TopicListSerializer(serializers.HyperlinkedModelSerializer, ConversationRe
         fields = ['url', 'name', 'description', 'conversation_count']
 
 
-class MetaSummarySerializer(serializers.ModelSerializer):
+class TopicDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationStatsSerializer):
     """
-    Abstract Serializer class used to produce meta-summary data on the models that allow its creation via
-    get_or_create_summary()
-    """
-    summary_data = serializers.SerializerMethodField()
-
-    class Meta:
-        abstract = True
-
-    @staticmethod
-    def get_summary_data(obj):
-        obj.get_or_create_summary()
-        return {
-            'summary': obj.summary,
-            'summary_date': obj.summary_date,
-            'summary_call_count': obj.summary_call_count
-        }
-
-
-class TopicDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer,
-                            MetaSummarySerializer):
-    """
-    This serializer is used to present all topic information and statistics, focused on the retrieve() action
+    This serializer is used to present basic topic information, focused on the retrieve() action
     """
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'summary_data', 'conversations', 'conversation_trend',
-                  'conversation_topic_trend', 'duration_trend', 'sentiment_trend']
+        fields = ['url', 'name', 'description', 'conversation_count']
 
 
 class AgentModifySerializer(serializers.ModelSerializer):
@@ -199,7 +302,7 @@ class AgentModifySerializer(serializers.ModelSerializer):
         fields = ['organization', 'employee', 'manager', 'agents']
 
 
-class AgentListSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
+class AgentListSerializer(serializers.HyperlinkedModelSerializer, ConversationStatsSerializer):
     """
     This serializer simply lists all existing Agents in an organization, as well as their managers and call count.
     """
@@ -213,7 +316,7 @@ class AgentListSerializer(serializers.HyperlinkedModelSerializer, ConversationRe
         fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count']
 
 
-class AgentDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer,
+class AgentDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationStatsSerializer,
                             MetaSummarySerializer):
     """
     This serializer shows the detail of a given agent, including all its meta-summary data and trend statistics
@@ -226,9 +329,7 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer, Conversation
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'summary', 'summary_date', 'summary_call_count',
-                  'agents', 'agent_names', 'conversations', 'conversation_trend', 'conversation_topic_trend',
-                  'duration_trend', 'sentiment_trend']
+        fields = ['url', 'username', 'manager', 'manager_username', 'agents', 'agent_names', 'conversation_count']
 
     @staticmethod
     def get_agent_names(obj):
@@ -247,7 +348,7 @@ class CustomerModifySerializer(serializers.ModelSerializer):
         fields = ['organization', 'name']
 
 
-class CustomerListSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer):
+class CustomerListSerializer(serializers.HyperlinkedModelSerializer, ConversationStatsSerializer):
     conversation_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -255,9 +356,8 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer, Conversatio
         fields = ['url', 'name', 'conversation_count']
 
 
-class CustomerDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationRelationshipSerializer,
+class CustomerDetailSerializer(serializers.HyperlinkedModelSerializer, ConversationStatsSerializer,
                                MetaSummarySerializer):
     class Meta:
         model = Customer
-        fields = ['url', 'name', 'summary', 'summary_date', 'summary_call_count', 'conversations', 'conversation_trend',
-                  'conversation_topic_trend', 'duration_trend', 'sentiment_trend']
+        fields = ['url', 'name', 'conversation_count']

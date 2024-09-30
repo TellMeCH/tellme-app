@@ -1,16 +1,11 @@
+from django.utils import timezone
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth.models import User
 from call_miner.models import Organization, Analyst, Agent, Topic, Customer, Conversation
+from datetime import datetime, timedelta
+import random
 
 COMMON_PASSWORD = 'tell_me_long'
-CALL_TITLE = 'Snake found in pickles'
-CALL_TRANSCRIPT = """
-<agent>: Good afternoon, what can I do for you?
-<customer>: Hello, there is a snake in my pickles!
-<agent>: Oh dear! That's for sure not Kosher!
-<customer>: I shart my pants.
-"""
-CALL_SUMMARY = "Reptilian causes defecation."
 
 
 class Command(BaseCommand):
@@ -28,20 +23,16 @@ class Command(BaseCommand):
             raise CommandError(f'Failed creation of Sample Organizations: {e}')
 
         try:
-            self.stdout.write('Creating Sample Topics')
-            topic_1 = Topic(
-                name='Animals',
-                description='The animal kingdom is upon us.',
-                organization=org
-            )
-            topic_1.save()
-
-            topic_2 = Topic(
-                name='Preserved Foods',
-                description='Excessive harvests should be kept for future years.',
-                organization=org
-            )
-            topic_2.save()
+            self.stdout.write('Creating 10 Sample Topics for ACME Org')
+            topics = []
+            for i in range(1, 11):
+                topic = Topic(
+                    name=f'Topic {i}',
+                    description=f'This is topic number {i} for ACME Org.',
+                    organization=org
+                )
+                topic.save()
+                topics.append(topic)
         except Exception as e:
             raise CommandError(f'Failed creation of Sample Topics: {e}')
 
@@ -72,7 +63,7 @@ class Command(BaseCommand):
             raise CommandError(f'Failed creation of Sample Analysts: {e}')
 
         try:
-            self.stdout.write('Creating Sample Agents')
+            self.stdout.write('Creating 15 Sample Agents under manager_01')
             user = User.objects.create_user(
                 username='manager_01',
                 password=COMMON_PASSWORD,
@@ -84,51 +75,89 @@ class Command(BaseCommand):
             )
             manager.save()
 
-            user = User.objects.create_user(
-                username='agent_01',
-                password=COMMON_PASSWORD,
-                email='agent_01@acme.org'
-            )
-            agent = Agent(
-                organization=org,
-                user=user,
-                manager=manager
-            )
-            agent.save()
+            agents = []
+            for i in range(1, 17):  # Creating agent_02 to agent_16
+                user = User.objects.create_user(
+                    username=f'agent_{i:02d}',
+                    password=COMMON_PASSWORD,
+                    email=f'agent_{i:02d}@acme.org'
+                )
+                agent = Agent(
+                    organization=org,
+                    user=user,
+                    manager=manager
+                )
+                agent.save()
+                agents.append(agent)
         except Exception as e:
             raise CommandError(f'Failed creation of Sample Agents: {e}')
 
         try:
-            self.stdout.write('Creating Sample Customer')
-            customer = Customer(
-                name='Anna Boweles',
-                organization=org
-            )
-            customer.save()
+            self.stdout.write('Creating 50 Sample Customers for ACME Org')
+            customer_names = [
+                'John Smith', 'Jane Doe', 'Alice Brown', 'Charlie Black', 'Emma Green',
+                'Michael White', 'Olivia Blue', 'Isabella Gray', 'William Gold', 'Sophia Silver',
+                'Liam Violet', 'Lucas Yellow', 'Amelia Orange', 'Elijah Pink', 'Ethan Indigo',
+                'James Crimson', 'Henry Teal', 'Alexander Cyan', 'Benjamin Magenta', 'Jackson Olive',
+                'Sebastian Ruby', 'Matthew Jade', 'Joseph Emerald', 'David Amber', 'Owen Coral',
+                'Gabriel Navy', 'Oliver Lilac', 'Mason Burgundy', 'Samuel Sapphire', 'Logan Pearl',
+                'Levi Garnet', 'Jacob Quartz', 'Daniel Topaz', 'Jack Opal', 'Carter Onyx',
+                'Isaac Amethyst', 'Noah Diamond', 'Thomas Jasper', 'Lucas Bronze', 'Ryan Steel',
+                'Caleb Brass', 'Nathan Copper', 'Hunter Silverleaf', 'Chloe Violet', 'Scarlett Garnet',
+                'Hazel Stone', 'Grace Ruby', 'Luna Quartz', 'Penelope Pearl', 'Ellie Topaz'
+            ]
+
+            customers = []
+            for name in customer_names:
+                customer = Customer(
+                    name=name,
+                    organization=org
+                )
+                customer.save()
+                customers.append(customer)
         except Exception as e:
-            raise CommandError(f'Failed creation of Sample Customer: {e}')
+            raise CommandError(f'Failed creation of Sample Customers: {e}')
 
         try:
-            self.stdout.write('Creating Sample Conversation')
-            conversation = Conversation(
-                path='/random/path/in/gcs/',
-                date='2024-03-15',
-                duration=15,
-                transcript=CALL_TRANSCRIPT,
-                sentiment=0.8,
-                title=CALL_TITLE,
-                summary=CALL_SUMMARY,
-                input_tokens=50,
-                output_tokens=15,
-                customer=customer,
-                agent=agent
-            )
-            conversation.save()
-            conversation.topics.add(topic_1, topic_2)
-            conversation.save()
+            self.stdout.write('Creating 150 Sample Conversations for ACME Org Customers')
+            base_date = datetime(2024, 1, 1)
+            for i in range(150):
+                agent = random.choice(agents)
+                customer = random.choice(customers)
+                naive_date = base_date + timedelta(days=random.randint(0, 364))  # Naive datetime
+                date = timezone.make_aware(naive_date)  # Convert to aware datetime
+                sentiment = random.uniform(-1, 1)  # Sentiment between -1 and 1
+                duration = random.randint(30, 1800)  # Random duration in seconds
+
+                conversation = Conversation(
+                    path=f'/random/path/{i}',
+                    date=date,
+                    duration=duration,
+                    transcript=f"""
+                    <agent>: Hello, {agent.user.username}, how can I assist you today?
+                    <customer>: Hi, I have an issue with my product. It's acting weird.
+                    <agent>: Could you describe the problem?
+                    <customer>: Yes, it keeps making a strange noise and flashing red lights.
+                    <agent>: That doesn't sound right. Let me look into that for you.
+                    <customer>: Thank you, it's driving me crazy!
+                    """,
+                    sentiment=sentiment,
+                    title=f"Conversation {i + 1} - {agent.user.username} assists {customer.name}",
+                    summary=f"Agent {agent.user.username} assisted customer {customer.name} with an issue.",
+                    input_tokens=random.randint(50, 200),
+                    output_tokens=random.randint(20, 100),
+                    customer=customer,
+                    agent=agent
+                )
+                conversation.save()
+
+                # Assign random topics
+                random_topics = random.sample(topics, random.randint(1, 3))
+                conversation.topics.add(*random_topics)
+                conversation.save()
         except Exception as e:
-            raise CommandError(f'Failed creation of Conversation: {e}')
+            raise CommandError(f'Failed creation of Conversations: {e}')
 
         self.stdout.write(
-            self.style.SUCCESS('Successfully created sample data')
+            self.style.SUCCESS('Successfully created expanded sample data')
         )
