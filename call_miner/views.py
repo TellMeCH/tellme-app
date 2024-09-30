@@ -1,4 +1,5 @@
 from .models import Conversation, Organization, Topic, Agent, Customer
+from rest_framework import viewsets, permissions, decorators, response
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationDetailSerializer, ConversationStatsSerializer, MetaSummarySerializer, TopicModifySerializer,
@@ -6,7 +7,7 @@ from call_miner.serializers import (
     CustomerModifySerializer, CustomerListSerializer, CustomerDetailSerializer
 )
 from call_miner.permissions import IsSuperUserToModify, IsOrganizationMember, IsAnalyst, IsManager
-from rest_framework import viewsets, permissions, decorators, response
+from call_miner.utils.paginators import CustomListViewPaginator
 
 
 """
@@ -61,6 +62,8 @@ class StatisticsActionsViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ConversationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['-date']
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -86,6 +89,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
 class OrganizationViewSet(StatisticsActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['name']
 
     def get_serializer_class(self):
         if self.action in ['retrieve', 'topics']:
@@ -113,6 +118,8 @@ class OrganizationViewSet(StatisticsActionsViewSet):
 
 class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['-name']
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -146,6 +153,8 @@ class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
 
 class AgentViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember, IsManager]
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['-user_id']
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -176,6 +185,8 @@ class AgentViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
 
 class CustomerViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['-name']
 
     def get_serializer_class(self):
         if self.action == 'list':

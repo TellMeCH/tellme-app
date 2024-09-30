@@ -1,32 +1,15 @@
 from django.urls import reverse
 from rest_framework import serializers
-from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
-from rest_framework.pagination import CursorPagination
 from rest_framework.exceptions import NotFound
+from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
+from call_miner.utils.paginators import CustomFieldCursorPaginator
 
 
-class CustomFieldCursorPaginator(CursorPagination):
-    """
-    Custom cursor paginator that allows per-field pagination using query parameters
-    like `<field_name>_cursor` and `<field_name>_page_size`.
-    """
-    cursor_query_param = ''  # Set dynamically for each field
-    page_size_query_param = ''  # Set dynamically for each field
-    ordering = ['-date', 'id']  # Default ordering by descending date
-    page_size = 15
-
-
-def paginate_field(queryset, request, field_name):
+def paginate_field(queryset, request):
     """
     Helper function to paginate a queryset using DRF's CursorPagination.
-    Allows the use of custom cursor and page_size parameters like '<field_name>_cursor'
-    and '<field_name>_page_size'.
     """
     paginator = CustomFieldCursorPaginator()
-
-    # Set the custom query parameters for cursor pagination
-    paginator.cursor_query_param = f"{field_name}_cursor"
-    paginator.page_size_query_param = f"{field_name}_page_size"
 
     # Paginate the queryset using DRF's cursor paginator
     paginated_qs = paginator.paginate_queryset(queryset, request)
@@ -62,8 +45,7 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
             obj.conversations_scope.all()
             .order_by('-date')  # Order by descending date
             .values('id', 'title', 'date'),  # Fetch only the needed fields
-            self.context['request'],
-            'conversations'
+            self.context['request']
         )
 
         if conversations_qs is None:
@@ -90,8 +72,7 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
         conversation_trend = obj.get_conversation_trend()
         paginated_qs, paginator = paginate_field(
             conversation_trend,
-            self.context['request'],
-            'conversation_trend'
+            self.context['request']
         )
         return {
             'results': conversation_trend,
@@ -103,8 +84,7 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
         topic_trend = obj.get_conversation_trend_per_topic()
         paginated_qs, paginator = paginate_field(
             topic_trend,
-            self.context['request'],
-            'conversation_topic_trend'
+            self.context['request']
         )
         return {
             'results': topic_trend,
@@ -124,8 +104,7 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
         duration_trend = obj.get_avg_for_periods('duration', trend_period)
         paginated_qs, paginator = paginate_field(
             duration_trend,
-            self.context['request'],
-            'duration_trend'
+            self.context['request']
         )
         return {
             'results': duration_trend,
@@ -145,8 +124,7 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
         sentiment_trend = obj.get_avg_for_periods('sentiment', trend_period)
         paginated_qs, paginator = paginate_field(
             sentiment_trend,
-            self.context['request'],
-            'sentiment_trend'
+            self.context['request']
         )
         return {
             'results': sentiment_trend,
