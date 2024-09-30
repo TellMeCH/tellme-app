@@ -37,9 +37,6 @@ class ListCursorPagination(CursorPagination):
         # Slice the list based on the cursor and page size
         paginated_list = sorted_list[index:index + self.page_size]
 
-        if not paginated_list:
-            raise NotFound("No more data.")
-
         self.has_next = index + self.page_size < len(sorted_list)
         self.has_previous = index > 0
 

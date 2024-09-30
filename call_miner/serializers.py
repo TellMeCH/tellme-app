@@ -300,16 +300,36 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     manager = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
     manager_username = serializers.CharField(source='manager.user.username', read_only=True)
-    agents = serializers.HyperlinkedRelatedField(view_name='agent-detail', many=True, read_only=True)  # Pagination will be necessary
-    agent_names = serializers.SerializerMethodField()  # Pagination will be necessary
+    agent_data = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'agents', 'agent_names', 'conversation_count']
+        fields = ['url', 'username', 'manager', 'manager_username', 'agent_data', 'conversation_count']
 
     @staticmethod
     def get_agent_names(obj):
         return [agent.user.username for agent in obj.agents.all()]
+
+    def get_agent_data(self, obj):
+        # Return a list of agent names and links
+        agent_data = []
+        for i, agent in enumerate(obj.agents.all()):
+            agent_data.append(
+                {
+                    'id': i,
+                    'conversation_count': agent.conversation_count,
+                    'name': agent.user.username,
+                    'url': self.context['request'].build_absolute_uri(
+                        reverse('agent-detail', args=[agent.id])
+                    ),
+                }
+            )
+        paginated_data, paginator = paginate_list(agent_data, self.context['request'])
+        return {
+            'results': paginated_data,
+            'next': paginator.get_next_link(),
+            'previous': paginator.get_previous_link()
+        }
 
 
 class CustomerModifySerializer(serializers.ModelSerializer):
