@@ -140,6 +140,24 @@ class Command(BaseCommand):
                     <customer>: Yes, it keeps making a strange noise and flashing red lights.
                     <agent>: That doesn't sound right. Let me look into that for you.
                     <customer>: Thank you, it's driving me crazy!
+                    <agent>: Hello, {agent.user.username}, how can I assist you today?
+                    <customer>: Hi, I have an issue with my product. It's acting weird.
+                    <agent>: Could you describe the problem?
+                    <customer>: Yes, it keeps making a strange noise and flashing red lights.
+                    <agent>: That doesn't sound right. Let me look into that for you.
+                    <customer>: Thank you, it's driving me crazy!
+                    <agent>: Hello, {agent.user.username}, how can I assist you today?
+                    <customer>: Hi, I have an issue with my product. It's acting weird.
+                    <agent>: Could you describe the problem?
+                    <customer>: Yes, it keeps making a strange noise and flashing red lights.
+                    <agent>: That doesn't sound right. Let me look into that for you.
+                    <customer>: Thank you, it's driving me crazy!
+                    <agent>: Hello, {agent.user.username}, how can I assist you today?
+                    <customer>: Hi, I have an issue with my product. It's acting weird.
+                    <agent>: Could you describe the problem?
+                    <customer>: Yes, it keeps making a strange noise and flashing red lights.
+                    <agent>: That doesn't sound right. Let me look into that for you.
+                    <customer>: Thank you, it's driving me crazy!
                     """,
                     sentiment=sentiment,
                     title=f"Conversation {i + 1} - {agent.user.username} assists {customer.name}",

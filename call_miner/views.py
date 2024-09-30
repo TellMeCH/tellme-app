@@ -59,6 +59,10 @@ class StatisticsActionsViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(obj)
         return response.Response({'sentiment_trend': serializer.get_sentiment_trend(obj)})
 
+    def get_serializer_context(self):
+        # Ensure the request context is passed to the serializer
+        return {'request': self.request}
+
 
 class ConversationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
@@ -68,9 +72,9 @@ class ConversationViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return ConversationListSerializer
-        elif self.action == 'retrieve':
+        elif self.action in ['retrieve', 'transcript']:
             return ConversationDetailSerializer
-        elif self.request.method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+        elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return ConversationModifySerializer
         return ConversationListSerializer
 
@@ -81,6 +85,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
         if self.request.user.employee.organization:
             return Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
         return Conversation.objects.none()
+
+    @decorators.action(detail=True, methods=['get'])
+    def transcript(self, request, pk=None):
+        obj = self.get_object()
+        serializer = self.get_serializer(obj)
+        return response.Response({'transcript': serializer.get_processed_transcript(obj)})
 
     def get_serializer_context(self):
         # Ensure the request context is passed to the serializer
@@ -93,7 +103,7 @@ class OrganizationViewSet(StatisticsActionsViewSet):
     cursor_ordering = ['name']
 
     def get_serializer_class(self):
-        if self.action in ['retrieve', 'topics']:
+        if self.action in ['retrieve']:
             return OrganizationDetailSerializer
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
@@ -104,16 +114,6 @@ class OrganizationViewSet(StatisticsActionsViewSet):
         if self.request.user.employee.organization:
             return Organization.objects.filter(pk=self.request.user.employee.organization.pk)
         return Organization.objects.none()
-
-    def get_serializer_context(self):
-        # Ensure the request context is passed to the serializer
-        return {'request': self.request}
-
-    @decorators.action(detail=True, methods=['get'])
-    def topics(self, request, pk=None):
-        org = self.get_object()
-        serializer = self.get_serializer(org)
-        return response.Response({'topics': serializer.get_topic_data(org)})
 
 
 class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
@@ -141,10 +141,6 @@ class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
         if self.request.user.employee.organization:
             return Topic.objects.filter(organization=self.request.user.employee.organization)
         return Topic.objects.none()
-
-    def get_serializer_context(self):
-        # Ensure the request context is passed to the serializer
-        return {'request': self.request}
 
     def conversation_topic_trend(self, request, *args, **kwargs):
         # This action will not appear in the API schema
@@ -178,10 +174,6 @@ class AgentViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
             return Agent.objects.filter(organization=self.request.user.employee.organization)
         return Agent.objects.none()
 
-    def get_serializer_context(self):
-        # Ensure the request context is passed to the serializer
-        return {'request': self.request}
-
 
 class CustomerViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
@@ -209,7 +201,3 @@ class CustomerViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
         if self.request.user.employee.organization:
             return Customer.objects.filter(organization=self.request.user.employee.organization)
         return Customer.objects.none()
-
-    def get_serializer_context(self):
-        # Ensure the request context is passed to the serializer
-        return {'request': self.request}

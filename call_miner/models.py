@@ -325,10 +325,11 @@ class Conversation(models.Model):
 
         # Pair up the message and assign the appropriate class (agent or customer) for coloring
         processed_messages = []
-        for i in range(1, len(messages), 2):  # We start at 1 because 0 is an empty string from the split
+        for message_id, i in enumerate(range(1, len(messages), 2)):  # We start at 1 because 0 is an empty string from the split
             speaker = messages[i].strip()  # Either "Agent:" or "Customer:"
             message_text = messages[i + 1][len(speaker):].strip()  # The message following the speaker identifier
             processed_messages.append({
+                'id': message_id,
                 'message': message_text,
                 'class': 'agent-message' if speaker == '<agent>:' else 'customer-message'
             })
