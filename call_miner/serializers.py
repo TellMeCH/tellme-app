@@ -17,7 +17,6 @@ def paginate_field(queryset, request):
 
 
 class ConversationStatsSerializer(serializers.ModelSerializer):
-    conversation_count = serializers.SerializerMethodField()
     conversations = serializers.SerializerMethodField()
     conversation_trend = serializers.SerializerMethodField()
     conversation_topic_trend = serializers.SerializerMethodField()
@@ -26,10 +25,6 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
 
     class Meta:
         abstract = True
-
-    @staticmethod
-    def get_conversation_count(obj):
-        return obj.get_conversation_count()
 
     def get_conversations(self, obj):
         """
@@ -213,9 +208,11 @@ class ConversationDetailSerializer(ConversationListSerializer):
 
 
 class OrganizationDetailSerializer(serializers.HyperlinkedModelSerializer):
+    conversation_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Organization
-        fields = ['url', 'name']
+        fields = ['url', 'name', 'conversation_count']
 
     def get_topic_data(self, obj):
         # Return a list of topic names and descriptions
@@ -231,6 +228,10 @@ class OrganizationDetailSerializer(serializers.HyperlinkedModelSerializer):
                 }
             )
         return topic_data
+
+    @staticmethod
+    def get_conversation_count(obj):
+        return obj.conversations_scope.count()
 
 
 class TopicModifySerializer(serializers.ModelSerializer):
@@ -249,7 +250,6 @@ class TopicListSerializer(serializers.HyperlinkedModelSerializer, ConversationSt
     """
     This serializer is used to list all instances of an organization's topics
     """
-    conversation_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Topic
@@ -287,7 +287,6 @@ class AgentListSerializer(serializers.HyperlinkedModelSerializer, ConversationSt
     username = serializers.CharField(source='user.username', read_only=True)
     manager = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
     manager_username = serializers.CharField(source='manager.user.username', read_only=True)
-    conversation_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
@@ -327,8 +326,6 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 
 
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer, ConversationStatsSerializer):
-    conversation_count = serializers.SerializerMethodField()
-
     class Meta:
         model = Customer
         fields = ['url', 'name', 'conversation_count']

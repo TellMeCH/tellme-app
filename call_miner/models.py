@@ -5,6 +5,7 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
 from django.core.exceptions import ValidationError
+from django.db.models.signals import post_save, post_delete
 
 
 class MetaSummaryAbstractModel(models.Model):
@@ -51,6 +52,51 @@ class MetaSummaryAbstractModel(models.Model):
         return deviation > self.DEVIATION_THRESHOLD
 
 
+class ConversationCountAbstractModel(models.Model):
+    """
+    Abstract class used to keep a counter of the existing conversations associated to a model instance.
+    """
+    conversation_count = models.IntegerField(default=0)
+
+    class Meta:
+        abstract = True
+
+    def update_conversation_count(self):
+        """
+        Updates the stored conversation_count field.
+        """
+        self.conversation_count = self.conversations.all().count()
+        self.save()
+
+    @staticmethod
+    def register_signals(conversation_model, related_field):
+        """
+        Registers signals to automatically update the conversation count for different models.
+
+        Args:
+            conversation_model: The model that has the conversations (e.g., Conversation).
+            related_field: The name of the field on the conversation_model that links to the related object
+                           (e.g., 'customer', 'agent', 'organization').
+        """
+        @receiver(post_save, sender=conversation_model)
+        def update_conversation_count_on_save(sender, instance, **kwargs):
+            if related_field == 'topics':
+                for topic in instance.topics.all():
+                    topic.update_conversation_count()
+            else:
+                related_object = getattr(instance, related_field)
+                related_object.update_conversation_count()
+
+        @receiver(post_delete, sender=conversation_model)
+        def update_conversation_count_on_delete(sender, instance, **kwargs):
+            if related_field == 'topics':
+                for topic in instance.topics.all():
+                    topic.update_conversation_count()
+            else:
+                related_object = getattr(instance, related_field)
+                related_object.update_conversation_count()
+
+
 class ConversationTrendMixin:
     """
     Mixin containing the trends of the conversations associated with a given object, now including
@@ -74,12 +120,6 @@ class ConversationTrendMixin:
         else:
             # Assume the object has a direct relationship with conversations
             return self.conversations.all()
-
-    def get_conversation_count(self):
-        """
-        Obtains the current conversation count.
-        """
-        return self.conversations_scope.count()
 
     def get_conversation_trend(self):
         """
@@ -150,7 +190,7 @@ class Organization(models.Model, ConversationTrendMixin):
         verbose_name_plural = "Organizations"
 
 
-class Topic(MetaSummaryAbstractModel, ConversationTrendMixin):
+class Topic(MetaSummaryAbstractModel, ConversationCountAbstractModel, ConversationTrendMixin):
     """
     Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
     multi-label classification task.
@@ -178,7 +218,7 @@ class Employee(models.Model):
     - A manager is an agent that is related to another agent in a hierarchical relationship. Managers can hold calls.
     """
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='employees')
-    user = models.OneToOneField('auth.User', related_name='employee', on_delete=models.CASCADE)
+    user = models.OneToOneField('auth.User', on_delete=models.SET_NULL, related_name='employee', null=True)
 
     def __str__(self):
         return self.user.username
@@ -193,7 +233,7 @@ class Analyst(Employee):
         verbose_name_plural = "Analysts"
 
 
-class Agent(Employee, MetaSummaryAbstractModel, ConversationTrendMixin):
+class Agent(Employee, MetaSummaryAbstractModel, ConversationCountAbstractModel, ConversationTrendMixin):
     manager = models.ForeignKey(
         'self',
         null=True,
@@ -217,7 +257,7 @@ class Agent(Employee, MetaSummaryAbstractModel, ConversationTrendMixin):
         verbose_name_plural = "Agents"
 
 
-class Customer(MetaSummaryAbstractModel, ConversationTrendMixin):
+class Customer(MetaSummaryAbstractModel, ConversationCountAbstractModel, ConversationTrendMixin):
     """
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
@@ -252,8 +292,8 @@ class Conversation(models.Model):
     input_tokens = models.IntegerField()
     output_tokens = models.IntegerField()
     topics = models.ManyToManyField(Topic, related_name='conversations')
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='conversations')
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='conversations')
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, related_name='conversations', null=True)
+    agent = models.ForeignKey(Agent, on_delete=models.SET_NULL, related_name='conversations', null=True)
 
     class Meta:
         verbose_name_plural = "Conversations"
