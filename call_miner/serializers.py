@@ -5,11 +5,34 @@ from call_miner.models import Conversation, Organization, Topic, Employee, Agent
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 
 
-def paginate_queryset(queryset, request):
+def paginate_queryset(queryset, request, ordering: list[str] = None):
     """
-    Helper function to paginate a queryset using DRF's CursorPagination.
+    Paginates a queryset using Django Rest Framework's (DRF) CursorPagination with custom ordering.
+
+    This function leverages a custom cursor paginator to paginate the given queryset
+    according to the specified ordering. It uses DRF's CursorPagination class to efficiently
+    paginate large datasets and supports cursor-based navigation through results.
+
+    Args:
+        queryset (QuerySet): The queryset to paginate.
+        request (HttpRequest): The current request object, which contains pagination parameters.
+        ordering (list[str]): A list of fields to use for ordering in the cursor pagination.
+
+    Returns:
+        tuple: A tuple containing:
+            - paginated_qs (QuerySet): The paginated subset of the queryset.
+            - paginator (CursorPaginator): The paginator instance used for pagination, useful for
+              accessing additional pagination data (like the next and previous cursor).
+
+    Raises:
+        ValueError: If the ordering fields are not valid for cursor pagination.
+
+    Example:
+        paginated_queryset, paginator = paginate_queryset(my_queryset, request, ['-date'])
     """
     paginator = CustomFieldCursorPaginator()
+    if ordering:
+        paginator.ordering = ordering
 
     # Paginate the queryset using DRF's cursor paginator
     paginated_qs = paginator.paginate_queryset(queryset, request)
@@ -69,10 +92,14 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
         }
 
     def get_conversation_trend(self, obj):
-        conversation_trend = obj.get_conversation_trend()
+        request = self.context.get('request')
+        trend_period = request.query_params.get('trend_period', 'daily')
+
+        conversation_trend = obj.get_conversation_trend(trend_period)
         paginated_qs, paginator = paginate_queryset(
             conversation_trend,
-            self.context['request']
+            self.context['request'],
+            ['date']
         )
         return {
             'results': paginated_qs,
@@ -81,10 +108,14 @@ class ConversationStatsSerializer(serializers.ModelSerializer):
         }
 
     def get_conversation_topic_trend(self, obj):
-        topic_trend = obj.get_conversation_trend_per_topic()
+        request = self.context.get('request')
+        trend_period = request.query_params.get('trend_period', 'daily')  # Default to daily
+
+        topic_trend = obj.get_conversation_trend_per_topic(trend_period)
         paginated_qs, paginator = paginate_queryset(
             topic_trend,
-            self.context['request']
+            self.context['request'],
+            ['date', 'topic']
         )
         return {
             'results': paginated_qs,
@@ -305,10 +336,6 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Agent
         fields = ['url', 'username', 'manager', 'manager_username', 'agent_data', 'conversation_count']
-
-    @staticmethod
-    def get_agent_names(obj):
-        return [agent.user.username for agent in obj.agents.all()]
 
     def get_agent_data(self, obj):
         # Return a list of agent names and links

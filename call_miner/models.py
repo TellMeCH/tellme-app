@@ -102,6 +102,11 @@ class ConversationTrendMixin:
     Mixin containing the trends of the conversations associated with a given object, now including
     average call duration and sentiment.
     """
+    period_truncations = {
+        'daily': models.functions.TruncDay('date'),
+        'weekly': models.functions.TruncWeek('date'),
+        'monthly': models.functions.TruncMonth('date'),
+    }
 
     @property
     def conversations_scope(self):
@@ -121,29 +126,37 @@ class ConversationTrendMixin:
             # Assume the object has a direct relationship with conversations
             return self.conversations.all()
 
-    def get_conversation_trend(self):
+    def get_conversation_trend(self, period: str):
         """
         Returns the evolution of the number of calls with time.
         """
+        if period not in self.period_truncations:
+            raise ValueError('Specify a period that is one of: "daily", "weekly", "monthly".')
+
         conversations_per_day = (
             self.conversations_scope
-            .values('date__date')
+            .annotate(period=self.period_truncations[period])
+            .values('period')
             .annotate(count=models.Count('id'))
-            .order_by('date__date')
-            .values('count', date=models.F('date__date'))
+            .values('count', date=models.F('period'))
+            .order_by()
         )
         return conversations_per_day
 
-    def get_conversation_trend_per_topic(self):
+    def get_conversation_trend_per_topic(self, period: str):
         """
-        Returns the number of conversations per topic per day.
+        Returns the number of conversations per topic per period of time.
         """
+        if period not in self.period_truncations:
+            raise ValueError('Specify a period that is one of: "daily", "weekly", "monthly".')
+
         conversations_per_topic_per_day = (
             self.conversations_scope
-            .values('topics__name', 'date__date')
+            .annotate(period=self.period_truncations[period])
+            .values('topics__name', 'period')
             .annotate(count=models.Count('id'))
-            .order_by('topics__name', 'date__date')
-            .values('count', date=models.F('date__date'), topic=models.F('topics__name'))
+            .values('count', date=models.F('period'), topic=models.F('topics__name'))
+            .order_by()
         )
         return conversations_per_topic_per_day
 
@@ -155,17 +168,12 @@ class ConversationTrendMixin:
         if field not in ['duration', 'sentiment']:
             raise ValueError('Currently only "duration" and "sentiment" are accepted as fields.')
 
-        period_truncs = {
-            'daily': models.functions.TruncDay('date'),
-            'weekly': models.functions.TruncWeek('date'),
-            'monthly': models.functions.TruncMonth('date'),
-        }
-        if period not in period_truncs.keys():
+        if period not in self.period_truncations:
             raise ValueError('Specify a period that is one of: "daily", "weekly", "monthly".')
 
         avg_per_period = (
             self.conversations_scope
-            .annotate(period=period_truncs[period])
+            .annotate(period=self.period_truncations[period])
             .values('period')
             .annotate(avg_value=models.Avg(field))
             .order_by('period')

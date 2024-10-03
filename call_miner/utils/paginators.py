@@ -12,7 +12,7 @@ class ListCursorPagination(CursorPagination):
     ordering = 'id'
     page_size = api_settings.PAGE_SIZE
     page_size_query_param = 'page_size'
-    max_page_size = 100  # Set a maximum limit to prevent excessively large requests
+    max_page_size = 100
 
     def get_page_size(self, request):
         if self.page_size_query_param:
@@ -86,10 +86,10 @@ class CustomFieldCursorPaginator(CursorPagination):
     """
     Custom cursor paginator that allows per-field pagination
     """
-    ordering = ['-date', 'id']  # Default ordering by descending date
+    ordering = ['-date', 'id']
     page_size = api_settings.PAGE_SIZE
     page_size_query_param = 'page_size'
-    max_page_size = 100  # Set a maximum limit to prevent excessively large requests
+    max_page_size = 100
 
     def get_page_size(self, request):
         if self.page_size_query_param:
@@ -103,7 +103,7 @@ class CustomFieldCursorPaginator(CursorPagination):
 class CustomListViewPaginator(CursorPagination):
     page_size = api_settings.PAGE_SIZE
     page_size_query_param = 'page_size'
-    max_page_size = 100  # Set a maximum limit to prevent excessively large requests
+    max_page_size = 100
 
     def get_page_size(self, request):
         if self.page_size_query_param:

@@ -1,9 +1,19 @@
 import pytest
+from unittest.mock import MagicMock, patch
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.contrib.auth.models import User
-from call_miner.models import Organization, Topic, Customer, Conversation, Employee, Analyst, Agent
 from django.utils import timezone
+
+from call_miner.models import (
+    Organization,
+    Topic,
+    Customer,
+    Conversation,
+    Employee,
+    Analyst,
+    Agent,
+)
 
 
 @pytest.fixture
@@ -12,8 +22,18 @@ def organization():
 
 
 @pytest.fixture
-def user(organization):
+def another_organization():
+    return Organization.objects.create(name="Another Organization")
+
+
+@pytest.fixture
+def user():
     return User.objects.create_user(username="testuser", password="testpass")
+
+
+@pytest.fixture
+def another_user():
+    return User.objects.create_user(username="anotheruser", password="anotherpass")
 
 
 @pytest.fixture
@@ -32,6 +52,11 @@ def agent(user, organization):
 
 
 @pytest.fixture
+def manager(another_user, organization):
+    return Agent.objects.create(user=another_user, organization=organization)
+
+
+@pytest.fixture
 def customer(organization):
     return Customer.objects.create(name="Test Customer", organization=organization)
 
@@ -42,12 +67,17 @@ def topic(organization):
 
 
 @pytest.fixture
+def another_topic(organization):
+    return Topic.objects.create(name="Another Topic", description="Another Description", organization=organization)
+
+
+@pytest.fixture
 def conversation(agent, customer, topic):
     conv = Conversation.objects.create(
         path="Test Call",
         date=timezone.now(),
         duration=60,
-        transcript="Test transcript",
+        transcript="<agent>: Hello <customer>: Hi",
         sentiment=0.5,
         summary="Test Summary",
         title='Test Title',
@@ -60,6 +90,259 @@ def conversation(agent, customer, topic):
     return conv
 
 
+@pytest.fixture
+def another_conversation(agent, customer, another_topic):
+    another_conv = Conversation.objects.create(
+        path="Another Test Call",
+        date=timezone.now() - timezone.timedelta(days=1),
+        duration=45,
+        transcript="<agent>: How can I help you? <customer>: I have an issue.",
+        sentiment=0.6,
+        summary="Another Summary",
+        title='Another Test Title',
+        customer=customer,
+        agent=agent,
+        input_tokens=5,
+        output_tokens=15
+    )
+    another_conv.topics.add(another_topic)
+    return another_conv
+
+
+@pytest.mark.django_db
+class TestMetaSummaryAbstractModel:
+    def test_meta_summary_creation(self, topic, conversation, mocker):
+        """
+        Test that get_or_create_summary method creates a summary for the Topic.
+        """
+        mock_condense = mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
+        topic.get_or_create_summary()
+        mock_condense.assert_called_once_with([conversation.summary])
+        assert topic.summary == "Mocked Summary"
+        assert topic.summary_call_count == 1
+        assert topic.summary_date == conversation.date
+
+    def test_meta_summary_no_update_when_deviation_not_significant(self, topic, conversation, mocker):
+        """
+        Test that get_or_create_summary does not update the summary if deviation is not significant.
+        """
+        topic.summary_call_count = 1
+        topic.summary = "Existing Summary"
+        topic.summary_date = conversation.date
+        topic.save()
+
+        mock_condense = mocker.patch('call_miner.models.condense_summaries')
+        topic.get_or_create_summary()
+        mock_condense.assert_not_called()
+        assert topic.summary == "Existing Summary"
+
+    def test_is_deviation_significant(self, topic):
+        """
+        Test the is_deviation_significant method for various scenarios.
+        """
+        topic.summary_call_count = 100
+        topic.save()
+        assert topic.is_deviation_significant(111) is True
+        assert topic.is_deviation_significant(89) is True
+        assert topic.is_deviation_significant(110) is False
+        assert topic.is_deviation_significant(90) is False
+        assert topic.is_deviation_significant(100) is False
+        topic.summary_call_count = 0
+        topic.save()
+        assert topic.is_deviation_significant(1) is True
+        assert topic.is_deviation_significant(0) is True
+
+    @patch('call_miner.models.condense_summaries', return_value=None)
+    def test_get_or_create_summary_no_conversations(self, mock_condense, topic):
+        """
+        Test that get_or_create_summary does nothing when there are no conversations.
+        """
+        topic.get_or_create_summary()
+        assert mock_condense.called
+        assert topic.summary is None
+
+
+@pytest.mark.django_db
+class TestConversationCountAbstractModel:
+    def test_conversation_count_empty(self, topic):
+        """
+        Test that the conversation count is 0 when there are no conversations.
+        """
+        topic.update_conversation_count()
+        assert topic.conversation_count == 0
+
+    def test_conversation_count_single_conversation(self, topic, conversation):
+        """
+        Test that the conversation count is 1 when there is one conversation.
+        """
+        topic.update_conversation_count()
+        assert topic.conversation_count == 1
+
+    def test_conversation_count_multiple_conversations(self, topic, conversation, another_conversation):
+        """
+        Test that multiple conversations are detected.
+        """
+        another_conversation.topics.add(topic)
+        topic.update_conversation_count()
+        assert topic.conversation_count == 2
+
+    def test_conversation_count_updates_on_delete(self, topic, conversation):
+        """
+        Test that the conversation count updates when a conversation is deleted via signals.
+        """
+        conversation.delete()
+        assert topic.conversation_count == 0
+
+
+@pytest.mark.django_db
+class TestConversationTrendMixin:
+    def test_conversations_scope_organization(self, organization, agent, customer, conversation):
+        """
+        Test that the conversations_scope method retrieves all conversations for an organization.
+        """
+        assert conversation in organization.conversations_scope
+
+    def test_conversations_scope_agent_manager(self, organization, agent, manager, customer, conversation):
+        """
+        Test that the conversations_scope method retrieves all conversations for a manager and their team.
+        """
+        agent.manager = manager
+        agent.save()
+        assert conversation in manager.conversations_scope
+        assert conversation in agent.conversations_scope
+
+    def test_conversations_scope_agent_non_manager(self, agent, conversation):
+        """
+        Test that the conversations_scope method retrieves only the agent's own conversations if they are not a manager.
+        """
+        assert conversation in agent.conversations_scope
+
+    def test_conversations_scope_direct_relationship(self, customer, conversation):
+        """
+        Test that the conversations_scope method retrieves the conversations directly related to a customer.
+        """
+        assert conversation in customer.conversations_scope
+
+    def test_get_conversation_trend_invalid_period(self, topic):
+        """
+        Tests the required input format for get_conversation_trend.
+        """
+        with pytest.raises(ValueError):
+            topic.get_conversation_trend('invalid_period')
+
+    def test_get_conversation_trend_empty(self, topic):
+        """
+        Test that get_conversation_trend returns an empty list when there are no conversations.
+        """
+        trend = list(topic.get_conversation_trend('daily'))
+        assert len(trend) == 0
+
+    def test_get_conversation_trend_single_conversation(self, topic, conversation):
+        """
+        Test that get_conversation_trend returns the correct trend for a single conversation.
+        """
+        trend = list(topic.get_conversation_trend('daily'))
+        assert len(trend) == 1
+        assert trend[0]['count'] == 1
+
+    def test_get_conversation_trend_multiple_conversations(self, topic, conversation, another_conversation):
+        """
+        Test that get_conversation_trend returns the correct trend for multiple conversations on different dates.
+        """
+        another_conversation.topics.add(topic)
+        trend = list(topic.get_conversation_trend('daily'))
+        assert len(trend) == 2
+
+    def test_get_conversation_trend_per_topic_invalid_period(self, topic):
+        """
+        Tests the required input format for get_conversation_trend_per_topic.
+        """
+        with pytest.raises(ValueError):
+            topic.get_conversation_trend_per_topic('invalid_period')
+
+    def test_get_conversation_trend_per_topic_empty(self, customer):
+        """
+        Test that get_conversation_trend_per_topic returns an empty list when there are no conversations.
+        """
+        trend = list(customer.get_conversation_trend_per_topic('daily'))
+        assert len(trend) == 0
+
+    def test_get_conversation_trend_per_topic_single_conversation(self, customer, conversation, topic):
+        """
+        Test that get_conversation_trend_per_topic returns the correct trend for a single conversation.
+        """
+        trend = list(customer.get_conversation_trend_per_topic('daily'))
+        assert len(trend) == 1
+        assert trend[0]['count'] == 1
+        assert trend[0]['topic'] == topic.name
+
+    def test_get_conversation_trend_per_topic_multiple_conversations(self, customer, conversation, another_conversation,
+                                                                     another_topic):
+        """
+        Test that get_conversation_trend_per_topic returns the correct trend for multiple conversations with different topics.
+        """
+        another_conversation.topics.add(another_topic)
+        trend = list(customer.get_conversation_trend_per_topic('daily'))
+        assert len(trend) == 2
+
+    def test_get_avg_for_periods_invalid_field(self, topic):
+        """
+        Tests the required input format for get_avg_for_periods.
+        """
+        with pytest.raises(ValueError):
+            topic.get_avg_for_periods('invalid_field', 'daily')
+
+    def test_get_avg_for_periods_invalid_period(self, topic):
+        with pytest.raises(ValueError):
+            topic.get_avg_for_periods('duration', 'invalid_period')
+
+    def test_get_avg_duration_empty(self, topic):
+        """
+        Test that get_avg_duration returns empty results when there are no conversations.
+        """
+        avg_duration = list(topic.get_avg_for_periods('duration', 'daily'))
+        assert len(avg_duration) == 0
+
+    def test_get_avg_duration_single_conversation(self, topic, conversation):
+        """
+        Test that get_avg_duration returns the correct average duration for a single conversation.
+        """
+        avg_duration = list(topic.get_avg_for_periods('duration', 'daily'))
+        assert len(avg_duration) == 1
+        assert avg_duration[0]['avg_value'] == conversation.duration
+
+    def test_get_avg_duration_multiple_conversations(self, topic, conversation, another_conversation):
+        """
+        Test that get_avg_duration returns the correct average duration for multiple conversations over different days.
+        """
+        another_conversation.topics.add(topic)
+        avg_duration = list(topic.get_avg_for_periods('duration', 'daily'))
+        assert len(avg_duration) == 2
+
+    def test_get_avg_sentiment_empty(self, topic):
+        """
+        Test that get_avg_sentiment returns empty results when there are no conversations.
+        """
+        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'daily'))
+        assert len(avg_sentiment) == 0
+
+    def test_get_avg_sentiment_single_conversation(self, topic, conversation):
+        """
+        Test that get_avg_sentiment returns the correct average sentiment for a single conversation.
+        """
+        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'monthly'))
+        assert len(avg_sentiment) == 1
+        assert avg_sentiment[0]['avg_value'] == conversation.sentiment
+
+    def test_get_avg_sentiment_multiple_conversations(self, topic, conversation, another_conversation):
+        """
+        Test that get_avg_sentiment returns the correct average sentiment for multiple conversations over different days.
+        """
+        another_conversation.topics.add(topic)
+        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'daily'))
+        assert len(avg_sentiment) == 2
+
+
 @pytest.mark.django_db
 class TestOrganization:
     def test_organization_creation(self, organization):
@@ -68,12 +351,13 @@ class TestOrganization:
         """
         assert organization.name == "Test Organization"
 
-    def test_organization_name_uniqueness(self, organization):
+    def test_organization_name_uniqueness(self):
         """
         Test that creating an Organization with a duplicate name raises an IntegrityError.
         """
+        Organization.objects.create(name="Unique Organization")
         with pytest.raises(IntegrityError):
-            Organization.objects.create(name="Test Organization")
+            Organization.objects.create(name="Unique Organization")
 
     def test_organization_str(self, organization):
         """
@@ -86,6 +370,14 @@ class TestOrganization:
         Test that the verbose name plural for Organization is "Organizations".
         """
         assert Organization._meta.verbose_name_plural == "Organizations"
+
+    def test_organization_inherits_conversation_trends(self, organization):
+        """
+        Test that Organizations have the functionalities inherited from ConversationTrendMixin.
+        """
+        assert hasattr(organization, 'get_conversation_trend')
+        assert hasattr(organization, 'get_conversation_trend_per_topic')
+        assert hasattr(organization, 'get_avg_for_periods')
 
 
 @pytest.mark.django_db
@@ -106,58 +398,26 @@ class TestTopic:
         with pytest.raises(IntegrityError):
             Topic.objects.create(name="Test Topic", description="Another Description", organization=organization)
 
-    def test_topic_meta_summary_creation(self, topic, conversation, mocker):
+    def test_topic_inherits_metasummary_model(self, topic):
         """
-        Test that get_or_create_summary method creates a summary for the Topic.
+        Test that Topics have the functionalities inherited from MetaSummaryAbstractModel.
         """
-        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        topic.get_or_create_summary()
-        assert topic.summary == "Mocked Summary"
-        assert topic.summary_call_count == 1
-        assert topic.summary_date == conversation.date
+        assert hasattr(topic, 'get_or_create_summary')
+        assert hasattr(topic, 'is_deviation_significant')
 
-    def test_topic_get_conversation_trend(self, topic, conversation):
+    def test_topic_inherits_conversation_count_model(self, topic):
         """
-        Test that get_conversation_trend method returns the correct trend data for the Topic.
+        Test that Topics have the functionalities inherited from ConversationCountAbstractModel.
         """
-        trend = topic.get_conversation_trend()
-        assert len(trend) == 1
-        assert trend[0]['count'] == 1
+        assert hasattr(topic, 'update_conversation_count')
 
-    def test_topic_is_deviation_significant(self, topic):
+    def test_topic_inherits_conversation_trends(self, topic):
         """
-        Test the is_deviation_significant method for various scenarios.
+        Test that Topics have the functionalities inherited from ConversationTrendMixin.
         """
-        topic.summary_call_count = 100
-        topic.save()
-        assert topic.is_deviation_significant(111)
-        assert topic.is_deviation_significant(89)
-        assert not topic.is_deviation_significant(110)
-        assert not topic.is_deviation_significant(90)
-        assert not topic.is_deviation_significant(100)
-        topic.summary_call_count = 0
-        topic.save()
-        assert topic.is_deviation_significant(1)
-        assert topic.is_deviation_significant(0)
-
-
-@pytest.mark.django_db
-class TestEmployee:
-    def test_employee_creation(self, employee, organization, user):
-        """
-        Test that an Employee instance is created with the correct attributes.
-        """
-        assert employee.organization == organization
-        assert employee.user == user
-        assert str(employee) == user.username
-
-    def test_employee_unique_together(self, employee, organization):
-        """
-        Test that creating an Employee with a duplicate user in the same organization raises an IntegrityError.
-        """
-        with pytest.raises(IntegrityError):
-            new_user = User.objects.create_user(username="testuser", password="newpass")
-            Employee.objects.create(user=new_user, organization=organization)
+        assert hasattr(topic, 'get_conversation_trend')
+        assert hasattr(topic, 'get_conversation_trend_per_topic')
+        assert hasattr(topic, 'get_avg_for_periods')
 
 
 @pytest.mark.django_db
@@ -172,11 +432,16 @@ class TestAnalyst:
 
     def test_analyst_unique_together(self, analyst, organization):
         """
-        Test that creating an Employee with a duplicate user in the same organization raises an IntegrityError.
+        Test that creating an Analyst with a duplicate user in the same organization raises an IntegrityError.
         """
         with pytest.raises(IntegrityError):
-            new_user = User.objects.create_user(username="testuser", password="newpass")
-            Analyst.objects.create(user=new_user, organization=organization)
+            Analyst.objects.create(user=analyst.user, organization=organization)
+
+    def test_analyst_is_employee(self, analyst):
+        """
+        Test that an Analyst is also an Employee.
+        """
+        assert isinstance(analyst, Employee)
 
 
 @pytest.mark.django_db
@@ -189,14 +454,10 @@ class TestAgent:
         assert agent.user == user
         assert agent.manager is None
 
-    def test_agent_manager_assignment(self, agent, organization):
+    def test_agent_manager_assignment(self, agent, manager, organization):
         """
         Test that an Agent can be assigned a manager from the same organization.
         """
-        manager = Agent.objects.create(
-            user=User.objects.create_user(username="manager", password="managerpass"),
-            organization=organization
-        )
         agent.manager = manager
         agent.save()
         assert agent.manager == manager
@@ -205,56 +466,42 @@ class TestAgent:
         """
         Test that an Agent cannot be assigned as their own manager.
         """
+        agent.manager = agent
         with pytest.raises(ValidationError):
-            agent.manager = agent
             agent.save()
 
-    def test_agent_different_organization_manager(self, agent):
+    def test_agent_different_organization_manager(self, agent, another_organization):
         """
         Test that an Agent cannot be assigned a manager from a different organization.
         """
-        other_org = Organization.objects.create(name="Other Organization")
         other_manager = Agent.objects.create(
             user=User.objects.create_user(username="other_manager", password="otherpass"),
-            organization=other_org
+            organization=another_organization
         )
+        agent.manager = other_manager
         with pytest.raises(ValueError):
-            agent.manager = other_manager
             agent.save()
 
-    def test_agent_meta_summary_creation(self, agent, conversation, mocker):
+    def test_agent_inherits_metasummary_model(self, agent):
         """
-        Test that get_or_create_summary method creates a summary for the Agent.
+        Test that Agents have the functionalities inherited from MetaSummaryAbstractModel.
         """
-        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        agent.get_or_create_summary()
-        assert agent.summary == "Mocked Summary"
-        assert agent.summary_call_count == 1
-        assert agent.summary_date == conversation.date
+        assert hasattr(agent, 'get_or_create_summary')
+        assert hasattr(agent, 'is_deviation_significant')
 
-    def test_agent_get_conversation_trend(self, agent, conversation):
+    def test_agent_inherits_conversation_count_model(self, agent):
         """
-        Test that get_conversation_trend method returns the correct trend data for the Agent.
+        Test that Agents have the functionalities inherited from ConversationCountAbstractModel.
         """
-        trend = agent.get_conversation_trend()
-        assert len(trend) == 1
-        assert trend[0]['count'] == 1
+        assert hasattr(agent, 'update_conversation_count')
 
-    def test_agent_is_deviation_significant(self, agent):
+    def test_agent_inherits_conversation_trends(self, agent):
         """
-        Test the is_deviation_significant method for various scenarios.
+        Test that Agents have the functionalities inherited from ConversationTrendMixin.
         """
-        agent.summary_call_count = 100
-        agent.save()
-        assert agent.is_deviation_significant(111)
-        assert agent.is_deviation_significant(89)
-        assert not agent.is_deviation_significant(110)
-        assert not agent.is_deviation_significant(90)
-        assert not agent.is_deviation_significant(100)
-        agent.summary_call_count = 0
-        agent.save()
-        assert agent.is_deviation_significant(1)
-        assert agent.is_deviation_significant(0)
+        assert hasattr(agent, 'get_conversation_trend')
+        assert hasattr(agent, 'get_conversation_trend_per_topic')
+        assert hasattr(agent, 'get_avg_for_periods')
 
 
 @pytest.mark.django_db
@@ -279,39 +526,26 @@ class TestCustomer:
         with pytest.raises(IntegrityError):
             Customer.objects.create(name="Test Customer", organization=organization)
 
-    def test_customer_meta_summary_creation(self, customer, conversation, mocker):
+    def test_customer_inherits_metasummary_model(self, customer):
         """
-        Test that get_or_create_summary method creates a summary for the Customer.
+        Test that Customers have the functionalities inherited from MetaSummaryAbstractModel.
         """
-        mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
-        customer.get_or_create_summary()
-        assert customer.summary == "Mocked Summary"
-        assert customer.summary_call_count == 1
-        assert customer.summary_date == conversation.date
+        assert hasattr(customer, 'get_or_create_summary')
+        assert hasattr(customer, 'is_deviation_significant')
 
-    def test_customer_get_conversation_trend(self, customer, conversation):
+    def test_customer_inherits_conversation_count_model(self, customer):
         """
-        Test that get_conversation_trend method returns the correct trend data for the Customer.
+        Test that Customers have the functionalities inherited from ConversationCountAbstractModel.
         """
-        trend = customer.get_conversation_trend()
-        assert len(trend) == 1
-        assert trend[0]['count'] == 1
+        assert hasattr(customer, 'update_conversation_count')
 
-    def test_customer_is_deviation_significant(self, customer):
+    def test_customer_inherits_conversation_trends(self, customer):
         """
-        Test the is_deviation_significant method for various scenarios.
+        Test that Customers have the functionalities inherited from ConversationTrendMixin.
         """
-        customer.summary_call_count = 100
-        customer.save()
-        assert customer.is_deviation_significant(111)
-        assert customer.is_deviation_significant(89)
-        assert not customer.is_deviation_significant(110)
-        assert not customer.is_deviation_significant(90)
-        assert not customer.is_deviation_significant(100)
-        customer.summary_call_count = 0
-        customer.save()
-        assert customer.is_deviation_significant(1)
-        assert customer.is_deviation_significant(0)
+        assert hasattr(customer, 'get_conversation_trend')
+        assert hasattr(customer, 'get_conversation_trend_per_topic')
+        assert hasattr(customer, 'get_avg_for_periods')
 
 
 @pytest.mark.django_db
@@ -342,289 +576,68 @@ class TestConversation:
 
         with pytest.raises(ValueError):
             Conversation.objects.create(
-                path="Invalid Call", duration=60, transcript="Invalid transcript", sentiment=0.5,
-                summary="Valid Summary", customer=other_customer, agent=agent, input_tokens=10, output_tokens=20
+                path="Invalid Call",
+                date=timezone.now(),
+                duration=60,
+                transcript="Invalid transcript",
+                sentiment=0.5,
+                summary="Valid Summary",
+                title="Invalid Title",
+                customer=other_customer,
+                agent=agent,
+                input_tokens=10,
+                output_tokens=20
             )
 
-    def test_conversation_topic_organization_consistency(self, conversation, organization):
+    def test_conversation_topic_organization_consistency(self, conversation, another_organization):
         """
         Test that a Topic from a different organization cannot be added to a Conversation.
         """
-        other_org = Organization.objects.create(name="Other Organization")
-        other_topic = Topic.objects.create(name="Other Topic", description="Other Description", organization=other_org)
-
+        external_topic = Topic(name="External Topic", description="Desc", organization=another_organization)
         with pytest.raises(ValueError):
-            conversation.topics.add(other_topic)
+            conversation.topics.add(external_topic)
 
-    def test_process_transcript(self):
+    def test_process_transcript(self, conversation):
         """
         Test that the process_transcript method correctly processes a valid transcript.
         """
-        transcript = "<agent>: Hello, how can I help you today? <customer>: I need help with my order."
-        conversation = Conversation(
-            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
-            summary="Valid Summary", customer=Customer(), agent=Agent(), input_tokens=10, output_tokens=20
-        )
+        conversation.transcript = "<agent>: Hello, how can I help you today? <customer>: I need help with my order."
         processed_messages = conversation.process_transcript()
 
         expected_processed_messages = [
-            {'message': 'Hello, how can I help you today?', 'class': 'agent-message'},
-            {'message': 'I need help with my order.', 'class': 'customer-message'}
+            {'id': 0, 'message': 'Hello, how can I help you today?', 'class': 'agent-message'},
+            {'id': 1, 'message': 'I need help with my order.', 'class': 'customer-message'}
         ]
 
         assert processed_messages == expected_processed_messages
 
-    def test_process_transcript_invalid_format(self):
+    def test_process_transcript_invalid_format(self, conversation):
         """
         Test that the process_transcript method handles an invalid transcript format correctly.
         """
-        transcript = "This is an invalid format message."
-        conversation = Conversation(
-            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
-            summary="Valid Summary", customer=Customer(), agent=Agent(), input_tokens=10, output_tokens=20
-        )
+        conversation.transcript = "This is an invalid format message."
         processed_messages = conversation.process_transcript()
 
         assert processed_messages == []
 
-    def test_process_transcript_partial_labels(self):
+    def test_process_transcript_partial_labels(self, conversation):
         """
         Test that the process_transcript method correctly handles a transcript with only one speaker label.
         """
-        transcript = "<agent>: Hello, how can I assist you? No customer response here."
-        conversation = Conversation(
-            path="Test Call", duration=60, transcript=transcript, sentiment=0.5,
-            summary="Valid Summary", customer=Customer(), agent=Agent(), input_tokens=10, output_tokens=20
-        )
+        conversation.transcript = "<agent>: Hello, how can I assist you? No customer response here."
         processed_messages = conversation.process_transcript()
 
         expected_processed_messages = [
-            {'message': 'Hello, how can I assist you? No customer response here.', 'class': 'agent-message'}
+            {'id': 0, 'message': 'Hello, how can I assist you? No customer response here.', 'class': 'agent-message'}
         ]
 
         assert processed_messages == expected_processed_messages
 
-
-@pytest.mark.django_db
-class TestConversationTrendMixin:
-
-    def test_conversations_scope_organization(self, organization, agent, customer, conversation):
+    def test_validate_topics_organization(self, conversation, another_topic):
         """
-        Test that the conversations_scope method retrieves all conversations for an organization.
+        Test that validate_topics_organization signal prevents adding topics from a different organization.
         """
-        assert conversation in organization.conversations_scope
-
-    def test_conversations_scope_agent_manager(self, organization, user, agent, customer, conversation):
-        """
-        Test that the conversations_scope method retrieves all conversations for a manager and their team.
-        """
-        manager = Agent.objects.create(
-            user=User.objects.create_user(username="manager", password="managerpass"),
-            organization=organization
-        )
-        agent.manager = manager
-        agent.save()
-        assert conversation in manager.conversations_scope
-        assert conversation in agent.conversations_scope
-
-    def test_conversations_scope_agent_non_manager(self, agent, customer, conversation):
-        """
-        Test that the conversations_scope method retrieves only the agent's own conversations if they are not a manager.
-        """
-        assert conversation in agent.conversations_scope
-
-    def test_conversations_scope_direct_relationship(self, customer, conversation):
-        """
-        Test that the conversations_scope method retrieves the conversations directly related to a customer.
-        """
-        assert conversation in customer.conversations_scope
-
-    def test_conversation_count_emtpy(self, topic):
-        """
-        Test that the conversation count is 0 when there are no conversations
-        """
-        count = topic.get_conversation_count()
-        assert count == 0
-
-    def test_conversation_count_single_conversation(self, topic, conversation):
-        """
-        Test that the conversation count is 1 when there is one conversation
-        """
-        count = topic.get_conversation_count()
-        assert count == 1
-
-    def test_conversation_count_multiple_conversations(self, topic, conversation):
-        """
-        Test that multiple conversations are detected.
-        """
-        another_conversation = Conversation.objects.create(
-            path="Another Test Call",
-            date=timezone.now() - timezone.timedelta(days=1),
-            duration=45,
-            transcript="Another test transcript",
-            sentiment=0.6,
-            summary="Another Summary",
-            title='Another Test Title',
-            customer=conversation.customer,
-            agent=conversation.agent,
-            input_tokens=5,
-            output_tokens=15
-        )
-        another_conversation.topics.add(topic)
-        another_conversation.save()
-        count = topic.get_conversation_count()
-        assert count == 2
-
-    def test_get_conversation_trend_empty(self, topic):
-        """
-        Test that get_conversation_trend returns an empty list when there are no conversations.
-        """
-        trend = topic.get_conversation_trend()
-        assert len(trend) == 0
-
-    def test_get_conversation_trend_single_conversation(self, topic, conversation):
-        """
-        Test that get_conversation_trend returns the correct trend for a single conversation.
-        """
-        trend = topic.get_conversation_trend()
-        assert len(trend) == 1
-        assert trend[0]['count'] == 1
-
-    def test_get_conversation_trend_multiple_conversations(self, topic, conversation):
-        """
-        Test that get_conversation_trend returns the correct trend for multiple conversations on different dates.
-        """
-        another_conversation = Conversation.objects.create(
-            path="Another Test Call",
-            date=timezone.now() - timezone.timedelta(days=1),
-            duration=45,
-            transcript="Another test transcript",
-            sentiment=0.6,
-            summary="Another Summary",
-            title='Another Test Title',
-            customer=conversation.customer,
-            agent=conversation.agent,
-            input_tokens=5,
-            output_tokens=15
-        )
-        another_conversation.topics.add(topic)
-        another_conversation.save()
-        trend = topic.get_conversation_trend()
-        assert len(trend) == 2
-
-    def test_get_conversation_trend_per_topic_empty(self, topic):
-        """
-        Test that get_conversation_trend_per_topic returns an empty list when there are no conversations.
-        """
-        trend = topic.get_conversation_trend_per_topic()
-        assert len(trend) == 0
-
-    def test_get_conversation_trend_per_topic_single_conversation(self, topic, conversation):
-        """
-        Test that get_conversation_trend_per_topic returns the correct trend for a single conversation.
-        """
-        trend = topic.get_conversation_trend_per_topic()
-        assert len(trend) == 1
-        assert trend[0]['count'] == 1
-        assert trend[0]['topic'] == topic.name
-
-    def test_get_conversation_trend_per_topic_multiple_conversations(self, topic, conversation):
-        """
-        Test that get_conversation_trend_per_topic returns the correct trend for multiple conversations with different topics.
-        """
-        another_topic = Topic.objects.create(
-            name="Another Topic",
-            description="Another Description",
-            organization=topic.organization
-        )
-        another_conversation = Conversation.objects.create(
-            path="Another Test Call",
-            date=timezone.now() - timezone.timedelta(days=1),
-            duration=45,
-            transcript="Another test transcript",
-            sentiment=0.6,
-            summary="Another Summary",
-            title='Another Test Title',
-            customer=conversation.customer,
-            agent=conversation.agent,
-            input_tokens=5,
-            output_tokens=15
-        )
-        another_conversation.topics.add(another_topic)
-
-        trend = topic.get_conversation_trend_per_topic()
-        assert len(trend) == 1
-
-    def test_get_avg_duration_empty(self, topic):
-        """
-        Test that get_avg_duration returns empty results when there are no conversations.
-        """
-        avg_duration = topic.get_avg_for_periods('duration', 'daily')
-        assert len(avg_duration) == 0
-
-    def test_get_avg_duration_single_conversation(self, topic, conversation):
-        """
-        Test that get_avg_duration returns the correct average duration for a single conversation.
-        """
-        avg_duration = topic.get_avg_for_periods('duration', 'daily')
-        assert len(avg_duration) == 1
-        assert avg_duration[0]['avg_value'] == conversation.duration
-
-    def test_get_avg_duration_multiple_conversations(self, topic, conversation):
-        """
-        Test that get_avg_duration returns the correct average duration for multiple conversations over different days.
-        """
-        another_conversation = Conversation.objects.create(
-            path="Another Test Call",
-            date=timezone.now() - timezone.timedelta(days=1),
-            duration=45,
-            transcript="Another test transcript",
-            sentiment=0.6,
-            summary="Another Summary",
-            title='Another Test Title',
-            customer=conversation.customer,
-            agent=conversation.agent,
-            input_tokens=5,
-            output_tokens=15
-        )
-        another_conversation.topics.add(topic)
-        another_conversation.save()
-        avg_duration = topic.get_avg_for_periods('duration', 'daily')
-        assert len(avg_duration) == 2
-
-    def test_get_avg_sentiment_empty(self, topic):
-        """
-        Test that get_avg_sentiment returns empty results when there are no conversations.
-        """
-        avg_sentiment = topic.get_avg_for_periods('sentiment', 'daily')
-        assert len(avg_sentiment) == 0
-
-    def test_get_avg_sentiment_single_conversation(self, topic, conversation):
-        """
-        Test that get_avg_sentiment returns the correct average sentiment for a single conversation.
-        """
-        avg_sentiment = topic.get_avg_for_periods('sentiment', 'monthly')
-        assert len(avg_sentiment) == 1
-        assert avg_sentiment[0]['avg_value'] == conversation.sentiment
-
-    def test_get_avg_sentiment_multiple_conversations(self, topic, conversation):
-        """
-        Test that get_avg_sentiment returns the correct average sentiment for multiple conversations over different days.
-        """
-        another_conversation = Conversation.objects.create(
-            path="Another Test Call",
-            date=timezone.now() - timezone.timedelta(days=1),
-            duration=45,
-            transcript="Another test transcript",
-            sentiment=0.6,
-            summary="Another Summary",
-            title='Another Test Title',
-            customer=conversation.customer,
-            agent=conversation.agent,
-            input_tokens=5,
-            output_tokens=15
-        )
-        another_conversation.topics.add(topic)
-        another_conversation.save()
-        avg_sentiment = topic.get_avg_for_periods('sentiment', 'daily')
-        assert len(avg_sentiment) == 2
+        another_org = Organization.objects.create(name="Another Org")
+        topic_other_org = Topic.objects.create(name="Other Topic", description="Desc", organization=another_org)
+        with pytest.raises(ValueError):
+            conversation.topics.add(topic_other_org)
