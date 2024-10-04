@@ -1,3 +1,4 @@
+import time
 from django.utils import timezone
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth.models import User
@@ -175,6 +176,16 @@ class Command(BaseCommand):
                 conversation.save()
         except Exception as e:
             raise CommandError(f'Failed creation of Conversations: {e}')
+
+        try:
+            self.stdout.write('Setting the last 2 Sample Topics as Inactive')
+            time.sleep(30)
+            for i in range(9, 11):
+                topic = Topic.objects.filter(name=f'Topic {i}', organization=org)[0]
+                topic.is_active = False
+                topic.save()
+        except Exception as e:
+            raise CommandError(f'Failed setting topics to inactive: {e}')
 
         self.stdout.write(
             self.style.SUCCESS('Successfully created expanded sample data')

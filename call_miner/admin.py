@@ -12,7 +12,7 @@ class TopicAdmin(admin.ModelAdmin):
     list_display = ['name', 'organization', 'description']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
-    readonly_fields = ['summary', 'summary_date', 'summary_call_count']
+    readonly_fields = ['summary', 'summary_date', 'summary_call_count', 'is_active', 'created', 'updated']
 
 
 class EmployeeAdmin(admin.ModelAdmin):

@@ -119,10 +119,10 @@ class OrganizationViewSet(StatisticsActionsViewSet):
 class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
     pagination_class = CustomListViewPaginator
-    cursor_ordering = ['-conversation_count', 'name']
+    cursor_ordering = ['-is_active', '-conversation_count', 'name']
 
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action in ['list', 'list_active']:
             return TopicListSerializer
         elif self.action == 'retrieve':
             return TopicDetailSerializer
@@ -139,8 +139,18 @@ class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
         Return topics that belong to the user's organization
         """
         if self.request.user.employee.organization:
-            return Topic.objects.filter(organization=self.request.user.employee.organization)
+            if self.action == 'list_active':
+                return Topic.objects.filter(organization=self.request.user.employee.organization, is_active=True)
+            else:
+                return Topic.objects.filter(organization=self.request.user.employee.organization)
         return Topic.objects.none()
+
+    @decorators.action(detail=False, methods=['get'], url_path='list-active')
+    def list_active(self, request):
+        """
+        Custom action to list only active topics
+        """
+        return self.list(request)
 
     def conversation_topic_trend(self, request, *args, **kwargs):
         # This action will not appear in the API schema

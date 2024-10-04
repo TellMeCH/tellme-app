@@ -222,6 +222,7 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
                 {
                     'name': topic.name,
                     'description': topic.description,
+                    'is_active': topic.is_active,
                     'url': self.context['request'].build_absolute_uri(
                         reverse('topic-detail', args=[topic.id])
                     ),
@@ -274,7 +275,7 @@ class TopicModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Topic
-        fields = ['name', 'description', 'organization']
+        fields = ['name', 'description', 'organization', 'is_active']
 
 
 class TopicListSerializer(serializers.HyperlinkedModelSerializer):
@@ -284,7 +285,7 @@ class TopicListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'conversation_count']
+        fields = ['url', 'name', 'description', 'conversation_count', 'is_active', 'created', 'updated']
 
 
 class TopicDetailSerializer(serializers.HyperlinkedModelSerializer):
@@ -293,7 +294,7 @@ class TopicDetailSerializer(serializers.HyperlinkedModelSerializer):
     """
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'conversation_count']
+        fields = ['url', 'name', 'description', 'conversation_count', 'is_active', 'created', 'updated']
 
 
 class AgentModifySerializer(serializers.ModelSerializer):

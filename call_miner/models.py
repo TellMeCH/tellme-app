@@ -206,6 +206,9 @@ class Topic(MetaSummaryAbstractModel, ConversationCountAbstractModel, Conversati
     name = models.CharField(max_length=100, null=False)
     description = models.TextField()
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='topics')
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
