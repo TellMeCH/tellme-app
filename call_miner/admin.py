@@ -23,7 +23,7 @@ class EmployeeAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         if obj:  # Editing an existing object
-            return ['user']
+            return ['user', 'created', 'updated']
         return []
 
 
@@ -33,22 +33,12 @@ class AnalystAdmin(admin.ModelAdmin):
     search_fields = ['user__username', 'organization__name']
     list_filter = ['organization']
 
-    def get_readonly_fields(self, request, obj=None):
-        if obj:  # Editing an existing object
-            return ['user']
-        return []
-
 
 class AgentAdmin(EmployeeAdmin):
     form = AgentCreationForm
     list_display = ['user', 'organization', 'manager']
     search_fields = ['user__username', 'organization__name', 'manager__user__username']
     list_filter = ['organization']
-
-    def get_readonly_fields(self, request, obj=None):
-        if obj:  # Editing an existing object
-            return ['user']
-        return []
 
 
 class CustomerAdmin(admin.ModelAdmin):

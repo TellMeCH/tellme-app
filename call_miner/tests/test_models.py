@@ -16,6 +16,17 @@ from call_miner.models import (
 )
 
 
+@pytest.fixture(autouse=True)
+def register_signals():
+    """
+    Fixture to ensure signals are registered during tests.
+    """
+    from call_miner.models import Topic, Agent, Customer, Conversation
+    Topic.register_signals(Conversation, related_field='topics')
+    Agent.register_signals(Conversation, related_field='agent')
+    Customer.register_signals(Conversation, related_field='customer')
+
+
 @pytest.fixture
 def organization():
     return Organization.objects.create(name="Test Organization")
@@ -163,35 +174,116 @@ class TestMetaSummaryAbstractModel:
 
 
 @pytest.mark.django_db
-class TestConversationCountAbstractModel:
-    def test_conversation_count_empty(self, topic):
+class TestConversationStatsAbstractModel:
+    def test_conversation_stats_empty(self, topic):
         """
-        Test that the conversation count is 0 when there are no conversations.
+        Test that the conversation stats are correctly updated when there are no conversations.
         """
-        topic.update_conversation_count()
+        topic.update_conversation_stats()
         assert topic.conversation_count == 0
+        assert topic.first_conversation_date is None
+        assert topic.last_conversation_date is None
 
-    def test_conversation_count_single_conversation(self, topic, conversation):
+    def test_conversation_stats_single_conversation(self, topic, conversation):
         """
-        Test that the conversation count is 1 when there is one conversation.
+        Test that the conversation stats are correctly updated when there is one conversation.
         """
-        topic.update_conversation_count()
+        topic.update_conversation_stats()
+        topic.refresh_from_db()
         assert topic.conversation_count == 1
+        assert topic.first_conversation_date == conversation.date
+        assert topic.last_conversation_date == conversation.date
 
-    def test_conversation_count_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_conversation_stats_multiple_conversations(self, topic, conversation, another_conversation):
         """
-        Test that multiple conversations are detected.
+        Test that the conversation stats are correctly updated when there are multiple conversations.
         """
         another_conversation.topics.add(topic)
-        topic.update_conversation_count()
+        topic.update_conversation_stats()
+        topic.refresh_from_db()
+        expected_first_date = min(conversation.date, another_conversation.date)
+        expected_last_date = max(conversation.date, another_conversation.date)
         assert topic.conversation_count == 2
+        assert topic.first_conversation_date == expected_first_date
+        assert topic.last_conversation_date == expected_last_date
 
-    def test_conversation_count_updates_on_delete(self, topic, conversation):
+    def test_conversation_stats_updates_on_delete(self, topic, conversation):
         """
-        Test that the conversation count updates when a conversation is deleted via signals.
+        Test that the conversation stats are updated when a conversation is deleted.
         """
         conversation.delete()
+        topic.refresh_from_db()
         assert topic.conversation_count == 0
+        assert topic.first_conversation_date is None
+        assert topic.last_conversation_date is None
+
+    def test_agent_conversation_stats(self, agent, conversation):
+        """
+        Test that conversation stats are updated for an agent.
+        """
+        agent.update_conversation_stats()
+        agent.refresh_from_db()
+        assert agent.conversation_count == 1
+        assert agent.first_conversation_date == conversation.date
+        assert agent.last_conversation_date == conversation.date
+
+    def test_agent_conversation_stats_multiple_conversations(self, agent, conversation, another_conversation):
+        """
+        Test that conversation stats are correctly updated for an agent with multiple conversations.
+        """
+        another_conversation.agent = agent
+        another_conversation.save()
+        agent.update_conversation_stats()
+        agent.refresh_from_db()
+        expected_first_date = min(conversation.date, another_conversation.date)
+        expected_last_date = max(conversation.date, another_conversation.date)
+        assert agent.conversation_count == 2
+        assert agent.first_conversation_date == expected_first_date
+        assert agent.last_conversation_date == expected_last_date
+
+    def test_customer_conversation_stats(self, customer, conversation):
+        """
+        Test that conversation stats are updated for a customer.
+        """
+        customer.update_conversation_stats()
+        customer.refresh_from_db()
+        assert customer.conversation_count == 1
+        assert customer.first_conversation_date == conversation.date
+        assert customer.last_conversation_date == conversation.date
+
+    def test_customer_conversation_stats_multiple_conversations(self, customer, conversation, another_conversation):
+        """
+        Test that conversation stats are correctly updated for a customer with multiple conversations.
+        """
+        another_conversation.customer = customer
+        another_conversation.save()
+        customer.update_conversation_stats()
+        customer.refresh_from_db()
+        expected_first_date = min(conversation.date, another_conversation.date)
+        expected_last_date = max(conversation.date, another_conversation.date)
+        assert customer.conversation_count == 2
+        assert customer.first_conversation_date == expected_first_date
+        assert customer.last_conversation_date == expected_last_date
+
+    def test_agent_conversation_stats_after_delete(self, agent, conversation):
+        """
+        Test that conversation stats are updated for an agent after conversation deletion.
+        """
+        conversation.delete()
+        agent.refresh_from_db()
+        assert agent.conversation_count == 0
+        assert agent.first_conversation_date is None
+        assert agent.last_conversation_date is None
+
+    def test_customer_conversation_stats_after_delete(self, customer, conversation):
+        """
+        Test that conversation stats are updated for a customer after conversation deletion.
+        """
+        conversation.delete()
+        customer.refresh_from_db()
+        assert customer.conversation_count == 0
+        assert customer.first_conversation_date is None
+        assert customer.last_conversation_date is None
 
 
 @pytest.mark.django_db
@@ -405,11 +497,11 @@ class TestTopic:
         assert hasattr(topic, 'get_or_create_summary')
         assert hasattr(topic, 'is_deviation_significant')
 
-    def test_topic_inherits_conversation_count_model(self, topic):
+    def test_topic_inherits_conversation_stats_model(self, topic):
         """
-        Test that Topics have the functionalities inherited from ConversationCountAbstractModel.
+        Test that Topics have the functionalities inherited from ConversationStatsAbstractModel.
         """
-        assert hasattr(topic, 'update_conversation_count')
+        assert hasattr(topic, 'update_conversation_stats')
 
     def test_topic_inherits_conversation_trends(self, topic):
         """
@@ -489,11 +581,11 @@ class TestAgent:
         assert hasattr(agent, 'get_or_create_summary')
         assert hasattr(agent, 'is_deviation_significant')
 
-    def test_agent_inherits_conversation_count_model(self, agent):
+    def test_agent_inherits_conversation_stats_model(self, agent):
         """
-        Test that Agents have the functionalities inherited from ConversationCountAbstractModel.
+        Test that Agents have the functionalities inherited from ConversationStatsAbstractModel.
         """
-        assert hasattr(agent, 'update_conversation_count')
+        assert hasattr(agent, 'update_conversation_stats')
 
     def test_agent_inherits_conversation_trends(self, agent):
         """
@@ -533,11 +625,11 @@ class TestCustomer:
         assert hasattr(customer, 'get_or_create_summary')
         assert hasattr(customer, 'is_deviation_significant')
 
-    def test_customer_inherits_conversation_count_model(self, customer):
+    def test_customer_inherits_conversation_stats_model(self, customer):
         """
-        Test that Customers have the functionalities inherited from ConversationCountAbstractModel.
+        Test that Customers have the functionalities inherited from ConversationStatsAbstractModel.
         """
-        assert hasattr(customer, 'update_conversation_count')
+        assert hasattr(customer, 'update_conversation_stats')
 
     def test_customer_inherits_conversation_trends(self, customer):
         """
@@ -593,7 +685,7 @@ class TestConversation:
         """
         Test that a Topic from a different organization cannot be added to a Conversation.
         """
-        external_topic = Topic(name="External Topic", description="Desc", organization=another_organization)
+        external_topic = Topic.objects.create(name="External Topic", description="Desc", organization=another_organization)
         with pytest.raises(ValueError):
             conversation.topics.add(external_topic)
 
@@ -633,11 +725,10 @@ class TestConversation:
 
         assert processed_messages == expected_processed_messages
 
-    def test_validate_topics_organization(self, conversation, another_topic):
+    def test_validate_topics_organization(self, conversation, another_organization):
         """
         Test that validate_topics_organization signal prevents adding topics from a different organization.
         """
-        another_org = Organization.objects.create(name="Another Org")
-        topic_other_org = Topic.objects.create(name="Other Topic", description="Desc", organization=another_org)
+        topic_other_org = Topic.objects.create(name="Other Topic", description="Desc", organization=another_organization)
         with pytest.raises(ValueError):
             conversation.topics.add(topic_other_org)

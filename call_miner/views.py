@@ -2,7 +2,7 @@ from .models import Conversation, Organization, Topic, Agent, Customer
 from rest_framework import viewsets, permissions, decorators, response
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
-    OrganizationDetailSerializer, ConversationStatsSerializer, MetaSummarySerializer, TopicModifySerializer,
+    OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
     TopicListSerializer, TopicDetailSerializer, AgentModifySerializer, AgentListSerializer, AgentDetailSerializer,
     CustomerModifySerializer, CustomerListSerializer, CustomerDetailSerializer
 )
@@ -28,7 +28,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         return response.Response({'summary_data': serializer.get_summary_data(obj)})
 
 
-class StatisticsActionsViewSet(viewsets.ReadOnlyModelViewSet):
+class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
     @decorators.action(detail=True, methods=['get'])
     def conversations(self, request, pk=None):
         obj = self.get_object()
@@ -97,7 +97,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         return {'request': self.request}
 
 
-class OrganizationViewSet(StatisticsActionsViewSet):
+class OrganizationViewSet(TrendsActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['name']
@@ -107,7 +107,7 @@ class OrganizationViewSet(StatisticsActionsViewSet):
             return OrganizationDetailSerializer
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
-            return ConversationStatsSerializer
+            return ConversationTrendsSerializer
         return OrganizationDetailSerializer
 
     def get_queryset(self):
@@ -116,7 +116,7 @@ class OrganizationViewSet(StatisticsActionsViewSet):
         return Organization.objects.none()
 
 
-class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
+class TopicViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
@@ -129,7 +129,7 @@ class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
         elif self.action in ['conversations', 'conversation_trend', 'duration_trend', 'sentiment_trend']:
-            return ConversationStatsSerializer
+            return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return TopicModifySerializer
         return TopicListSerializer
@@ -145,7 +145,7 @@ class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
                 return Topic.objects.filter(organization=self.request.user.employee.organization)
         return Topic.objects.none()
 
-    @decorators.action(detail=False, methods=['get'], url_path='list-active')
+    @decorators.action(detail=False, methods=['get'], url_path='list_active')
     def list_active(self, request):
         """
         Custom action to list only active topics
@@ -157,7 +157,7 @@ class TopicViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
         pass
 
 
-class AgentViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
+class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember, IsManager]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'user_id']
@@ -165,13 +165,13 @@ class AgentViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return AgentListSerializer
-        elif self.action == 'retrieve':
+        elif self.action in ['retrieve', 'managed_agents']:
             return AgentDetailSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
-            return ConversationStatsSerializer
+            return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return AgentModifySerializer
         return AgentListSerializer
@@ -184,8 +184,14 @@ class AgentViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
             return Agent.objects.filter(organization=self.request.user.employee.organization)
         return Agent.objects.none()
 
+    @decorators.action(detail=True, methods=['get'])
+    def managed_agents(self, request, pk=None):
+        obj = self.get_object()
+        serializer = self.get_serializer(obj)
+        return response.Response({'managed_agents': serializer.get_agent_data(obj)})
 
-class CustomerViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
+
+class CustomerViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'name']
@@ -199,7 +205,7 @@ class CustomerViewSet(StatisticsActionsViewSet, SummaryActionsViewSet):
             return MetaSummarySerializer
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
-            return ConversationStatsSerializer
+            return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return CustomerModifySerializer
         return CustomerListSerializer

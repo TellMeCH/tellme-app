@@ -50,7 +50,7 @@ def paginate_list(data: list[dict], request):
     return paginated_data, paginator
 
 
-class ConversationStatsSerializer(serializers.ModelSerializer):
+class ConversationTrendsSerializer(serializers.ModelSerializer):
     class Meta:
         abstract = True
 
@@ -212,7 +212,7 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'agent', 'agent_name',
-                  'customer', 'customer_name', 'input_tokens', 'output_tokens']
+                  'customer', 'customer_name', 'input_tokens', 'output_tokens', 'created']
 
     def get_topic_data(self, obj):
         # Return a list of topic names and descriptions
@@ -242,7 +242,7 @@ class ConversationDetailSerializer(ConversationListSerializer):
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data', 'agent',
-                  'agent_name', 'customer', 'customer_name', 'input_tokens', 'output_tokens']
+                  'agent_name', 'customer', 'customer_name', 'input_tokens', 'output_tokens', 'created']
 
     def get_processed_transcript(self, obj):
         messages = obj.process_transcript()
@@ -259,7 +259,7 @@ class OrganizationDetailSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ['url', 'name', 'conversation_count']
+        fields = ['url', 'name', 'conversation_count', 'max_user_count', 'created', 'updated']
 
     @staticmethod
     def get_conversation_count(obj):
@@ -285,7 +285,8 @@ class TopicListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'conversation_count', 'is_active', 'created', 'updated']
+        fields = ['url', 'name', 'description', 'conversation_count', 'first_conversation_date',
+                  'last_conversation_date', 'is_active', 'created', 'updated']
 
 
 class TopicDetailSerializer(serializers.HyperlinkedModelSerializer):
@@ -294,7 +295,8 @@ class TopicDetailSerializer(serializers.HyperlinkedModelSerializer):
     """
     class Meta:
         model = Topic
-        fields = ['url', 'name', 'description', 'conversation_count', 'is_active', 'created', 'updated']
+        fields = ['url', 'name', 'description', 'conversation_count', 'first_conversation_date',
+                  'last_conversation_date', 'is_active', 'created', 'updated']
 
 
 class AgentModifySerializer(serializers.ModelSerializer):
@@ -322,7 +324,8 @@ class AgentListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count']
+        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count', 'first_conversation_date',
+                  'last_conversation_date', 'created', 'updated']
 
 
 class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
@@ -332,11 +335,11 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     manager = serializers.HyperlinkedRelatedField(view_name='agent-detail', read_only=True)
     manager_username = serializers.CharField(source='manager.user.username', read_only=True)
-    agent_data = serializers.SerializerMethodField()
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'agent_data', 'conversation_count']
+        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count',
+                  'first_conversation_date', 'last_conversation_date', 'created', 'updated']
 
     def get_agent_data(self, obj):
         # Return a list of agent names and links
@@ -345,11 +348,13 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
             agent_data.append(
                 {
                     'id': i,
-                    'conversation_count': agent.conversation_count,
                     'name': agent.user.username,
                     'url': self.context['request'].build_absolute_uri(
                         reverse('agent-detail', args=[agent.id])
                     ),
+                    'conversation_count': agent.conversation_count,
+                    'first_conversation_date': agent.first_conversation_date,
+                    'last_conversation_date': agent.last_conversation_date,
                 }
             )
         paginated_data, paginator = paginate_list(agent_data, self.context['request'])
@@ -375,10 +380,10 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Customer
-        fields = ['url', 'name', 'conversation_count']
+        fields = ['url', 'name', 'conversation_count', 'first_conversation_date', 'last_conversation_date', 'created']
 
 
 class CustomerDetailSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Customer
-        fields = ['url', 'name', 'conversation_count']
+        fields = ['url', 'name', 'conversation_count', 'first_conversation_date', 'last_conversation_date', 'created']

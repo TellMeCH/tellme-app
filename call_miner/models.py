@@ -52,20 +52,33 @@ class MetaSummaryAbstractModel(models.Model):
         return deviation > self.DEVIATION_THRESHOLD
 
 
-class ConversationCountAbstractModel(models.Model):
+class ConversationStatsAbstractModel(models.Model):
     """
     Abstract class used to keep a counter of the existing conversations associated to a model instance.
+    These statistics are stored in the related object's memory, and are updated every time a new conversation is saved.
     """
     conversation_count = models.IntegerField(default=0)
+    first_conversation_date = models.DateTimeField(null=True, blank=True)
+    last_conversation_date = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         abstract = True
 
-    def update_conversation_count(self):
+    def update_conversation_stats(self):
         """
-        Updates the stored conversation_count field.
+        Updates the stored conversation_count, first_conversation_date, and last_conversation_date fields
+        based on the associated conversations.
         """
-        self.conversation_count = self.conversations.all().count()
+        stats = self.conversations.aggregate(
+            count=models.Count('id'),
+            first_date=models.Min('date'),
+            last_date=models.Max('date')
+        )
+
+        # Update fields if there are any conversations
+        self.conversation_count = stats['count']
+        self.first_conversation_date = stats['first_date']
+        self.last_conversation_date = stats['last_date']
         self.save()
 
     @staticmethod
@@ -79,28 +92,29 @@ class ConversationCountAbstractModel(models.Model):
                            (e.g., 'customer', 'agent', 'organization').
         """
         @receiver(post_save, sender=conversation_model)
-        def update_conversation_count_on_save(sender, instance, **kwargs):
+        def update_stats_on_save(sender, instance, **kwargs):
             if related_field == 'topics':
                 for topic in instance.topics.all():
-                    topic.update_conversation_count()
+                    topic.update_conversation_stats()
             else:
                 related_object = getattr(instance, related_field)
-                related_object.update_conversation_count()
+                related_object.update_conversation_stats()
 
         @receiver(post_delete, sender=conversation_model)
-        def update_conversation_count_on_delete(sender, instance, **kwargs):
+        def update_stats_on_delete(sender, instance, **kwargs):
             if related_field == 'topics':
                 for topic in instance.topics.all():
-                    topic.update_conversation_count()
+                    topic.update_conversation_stats()
             else:
                 related_object = getattr(instance, related_field)
-                related_object.update_conversation_count()
+                related_object.update_conversation_stats()
 
 
 class ConversationTrendMixin:
     """
     Mixin containing the trends of the conversations associated with a given object, now including
-    average call duration and sentiment.
+    average call duration and sentiment. These are separated from the stats since these are never
+    stored in memory, but are produced when required.
     """
     period_truncations = {
         'daily': models.functions.TruncDay('date'),
@@ -189,6 +203,8 @@ class Organization(models.Model, ConversationTrendMixin):
 
     name = models.CharField(max_length=100, unique=True, null=False)
     max_user_count = models.IntegerField(default=10)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -198,7 +214,7 @@ class Organization(models.Model, ConversationTrendMixin):
         verbose_name_plural = "Organizations"
 
 
-class Topic(MetaSummaryAbstractModel, ConversationCountAbstractModel, ConversationTrendMixin):
+class Topic(MetaSummaryAbstractModel, ConversationStatsAbstractModel, ConversationTrendMixin):
     """
     Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
     multi-label classification task.
@@ -230,6 +246,8 @@ class Employee(models.Model):
     """
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='employees')
     user = models.OneToOneField('auth.User', on_delete=models.SET_NULL, related_name='employee', null=True)
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.user.username
@@ -244,7 +262,7 @@ class Analyst(Employee):
         verbose_name_plural = "Analysts"
 
 
-class Agent(Employee, MetaSummaryAbstractModel, ConversationCountAbstractModel, ConversationTrendMixin):
+class Agent(Employee, MetaSummaryAbstractModel, ConversationStatsAbstractModel, ConversationTrendMixin):
     manager = models.ForeignKey(
         'self',
         null=True,
@@ -268,13 +286,14 @@ class Agent(Employee, MetaSummaryAbstractModel, ConversationCountAbstractModel, 
         verbose_name_plural = "Agents"
 
 
-class Customer(MetaSummaryAbstractModel, ConversationCountAbstractModel, ConversationTrendMixin):
+class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, ConversationTrendMixin):
     """
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
     """
     name = models.CharField(max_length=100, null=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
+    created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('name', 'organization')
@@ -305,6 +324,7 @@ class Conversation(models.Model):
     topics = models.ManyToManyField(Topic, related_name='conversations')
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, related_name='conversations', null=True)
     agent = models.ForeignKey(Agent, on_delete=models.SET_NULL, related_name='conversations', null=True)
+    created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name_plural = "Conversations"
@@ -330,14 +350,11 @@ class Conversation(models.Model):
         This method processes the call transcript to separate it into messages.
         """
 
-        # Split the transcript on "Agent:" and "Customer:", while keeping the labels as part of the results
-        # This regex will split the transcript based on "Agent:" or "Customer:" while preserving these words
         messages = re.split(r'(?=(<agent>:|<customer>:))', self.transcript)
 
-        # Pair up the message and assign the appropriate class (agent or customer) for coloring
         processed_messages = []
-        for message_id, i in enumerate(range(1, len(messages), 2)):  # We start at 1 because 0 is an empty string from the split
-            speaker = messages[i].strip()  # Either "Agent:" or "Customer:"
+        for message_id, i in enumerate(range(1, len(messages), 2)):  # Avoid the leading empty string from the split
+            speaker = messages[i].strip()
             message_text = messages[i + 1][len(speaker):].strip()  # The message following the speaker identifier
             processed_messages.append({
                 'id': message_id,
