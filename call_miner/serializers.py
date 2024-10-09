@@ -281,19 +281,9 @@ class TopicModifySerializer(serializers.ModelSerializer):
 
 class TopicListSerializer(serializers.HyperlinkedModelSerializer):
     """
-    This serializer is used to list all instances of an organization's topics
+    This serializer is used to view instances of an organization's topics
     """
 
-    class Meta:
-        model = Topic
-        fields = ['url', 'name', 'description', 'conversation_count', 'first_conversation_date',
-                  'last_conversation_date', 'is_active', 'created', 'updated']
-
-
-class TopicDetailSerializer(serializers.HyperlinkedModelSerializer):
-    """
-    This serializer is used to present basic topic information, focused on the retrieve() action
-    """
     class Meta:
         model = Topic
         fields = ['url', 'name', 'description', 'conversation_count', 'first_conversation_date',
@@ -364,12 +354,9 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 
 
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
-    class Meta:
-        model = Customer
-        fields = ['url', 'name', 'conversation_count', 'first_conversation_date', 'last_conversation_date', 'created']
-
-
-class CustomerDetailSerializer(serializers.HyperlinkedModelSerializer):
+    """
+    Serializer used to view Customer instances
+    """
     class Meta:
         model = Customer
         fields = ['url', 'name', 'conversation_count', 'first_conversation_date', 'last_conversation_date', 'created']

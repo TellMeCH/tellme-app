@@ -3,9 +3,8 @@ from rest_framework import viewsets, decorators, response
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
-    TopicListSerializer, TopicDetailSerializer, AgentListSerializer, AgentDetailSerializer,
-    CustomerModifySerializer, CustomerListSerializer, CustomerDetailSerializer, EmployeeListSerializer,
-    EmployeeModifySerializer
+    TopicListSerializer, AgentListSerializer, AgentDetailSerializer, CustomerModifySerializer, CustomerListSerializer,
+    EmployeeListSerializer, EmployeeModifySerializer
 )
 from call_miner.permissions import (ConversationPermission, OrganizationPermission, TopicPermission, AgentPermission,
                                     CustomerPermission, EmployeePermission)
@@ -124,10 +123,8 @@ class TopicViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
 
     def get_serializer_class(self):
-        if self.action in ['list', 'list_active']:
+        if self.action in ['list', 'list_active', 'retrieve']:
             return TopicListSerializer
-        elif self.action == 'retrieve':
-            return TopicDetailSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
         elif self.action in ['conversations', 'conversation_trend', 'duration_trend', 'sentiment_trend']:
@@ -197,10 +194,8 @@ class CustomerViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     cursor_ordering = ['-conversation_count', 'name']
 
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action in ['list', 'retrieve']:
             return CustomerListSerializer
-        elif self.action == 'retrieve':
-            return CustomerDetailSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
