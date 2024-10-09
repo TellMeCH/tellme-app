@@ -4,7 +4,6 @@ from django.dispatch import receiver
 from django.contrib.auth.models import AbstractUser
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
-from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save, post_delete
 
 
@@ -244,17 +243,30 @@ class Employee(models.Model):
     - An agent is an employee that can be tagged in Conversations
     - A manager is an agent that is related to another agent in a hierarchical relationship. Managers can hold calls.
     """
+    ROLE_CHOICES = [
+        ('ANALYST', 'Analyst'),
+        ('AGENT', 'Agent'),
+    ]
+
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='employees')
     user = models.OneToOneField('auth.User', on_delete=models.SET_NULL, related_name='employee', null=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='ANALYST')
+    is_organization_admin = models.BooleanField(default=False)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.user.username
+        return f"{self.user.username} - {self.organization.name} - {self.get_role_display()}"
 
     class Meta:
         unique_together = ('user', 'organization')
         verbose_name_plural = "Employees"
+
+    def delete(self, *args, **kwargs):
+        user = self.user
+        super().delete(*args, **kwargs)
+        if user:
+            user.delete()
 
 
 class Analyst(Employee):
@@ -271,14 +283,7 @@ class Agent(Employee, MetaSummaryAbstractModel, ConversationStatsAbstractModel, 
     )
 
     def save(self, *args, **kwargs):
-        # Ensure that an agent is not assigned as their own manager.
-        if self.manager == self:
-            raise ValidationError("An agent cannot be their own manager.")
-
-        # Ensure that the manager is correctly specified
-        if self.manager:
-            if self.organization != self.manager.organization:
-                raise ValueError("The assigned manager must be associated with the same organization.")
+        self.role = 'AGENT'
 
         super().save(*args, **kwargs)
 

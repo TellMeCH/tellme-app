@@ -23,7 +23,7 @@ class EmployeeAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         if obj:  # Editing an existing object
-            return ['user', 'created', 'updated']
+            return ['user', 'created', 'updated', 'is_organization_admin', 'role']
         return []
 
 

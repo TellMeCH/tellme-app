@@ -1,74 +1,136 @@
 from rest_framework import permissions
-from call_miner.models import Organization
 
 
-class IsSuperUserToModify(permissions.BasePermission):
+class ConversationPermission(permissions.BasePermission):
     """
-    Custom permission allowing POST requests only if the user is a superuser
+    Permissions class for the ConversationViewSet.
     """
     def has_permission(self, request, view):
+        """
+        Modification is only allowed to superusers, listing is possible for Employees
+        """
         if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
             return request.user.is_superuser
-        return True
-
-
-class IsOrganizationMember(permissions.BasePermission):
-    """
-    Custom permission to allow access to objects only for users within their own organization.
-    """
-
-    def has_permission(self, request, view):
-        # Check if the user is authenticated
-        return request.user and request.user.is_authenticated
+        return hasattr(request.user, 'employee')
 
     def has_object_permission(self, request, view, obj):
         """
-        Check if the user is authenticated for a specific object. This is not called during POST requests,
-        only during detail-level actions (like retrieve, update, or delete)
+        For retrieve, check that the user has the same organization as the Conversation.
+        Note that this expects obj to be an instance of Conversation
         """
-        core_check = (request.user and request.user.is_authenticated)
-
-        if hasattr(obj, 'agent'):  # If the object is a Conversation, check the organization of its agent
-            necessary_org = obj.agent.organization
-        elif hasattr(obj, 'organization'):  # Otherwise get the object's organization
-            necessary_org = obj.organization
-        elif isinstance(obj, Organization):
-            necessary_org = obj
-        else:
-            raise ValueError('IsOrganizationMember was applied to an incorrect Viewset')
-
-        # For other objects, check if the object's organization matches the user's organization
-        return core_check and necessary_org == request.user.employee.organization
+        if hasattr(request.user, 'employee'):
+            return obj.agent.organization == request.user.employee.organization
+        return request.user.is_superuser
 
 
-class IsAnalyst(permissions.BasePermission):
+class OrganizationPermission(permissions.BasePermission):
     """
-    Custom permission to allow access to objects only for Analysts.
+    Permissions class for the OrganizationViewSet.
     """
-
     def has_permission(self, request, view):
-        # Check if the user is authenticated
-        return request.user and request.user.is_authenticated and hasattr(request.user.employee, 'analyst')
-
-    def has_object_permission(self, request, view, obj):
-        # Only allow access if the user is an analyst
+        """
+        Modification is only allowed to superusers, listing is possible for Employees
+        """
+        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return request.user.is_superuser
         return hasattr(request.user.employee, 'analyst')
 
+    def has_object_permission(self, request, view, obj):
+        """
+        For retrieve, check that the user belongs to the Organization.
+        For modification, check that the user is a superuser
+        Note that this expects obj to be an instance of Organization
+        """
+        if hasattr(request.user, 'employee'):
+            return request.user.employee.organization == obj
+        return request.user.is_superuser
 
-class IsManager(permissions.BasePermission):
+
+class TopicPermission(permissions.BasePermission):
     """
-    Custom permission to allow access to objects only for managers.
+    Permissions class for the TopicViewSet.
     """
     def has_permission(self, request, view):
-        # Check if the user is authenticated
-        return request.user and request.user.is_authenticated
+        """
+        Modification is only allowed to analysts, listing is possible for Employees
+        """
+        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return hasattr(request.user.employee, 'analyst')
+        return hasattr(request.user, 'employee')
 
     def has_object_permission(self, request, view, obj):
-        # Check if the user is an agent (and therefore can be a manager)
+        """
+        For retrieve, check that the user belongs to the Topic's Organization.
+        Note that this expects obj to be an instance of Topic
+        """
+        return request.user.employee.organization == obj.organization and hasattr(request.user.employee, 'analyst')
+
+
+class AgentPermission(permissions.BasePermission):
+    """
+    Permissions class for the AgentViewSet.
+    """
+    def has_permission(self, request, view):
+        """
+        Only organization admins or superusers can modify an agent, and organization employees can list.
+        """
+        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return request.user.employee.is_organization_admin or request.user.is_superuser
+        return hasattr(request.user, 'employee')
+
+    def has_object_permission(self, request, view, obj):
+        """
+        For retrieve, check that the user is either the agent or the agent's manager.
+        For modification, check that the user is an organization admin
+        Note that this expects obj to be an instance of Agent
+        """
         if hasattr(request.user.employee, 'agent'):
-            # Retrieve the agents managed by the current user
             managed_agents = request.user.employee.agent.agents.all()
-            # Allow access if the object is one of the agents managed by the user
             return (obj in managed_agents) or (obj == request.user.employee.agent)
-        # Return False if the user is not an agent or does not manage any agents
-        return False
+        return request.user.employee.is_organization_admin or request.user.is_superuser
+
+
+class CustomerPermission(permissions.BasePermission):
+    """
+    Permissions class for the CustomerViewSet.
+    """
+    def has_permission(self, request, view):
+        """
+        Only superusers can modify a customer, and organization employees can list them all.
+        """
+        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return request.user.is_superuser
+        return hasattr(request.user, 'employee')
+
+    def has_object_permission(self, request, view, obj):
+        """
+        For retrieve, check that the user belongs to the same organization as the customer.
+        For modification, check that the user is a superuser
+        Note that this expects obj to be an instance of Customer
+        """
+        if hasattr(request.user, 'employee'):
+            return request.user.employee.organization == obj.organization
+        return request.user.is_superuser
+
+
+class EmployeePermission(permissions.BasePermission):
+    """
+    Permissions class for the EmployeeViewSet.
+    """
+    def has_permission(self, request, view):
+        """
+        Only organization admins can create a new employee or list all existing employees.
+        """
+        if (request.method == 'GET' and view.action == 'list') or request.method == 'POST':
+            return request.user.employee.is_organization_admin or request.user.is_superuser
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        """
+        The retrieve action for an Employee is possible for organization admins and the employee itself
+        All other actions are only possible for organization admins or superusers
+        """
+        if view.action == 'retrieve':
+            return request.user.employee.is_organization_admin or request.user.employee == obj
+        return request.user.employee.is_organization_admin or request.user.is_superuser
+

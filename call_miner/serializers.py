@@ -1,7 +1,8 @@
 from django.urls import reverse
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
-from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
+from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Analyst, Customer
+from django.contrib.auth.models import User
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 
 
@@ -299,21 +300,6 @@ class TopicDetailSerializer(serializers.HyperlinkedModelSerializer):
                   'last_conversation_date', 'is_active', 'created', 'updated']
 
 
-class AgentModifySerializer(serializers.ModelSerializer):
-    """
-    This serializer is used for POST, PUT, PATCH and DELETE requests creating or modifying an Agent instance.
-    Note that the agent's organization and manager have to be specified with its primary key.
-    """
-    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all())
-    employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
-    manager = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all(), required=False)
-    agents = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all(), required=False, many=True)
-
-    class Meta:
-        model = Agent
-        fields = ['organization', 'employee', 'manager', 'agents']
-
-
 class AgentListSerializer(serializers.HyperlinkedModelSerializer):
     """
     This serializer simply lists all existing Agents in an organization, as well as their managers and call count.
@@ -387,3 +373,124 @@ class CustomerDetailSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Customer
         fields = ['url', 'name', 'conversation_count', 'first_conversation_date', 'last_conversation_date', 'created']
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'password', 'email')
+        extra_kwargs = {'password': {'write_only': True}}
+
+    def create(self, validated_data):
+        user = User(
+            email=validated_data['email'],
+            username=validated_data['username']
+        )
+        user.set_password(validated_data['password'])
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        # Update User instance
+        instance.email = validated_data.get('email', instance.email)
+        instance.username = validated_data.get('username', instance.username)
+        password = validated_data.get('password', None)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
+class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):
+    user = UserSerializer()
+    organization = serializers.HyperlinkedRelatedField(view_name='organization-detail', read_only=True)
+    manager = serializers.HyperlinkedRelatedField(view_name='employee-detail', read_only=True)
+
+    class Meta:
+        model = Employee
+        fields = ('url', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated')
+        read_only_fields = ('created', 'updated')
+
+
+class EmployeeModifySerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+    organization = serializers.PrimaryKeyRelatedField(read_only=True)
+    manager = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all(), required=False, allow_null=True)
+
+    class Meta:
+        model = Employee
+        fields = ('id', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated')
+        read_only_fields = ('created', 'updated')
+
+    def validate(self, data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            current_user = request.user
+
+            # Make sure current user has an associated organization
+            if not hasattr(current_user, 'employee'):
+                raise serializers.ValidationError("Current user is not associated with an Employee profile.")
+
+            user_organization = current_user.employee.organization
+            data['organization'] = user_organization  # Enforce the request user's organization
+
+            # If manager is specified, check that they are in the same organization
+            manager = data.get('manager')
+            if manager and manager.organization != user_organization:
+                raise serializers.ValidationError({
+                    'manager': 'Manager must belong to the same organization as the current user.'
+                })
+
+            if manager and data.get('role') == 'ANALYST':
+                raise serializers.ValidationError({
+                    'role': "Analysts can't have managers."
+                })
+        else:
+            raise serializers.ValidationError("Request user is not available.")
+
+        return data
+
+    def create(self, validated_data):
+        user_data = validated_data.pop('user')
+        user_serializer = UserSerializer(data=user_data)
+        user_serializer.is_valid(raise_exception=True)
+        user = user_serializer.save()
+
+        try:
+            role = validated_data.get('role')
+            validated_data['user'] = user
+
+            manager = validated_data.pop('manager', None)
+            if role == 'ANALYST':
+                employee = Analyst.objects.create(**validated_data)
+            elif role in ['AGENT', 'MANAGER']:
+                employee = Agent.objects.create(manager=manager, **validated_data)
+            else:
+                raise serializers.ValidationError(f'Could not create new Employee. Invalid role: {role}')
+            return employee
+        except Exception:
+            user.delete()
+            raise
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', None)
+        manager = validated_data.pop('manager', None)
+
+        if user_data:
+            user_serializer = UserSerializer(instance=instance.user, data=user_data, partial=True)
+            user_serializer.is_valid(raise_exception=True)
+            user_serializer.save()
+
+        # Update Employee fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        # Handle role change
+        role = validated_data.get('role', instance.role)
+        if role != instance.role:
+            raise serializers.ValidationError(f'Could not update Employee. It is not possible to change role from {instance.role} to {role}.')
+        else:
+            if isinstance(instance, Agent) and manager is not None:
+                instance.manager = manager
+            instance.save()
+        return instance

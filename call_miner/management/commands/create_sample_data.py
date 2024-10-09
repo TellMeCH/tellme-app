@@ -46,7 +46,8 @@ class Command(BaseCommand):
             )
             analyst = Analyst(
                 organization=org,
-                user=user
+                user=user,
+                is_organization_admin=True,
             )
             analyst.save()
 
@@ -72,7 +73,8 @@ class Command(BaseCommand):
             )
             manager = Agent(
                 organization=org,
-                user=user
+                user=user,
+                is_organization_admin=True,
             )
             manager.save()
 

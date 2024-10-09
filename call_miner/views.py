@@ -1,12 +1,14 @@
-from .models import Conversation, Organization, Topic, Agent, Customer
-from rest_framework import viewsets, permissions, decorators, response
+from .models import Conversation, Organization, Topic, Employee, Agent, Customer
+from rest_framework import viewsets, decorators, response
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
-    TopicListSerializer, TopicDetailSerializer, AgentModifySerializer, AgentListSerializer, AgentDetailSerializer,
-    CustomerModifySerializer, CustomerListSerializer, CustomerDetailSerializer
+    TopicListSerializer, TopicDetailSerializer, AgentListSerializer, AgentDetailSerializer,
+    CustomerModifySerializer, CustomerListSerializer, CustomerDetailSerializer, EmployeeListSerializer,
+    EmployeeModifySerializer
 )
-from call_miner.permissions import IsSuperUserToModify, IsOrganizationMember, IsAnalyst, IsManager
+from call_miner.permissions import (ConversationPermission, OrganizationPermission, TopicPermission, AgentPermission,
+                                    CustomerPermission, EmployeePermission)
 from call_miner.utils.paginators import CustomListViewPaginator
 
 
@@ -65,7 +67,7 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
+    permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-date']
 
@@ -98,7 +100,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
 
 class OrganizationViewSet(TrendsActionsViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
+    permission_classes = [OrganizationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['name']
 
@@ -117,7 +119,7 @@ class OrganizationViewSet(TrendsActionsViewSet):
 
 
 class TopicViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsOrganizationMember, IsAnalyst]
+    permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
 
@@ -158,7 +160,7 @@ class TopicViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
 
 
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember, IsManager]
+    permission_classes = [AgentPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'user_id']
 
@@ -172,8 +174,6 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
             return ConversationTrendsSerializer
-        elif self.action in ['create', 'update', 'partial_update', 'destroy']:
-            return AgentModifySerializer
         return AgentListSerializer
 
     def get_queryset(self):
@@ -192,7 +192,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
 
 
 class CustomerViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsSuperUserToModify, IsOrganizationMember]
+    permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'name']
 
@@ -217,3 +217,23 @@ class CustomerViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         if self.request.user.employee.organization:
             return Customer.objects.filter(organization=self.request.user.employee.organization)
         return Customer.objects.none()
+
+
+class EmployeeViewSet(viewsets.ModelViewSet):
+    permission_classes = [EmployeePermission]
+    serializer_class = EmployeeModifySerializer
+
+    def get_serializer_class(self):
+        if self.action in ['list', 'retrieve']:
+            return EmployeeListSerializer
+        elif self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return EmployeeModifySerializer
+        return EmployeeListSerializer
+
+    def get_queryset(self):
+        """
+        Return employees that belong to the user's organization
+        """
+        if self.request.user.employee.organization:
+            return Employee.objects.filter(organization=self.request.user.employee.organization)
+        return Employee.objects.none()

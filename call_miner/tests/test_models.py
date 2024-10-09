@@ -241,6 +241,16 @@ class TestConversationStatsAbstractModel:
         assert agent.first_conversation_date == expected_first_date
         assert agent.last_conversation_date == expected_last_date
 
+    def test_agent_conversation_stats_after_delete(self, agent, conversation):
+        """
+        Test that conversation stats are updated for an agent after conversation deletion.
+        """
+        conversation.delete()
+        agent.refresh_from_db()
+        assert agent.conversation_count == 0
+        assert agent.first_conversation_date is None
+        assert agent.last_conversation_date is None
+
     def test_customer_conversation_stats(self, customer, conversation):
         """
         Test that conversation stats are updated for a customer.
@@ -264,16 +274,6 @@ class TestConversationStatsAbstractModel:
         assert customer.conversation_count == 2
         assert customer.first_conversation_date == expected_first_date
         assert customer.last_conversation_date == expected_last_date
-
-    def test_agent_conversation_stats_after_delete(self, agent, conversation):
-        """
-        Test that conversation stats are updated for an agent after conversation deletion.
-        """
-        conversation.delete()
-        agent.refresh_from_db()
-        assert agent.conversation_count == 0
-        assert agent.first_conversation_date is None
-        assert agent.last_conversation_date is None
 
     def test_customer_conversation_stats_after_delete(self, customer, conversation):
         """
@@ -520,7 +520,7 @@ class TestAnalyst:
         """
         assert analyst.organization == organization
         assert analyst.user == user
-        assert str(analyst) == user.username
+        assert str(analyst) == f"{user.username} - {organization.name} - Analyst"
 
     def test_analyst_unique_together(self, analyst, organization):
         """

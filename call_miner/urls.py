@@ -9,6 +9,7 @@ router.register(r'organizations', views.OrganizationViewSet, basename='organizat
 router.register(r'topics', views.TopicViewSet, basename='topic')
 router.register(r'agents', views.AgentViewSet, basename='agent')
 router.register(r'customers', views.CustomerViewSet, basename='customer')
+router.register(r'employees', views.EmployeeViewSet, basename='employee')
 
 # The API URLs are now determined automatically by the router.
 urlpatterns = [
