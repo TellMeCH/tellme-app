@@ -326,9 +326,9 @@ class Conversation(models.Model):
     title = models.TextField()
     input_tokens = models.IntegerField()
     output_tokens = models.IntegerField()
-    topics = models.ManyToManyField(Topic, related_name='conversations')
-    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, related_name='conversations', null=True)
-    agent = models.ForeignKey(Agent, on_delete=models.SET_NULL, related_name='conversations', null=True)
+    topics = models.ManyToManyField(Topic, related_name='conversations', null=True)
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='conversations')
+    agent = models.ForeignKey(Agent, on_delete=models.PROTECT, related_name='conversations')
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
