@@ -83,6 +83,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
         """
         Return conversations that belong to the user's organization
         """
+        if self.request.user.is_superuser:
+            return Conversation.objects.all()
         if self.request.user.employee.organization:
             return Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
         return Conversation.objects.none()

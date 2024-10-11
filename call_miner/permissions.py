@@ -7,11 +7,11 @@ class ConversationPermission(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         """
-        Modification is only allowed to superusers, listing is possible for Employees
+        Modification is only allowed to superusers, listing is possible for Employees and superusers
         """
         if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
             return request.user.is_superuser
-        return hasattr(request.user, 'employee')
+        return hasattr(request.user, 'employee') or request.user.is_superuser
 
     def has_object_permission(self, request, view, obj):
         """
