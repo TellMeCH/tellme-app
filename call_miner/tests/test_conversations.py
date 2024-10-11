@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from django.contrib.auth.models import User
-from call_miner.models import Organization, Employee, Agent, Customer, Conversation
+from call_miner.models import Organization, Analyst, Agent, Customer, Conversation
 from datetime import datetime
 
 
@@ -36,23 +36,23 @@ def superuser():
 def organization_admin_user(organization):
     """Create and return an organization admin user associated with the given organization."""
     user = User.objects.create_user('orgadmin', 'orgadmin@example.com', 'password')
-    Employee.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=True)
+    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=True)
     return user
 
 
 @pytest.fixture
-def organization_employee_user(organization):
+def organization_analyst_user(organization):
     """Create and return an employee user associated with the given organization."""
     user = User.objects.create_user('employee', 'employee@example.com', 'password')
-    Employee.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=False)
+    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=False)
     return user
 
 
 @pytest.fixture
-def another_organization_employee_user(another_organization):
+def another_organization_analyst_user(another_organization):
     """Create and return an employee user associated with another organization."""
     user = User.objects.create_user('another_employee', 'another_employee@example.com', 'password')
-    Employee.objects.create(user=user, organization=another_organization, role='ANALYST', is_organization_admin=False)
+    Analyst.objects.create(user=user, organization=another_organization, role='ANALYST', is_organization_admin=False)
     return user
 
 
@@ -128,14 +128,14 @@ def another_conversation(another_agent, another_customer):
 
 
 @pytest.mark.django_db
-def test_employee_can_list_conversations_in_organization(client, organization_employee_user, conversation,
-                                                         another_conversation):
+def test_analyst_can_list_conversations_in_organization(client, organization_analyst_user, conversation,
+                                                        another_conversation):
     """
     Test that an employee can list conversations within their own organization,
     and does not see conversations from other organizations.
     """
     # Employee should only see conversations from their own organization
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     response = client.get(reverse('conversation-list'))
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data['results']) == 1
@@ -155,24 +155,24 @@ def test_superuser_can_list_all_conversations(client, superuser, conversation, a
 
 
 @pytest.mark.django_db
-def test_employee_can_view_conversation_in_organization(client, organization_employee_user, conversation):
+def test_analyst_can_view_conversation_in_organization(client, organization_analyst_user, conversation):
     """
     Test that an employee can view a conversation within their own organization.
     """
     # Employee in the same organization should be able to view the conversation
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     response = client.get(reverse('conversation-detail', args=[conversation.id]))
     assert response.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.django_db
-def test_employee_cannot_view_conversation_in_other_organization(client, organization_employee_user,
-                                                                 another_conversation):
+def test_analyst_cannot_view_conversation_in_other_organization(client, organization_analyst_user,
+                                                                another_conversation):
     """
     Test that an employee cannot view a conversation from another organization.
     """
     # Employee should not be able to view a conversation from another organization
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     response = client.get(reverse('conversation-detail', args=[another_conversation.id]))
     assert response.status_code == status.HTTP_404_NOT_FOUND  # Not found due to queryset filtering
 
@@ -192,12 +192,12 @@ def test_superuser_can_view_any_conversation(client, superuser, conversation, an
 
 
 @pytest.mark.django_db
-def test_employee_can_view_conversation_transcript(client, organization_employee_user, conversation):
+def test_analyst_can_view_conversation_transcript(client, organization_analyst_user, conversation):
     """
     Test that an employee can view the transcript of a conversation within their own organization.
     """
     # Employee in the same organization should be able to view the conversation transcript
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     url = reverse('conversation-transcript', args=[conversation.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -207,12 +207,12 @@ def test_employee_can_view_conversation_transcript(client, organization_employee
 
 
 @pytest.mark.django_db
-def test_employee_cannot_view_other_organization_conversation_transcript(client, organization_employee_user, another_conversation):
+def test_analyst_cannot_view_other_organization_conversation_transcript(client, organization_analyst_user, another_conversation):
     """
     Test that an employee cannot view the transcript of a conversation from another organization.
     """
     # Employee should not be able to view the transcript of a conversation from another organization
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     url = reverse('conversation-transcript', args=[another_conversation.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_404_NOT_FOUND  # Not found due to queryset filtering
@@ -235,12 +235,12 @@ def test_superuser_can_view_any_conversation_transcript(client, superuser, conve
 
 
 @pytest.mark.django_db
-def test_process_transcript_output(client, organization_employee_user, conversation):
+def test_process_transcript_output(client, organization_analyst_user, conversation):
     """
     Test that the process_transcript() method correctly processes the transcript and
     the ViewSet returns the expected paginated response.
     """
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     url = reverse('conversation-transcript', args=[conversation.id])
 
     # Fetch all pages of the transcript
@@ -292,14 +292,14 @@ def test_process_transcript_output(client, organization_employee_user, conversat
 
 
 @pytest.mark.django_db
-def test_transcript_pagination(client, organization_employee_user, conversation, settings):
+def test_transcript_pagination(client, organization_analyst_user, conversation, settings):
     """
     Test that the processed transcript is paginated correctly based on the PAGE_SIZE setting.
     """
     # Set page size for testing pagination
     settings.REST_FRAMEWORK['PAGE_SIZE'] = 15
 
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     url = reverse('conversation-transcript', args=[conversation.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -320,12 +320,12 @@ def test_transcript_pagination(client, organization_employee_user, conversation,
 
 
 @pytest.mark.django_db
-def test_employee_cannot_create_conversation(client, organization_employee_user, agent, customer):
+def test_analyst_cannot_create_conversation(client, organization_analyst_user, agent, customer):
     """
     Test that an employee cannot create a new conversation.
     """
     # Employee should not be able to create a conversation
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     data = {
         'path': 'path/to/new_conversation',
         'date': datetime.now().isoformat(),
@@ -395,12 +395,12 @@ def test_superuser_can_create_conversation(client, superuser, agent, customer):
 
 
 @pytest.mark.django_db
-def test_employee_cannot_update_conversation(client, organization_employee_user, conversation):
+def test_analyst_cannot_update_conversation(client, organization_analyst_user, conversation):
     """
     Test that an employee cannot update an existing conversation.
     """
     # Employee should not be able to update a conversation
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     data = {'title': 'Updated Title'}
     response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -420,12 +420,12 @@ def test_superuser_can_update_conversation(client, superuser, conversation):
 
 
 @pytest.mark.django_db
-def test_employee_cannot_delete_conversation(client, organization_employee_user, conversation):
+def test_analyst_cannot_delete_conversation(client, organization_analyst_user, conversation):
     """
     Test that an employee cannot delete a conversation.
     """
     # Employee should not be able to delete a conversation
-    client.force_authenticate(user=organization_employee_user)
+    client.force_authenticate(user=organization_analyst_user)
     response = client.delete(reverse('conversation-detail', args=[conversation.id]))
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
