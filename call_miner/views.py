@@ -1,5 +1,5 @@
 from .models import Conversation, Organization, Topic, Employee, Agent, Customer
-from rest_framework import viewsets, decorators, response
+from rest_framework import viewsets, decorators, response, status
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
@@ -26,7 +26,10 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     def summary_data(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'summary_data': serializer.get_summary_data(obj)})
+        try:
+            return response.Response({'summary_data': serializer.get_summary_data(obj)})
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
@@ -34,31 +37,46 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
     def conversations(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'conversations': serializer.get_conversations(obj)})
+        try:
+            return response.Response({'conversations': serializer.get_conversations(obj)})
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @decorators.action(detail=True, methods=['get'])
     def conversation_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'conversation_trend': serializer.get_conversation_trend(obj)})
+        try:
+            return response.Response({'conversation_trend': serializer.get_conversation_trend(obj)})
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @decorators.action(detail=True, methods=['get'])
     def conversation_topic_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'conversation_topic_trend': serializer.get_conversation_topic_trend(obj)})
+        try:
+            return response.Response({'conversation_topic_trend': serializer.get_conversation_topic_trend(obj)})
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @decorators.action(detail=True, methods=['get'])
     def duration_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'duration_trend': serializer.get_duration_trend(obj)})
+        try:
+            return response.Response({'duration_trend': serializer.get_duration_trend(obj)})
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @decorators.action(detail=True, methods=['get'])
     def sentiment_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'sentiment_trend': serializer.get_sentiment_trend(obj)})
+        try:
+            return response.Response({'sentiment_trend': serializer.get_sentiment_trend(obj)})
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_serializer_context(self):
         # Ensure the request context is passed to the serializer
