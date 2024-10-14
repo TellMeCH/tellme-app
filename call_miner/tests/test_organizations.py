@@ -3,8 +3,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from django.contrib.auth.models import User
-from call_miner.models import Organization, Analyst, Agent, Customer, Conversation
-from datetime import datetime
+from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic
+from datetime import datetime, timedelta, date
 
 TREND_ACTIONS = ['conversation-trend', 'conversation-topic-trend', 'duration-trend', 'sentiment-trend']
 
@@ -403,3 +403,301 @@ def test_unauthenticated_user_cannot_access_trends_actions(client, organization)
         url = reverse(f'organization-{action}', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_conversations_action_returns_correct_data(client, organization_analyst_user, organization, conversation):
+    """
+    Check the content of the Organization's conversations
+    """
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-conversations', args=[organization.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert 'conversations' in data
+    conversations = data['conversations']['results']
+    assert len(conversations) == 1
+    assert conversations[0]['title'] == conversation.title
+    assert conversations[0]['date'].replace('Z', '') == conversation.date.isoformat()  # Adjust for timezone
+
+
+@pytest.mark.django_db
+def test_conversations_action_pagination(client, organization_analyst_user, organization, agent, customer):
+    """
+    Check that pagination works when calling organization-conversations
+    """
+    # Create multiple conversations to test pagination
+    for i in range(15):
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=datetime.now() - timedelta(days=i),
+            duration=100 + i,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5 + i * 0.01,
+            agent=agent,
+            customer=customer,
+            input_tokens=100 + i,
+            output_tokens=50 + i
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-conversations', args=[organization.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    conversations = data['conversations']['results']
+    # Assuming default page size is less than 15
+    assert len(conversations) <= 15
+    assert 'next' in data['conversations']
+
+
+@pytest.mark.django_db
+def test_conversation_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent,
+                                                        customer):
+    """
+    Check that the daily conversation trend responds as expected to the different period specifications
+    """
+    # Create conversations on different days
+    for i in range(5):
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=datetime.now() - timedelta(days=i),
+            duration=100 + i,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5 + i * 0.1,
+            agent=agent,
+            customer=customer,
+            input_tokens=100 + i,
+            output_tokens=50 + i
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-conversation-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'daily'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert 'conversation_trend' in data
+    results = data['conversation_trend']['results']
+    assert len(results) == 5  # One entry per day
+    for entry in results:
+        assert 'date' in entry
+        assert 'count' in entry
+        assert entry['count'] == 1
+
+
+@pytest.mark.django_db
+def test_conversation_topic_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent,
+                                                              customer):
+    """
+    Check that the organization's topic trends are as expected
+    """
+    # Create topics
+    topic1 = Topic.objects.create(name='Topic 1', description='Description 1', organization=organization)
+    topic2 = Topic.objects.create(name='Topic 2', description='Description 2', organization=organization)
+    # Create conversations with topics
+    for i in range(5):
+        conv = Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=datetime.now() - timedelta(days=i),
+            duration=100 + i,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5 + i * 0.1,
+            agent=agent,
+            customer=customer,
+            input_tokens=100 + i,
+            output_tokens=50 + i
+        )
+        if i % 2 == 0:
+            conv.topics.add(topic1)
+        else:
+            conv.topics.add(topic2)
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-conversation-topic-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'daily'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert 'conversation_topic_trend' in data
+    results = data['conversation_topic_trend']['results']
+    assert len(results) == 5  # One entry per day per topic
+    for entry in results:
+        assert 'date' in entry
+        assert 'topic' in entry
+        assert 'count' in entry
+        assert entry['count'] == 1
+        assert entry['topic'] in ['Topic 1', 'Topic 2']
+
+@pytest.mark.django_db
+def test_duration_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent, customer):
+    """
+    Check that the duration trend of the organization returns the expected results
+    """
+    # Create conversations with varying durations
+    for i in range(5):
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=datetime.now() - timedelta(days=i),
+            duration=100 + i * 10,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-duration-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'daily'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert 'duration_trend' in data
+    results = data['duration_trend']['results']
+    assert len(results) == 5
+    for entry in results:
+        assert 'date' in entry
+        assert 'avg_value' in entry
+        assert entry['avg_value'] in [100.0, 110.0, 120.0, 130.0, 140.0]
+
+
+@pytest.mark.django_db
+def test_sentiment_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent, customer):
+    """
+    Check that the sentiment trend of the organization returns the expected results
+    """
+    # Create conversations with varying sentiments
+    for i in range(5):
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=datetime.now() - timedelta(days=i),
+            duration=100,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.1 * i,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-sentiment-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'daily'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert 'sentiment_trend' in data
+    results = data['sentiment_trend']['results']
+    assert len(results) == 5
+    for entry in results:
+        assert 'date' in entry
+        assert 'avg_value' in entry
+
+
+@pytest.mark.django_db
+def test_trend_actions_invalid_trend_period(client, organization_analyst_user, organization):
+    """
+    Test that an error is raised whenever an incorrect trend period is specified
+    """
+    client.force_authenticate(user=organization_analyst_user)
+    for action in TREND_ACTIONS:
+        url = reverse(f'organization-{action}', args=[organization.id])
+        response = client.get(url, {'trend_period': 'invalid_period'})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_conversation_trend_action_weekly_period(client, organization_analyst_user, organization, agent, customer):
+    """
+    Test the conversation trend action when a weekly period is specified
+    """
+    # Create conversations over several weeks
+    for i in range(21):  # 3 weeks
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=date(2024, 1, 1) + timedelta(days=i),
+            duration=100,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-conversation-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'weekly'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    results = data['conversation_trend']['results']
+    assert len(results) == 3  # Three weeks
+    for entry in results:
+        assert 'date' in entry
+        assert 'count' in entry
+
+
+@pytest.mark.django_db
+def test_duration_trend_action_monthly_period(client, organization_analyst_user, organization, agent, customer):
+    """
+    Test the conversation trend action when a monthly period is specified
+    """
+    # Create conversations over several months
+    for i in range(90):  # Approx 3 months
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=date(2024, 1, 1) + timedelta(days=i),
+            duration=100 + i,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-duration-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'monthly'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    results = data['duration_trend']['results']
+    assert len(results) >= 3  # At least three months
+    for entry in results:
+        assert 'date' in entry
+        assert 'avg_value' in entry
+
+
+@pytest.mark.django_db
+def test_conversations_action_no_data(client, organization_analyst_user, organization):
+    """
+    Test that the conversations action can return an empty result when no conversations are present
+    """
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-conversations', args=[organization.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert 'conversations' in data
+    assert data['conversations']['results'] == []
+
+
+@pytest.mark.django_db
+def test_trends_actions_no_data(client, organization_analyst_user, organization):
+    """
+    Test that the conversation trend actions can return an empty result when no conversations are present
+    """
+    client.force_authenticate(user=organization_analyst_user)
+    for action in TREND_ACTIONS:
+        url = reverse(f'organization-{action}', args=[organization.id])
+        response = client.get(url, {'trend_period': 'daily'})
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert action.replace('-', '_') in data
+        assert data[action.replace('-', '_')]['results'] == []
