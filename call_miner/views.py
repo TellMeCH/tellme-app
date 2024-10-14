@@ -100,7 +100,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         return {'request': self.request}
 
 
-class OrganizationViewSet(TrendsActionsViewSet):
+class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
     permission_classes = [OrganizationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['name']
@@ -114,6 +114,8 @@ class OrganizationViewSet(TrendsActionsViewSet):
         return OrganizationDetailSerializer
 
     def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Organization.objects.all()
         if self.request.user.employee.organization:
             return Organization.objects.filter(pk=self.request.user.employee.organization.pk)
         return Organization.objects.none()

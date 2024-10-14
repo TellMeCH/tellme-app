@@ -9,9 +9,12 @@ class ConversationPermission(permissions.BasePermission):
         """
         Modification is only allowed to superusers, listing is possible for Employees and superusers
         """
-        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
-            return request.user.is_superuser
-        return hasattr(request.user, 'employee') or request.user.is_superuser
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return hasattr(request.user, 'employee')
 
     def has_object_permission(self, request, view, obj):
         """
@@ -29,11 +32,14 @@ class OrganizationPermission(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         """
-        Modification is only allowed to superusers, listing is possible for Employees
+        Modification is only allowed to superusers, listing is possible for Analysts
         """
-        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
-            return request.user.is_superuser
-        return hasattr(request.user.employee, 'analyst')
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return hasattr(request.user.employee, 'analyst')
 
     def has_object_permission(self, request, view, obj):
         """
