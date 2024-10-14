@@ -154,6 +154,10 @@ def test_analyst_can_list_conversations_in_organization(client, organization_ana
 
 @pytest.mark.django_db
 def test_agent_can_list_conversations_in_organization(client, agent, conversation):
+    """
+    Test that an agent can list conversations within their own organization,
+    and does not see conversations from other organizations.
+    """
     client.force_authenticate(user=agent.user)
     response = client.get(reverse('conversation-list'))
     assert response.status_code == status.HTTP_200_OK
@@ -163,6 +167,9 @@ def test_agent_can_list_conversations_in_organization(client, agent, conversatio
 
 @pytest.mark.django_db
 def test_unauthenticated_user_cannot_retrieve_organization(client, organization):
+    """
+    Test that an unauthenticated user can't view any conversation
+    """
     url = reverse('organization-detail', args=[organization.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -225,6 +232,9 @@ def test_agent_cannot_view_conversation_in_other_organization(client, agent, ano
 
 @pytest.mark.django_db
 def test_unauthenticated_user_cannot_view_conversation(client, conversation):
+    """
+    Test that an unauthenticated user cannot view any conversation.
+    """
     url = reverse('conversation-detail', args=[conversation.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -383,6 +393,9 @@ def test_transcript_pagination(client, organization_analyst_user, conversation, 
 
 @pytest.mark.django_db
 def test_unauthenticated_user_cannot_view_conversation_transcript(client, conversation):
+    """
+    Test that an unauthenticated user can't view the transcript of any conversation.
+    """
     url = reverse('conversation-transcript', args=[conversation.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -488,6 +501,9 @@ def test_agent_cannot_create_conversation(client, agent, customer):
 
 @pytest.mark.django_db
 def test_unauthenticated_user_cannot_create_conversation(client, agent, customer):
+    """
+    Test that an unauthenticated user cannot create a new conversation.
+    """
     data = {
         'path': 'path/to/new_conversation',
         'date': datetime.now().isoformat(),
@@ -543,6 +559,9 @@ def test_agent_cannot_update_conversation(client, agent, conversation):
 
 @pytest.mark.django_db
 def test_unauthenticated_user_cannot_update_conversation(client, conversation):
+    """
+    Test that an agent cannot update a conversation.
+    """
     data = {'title': 'Updated Title'}
     response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -581,6 +600,9 @@ def test_agent_cannot_delete_conversation(client, agent, conversation):
 
 @pytest.mark.django_db
 def test_unauthenticated_user_cannot_delete_conversation(client, conversation):
+    """
+    Test that an agent cannot delete a new conversation.
+    """
     response = client.delete(reverse('conversation-detail', args=[conversation.id]))
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
