@@ -38,8 +38,9 @@ class OrganizationPermission(permissions.BasePermission):
             return False
         if request.user.is_superuser:
             return True
-        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
-            return hasattr(request.user.employee, 'analyst')
+        if hasattr(request.user.employee, 'analyst'):
+            return request.method not in ['POST', 'PATCH', 'PUT', 'DELETE'] and view.action != 'list'
+        return False
 
     def has_object_permission(self, request, view, obj):
         """

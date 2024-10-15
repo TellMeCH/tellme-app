@@ -44,7 +44,7 @@ def organization_admin_user(organization):
 
 @pytest.fixture
 def organization_analyst_user(organization):
-    """Create and return an employee user associated with the given organization."""
+    """Create and return an analyst user associated with the given organization."""
     user = User.objects.create_user('employee', 'employee@example.com', 'password')
     Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=False)
     return user
@@ -52,7 +52,7 @@ def organization_analyst_user(organization):
 
 @pytest.fixture
 def another_organization_analyst_user(another_organization):
-    """Create and return an employee user associated with another organization."""
+    """Create and return an analyst user associated with another organization."""
     user = User.objects.create_user('another_employee', 'another_employee@example.com', 'password')
     Analyst.objects.create(user=user, organization=another_organization, role='ANALYST', is_organization_admin=False)
     return user
@@ -130,14 +130,59 @@ def another_conversation(another_agent, another_customer):
 
 
 @pytest.mark.django_db
-def test_superuser_can_retrieve_any_organization(client, superuser, organization, another_organization):
+def test_superuser_can_list_organizations(client, superuser):
+    """Test that a superuser can list all organizations."""
     client.force_authenticate(user=superuser)
-    # Retrieve organization
+    url = reverse('organization-list')
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data) > 0  # Check that organizations are returned
+
+
+@pytest.mark.django_db
+def test_analyst_cannot_list_all_organizations(client, organization_analyst_user):
+    """Test that a regular analyst cannot list all organizations."""
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-list')
+    response = client.get(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_agent_cannot_list_all_organizations(client, agent):
+    """Test that an agent cannot list all organizations."""
+    client.force_authenticate(user=agent.user)
+    url = reverse('organization-list')
+    response = client.get(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_another_organization_analyst_cannot_list_organizations(client, another_organization_analyst_user):
+    """Test that an analyst from another organization cannot list organizations."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    url = reverse('organization-list')
+    response = client.get(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_unauthenticated_user_cannot_list_all_organizations(client, agent):
+    """Test that an unauthenticated user cannot list all organizations."""
+    client.force_authenticate(user=agent.user)
+    url = reverse('organization-list')
+    response = client.get(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_superuser_can_retrieve_any_organization(client, superuser, organization, another_organization):
+    """Test that a superuser can retrieve any organization."""
+    client.force_authenticate(user=superuser)
     url = reverse('organization-detail', args=[organization.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
 
-    # Retrieve another organization
     url = reverse('organization-detail', args=[another_organization.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
@@ -145,6 +190,7 @@ def test_superuser_can_retrieve_any_organization(client, superuser, organization
 
 @pytest.mark.django_db
 def test_analyst_can_retrieve_own_organization(client, organization_analyst_user, organization):
+    """Test that an analyst can retrieve their own organization."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-detail', args=[organization.id])
     response = client.get(url)
@@ -154,6 +200,7 @@ def test_analyst_can_retrieve_own_organization(client, organization_analyst_user
 
 @pytest.mark.django_db
 def test_analyst_cannot_retrieve_other_organization(client, organization_analyst_user, another_organization):
+    """Test that an analyst cannot retrieve another organization's details."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-detail', args=[another_organization.id])
     response = client.get(url)
@@ -162,6 +209,7 @@ def test_analyst_cannot_retrieve_other_organization(client, organization_analyst
 
 @pytest.mark.django_db
 def test_agent_cannot_retrieve_own_organization(client, agent, organization):
+    """Test that an agent cannot retrieve their own organization's details."""
     client.force_authenticate(user=agent.user)
     url = reverse('organization-detail', args=[organization.id])
     response = client.get(url)
@@ -170,6 +218,7 @@ def test_agent_cannot_retrieve_own_organization(client, agent, organization):
 
 @pytest.mark.django_db
 def test_agent_cannot_retrieve_other_organization(client, agent, another_organization):
+    """Test that an agent cannot retrieve another organization's details."""
     client.force_authenticate(user=agent.user)
     url = reverse('organization-detail', args=[another_organization.id])
     response = client.get(url)
@@ -177,7 +226,18 @@ def test_agent_cannot_retrieve_other_organization(client, agent, another_organiz
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_retrieve_organization(client, another_organization_analyst_user,
+                                                                   organization):
+    """Test that an analyst from another organization cannot retrieve an organization's details."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    url = reverse('organization-detail', args=[organization.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_retrieve_organization(client, organization):
+    """Test that an unauthenticated user cannot retrieve an organization's details."""
     url = reverse('organization-detail', args=[organization.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -185,6 +245,7 @@ def test_unauthenticated_user_cannot_retrieve_organization(client, organization)
 
 @pytest.mark.django_db
 def test_superuser_can_create_organization(client, superuser):
+    """Test that a superuser can create an organization."""
     client.force_authenticate(user=superuser)
     url = reverse('organization-list')
     data = {'name': 'New Organization', 'max_user_count': 20}
@@ -195,6 +256,7 @@ def test_superuser_can_create_organization(client, superuser):
 
 @pytest.mark.django_db
 def test_analyst_cannot_create_organization(client, organization_analyst_user):
+    """Test that an analyst cannot create an organization."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-list')
     data = {'name': 'Unauthorized Organization', 'max_user_count': 20}
@@ -205,6 +267,7 @@ def test_analyst_cannot_create_organization(client, organization_analyst_user):
 
 @pytest.mark.django_db
 def test_agent_cannot_create_organization(client, agent):
+    """Test that an agent cannot create an organization."""
     client.force_authenticate(user=agent.user)
     url = reverse('organization-list')
     data = {'name': 'Unauthorized Organization', 'max_user_count': 20}
@@ -214,7 +277,18 @@ def test_agent_cannot_create_organization(client, agent):
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_create_organization(client, another_organization_analyst_user):
+    """Test that an analyst from another organization cannot create an organization."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    url = reverse('organization-list')
+    data = {'name': 'Unauthorized Creation', 'max_user_count': 20}
+    response = client.post(url, data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_create_organization(client):
+    """Test that an unauthenticated user cannot create an organization."""
     url = reverse('organization-list')
     data = {'name': 'Unauthorized Organization', 'max_user_count': 20}
     response = client.post(url, data)
@@ -224,6 +298,7 @@ def test_unauthenticated_user_cannot_create_organization(client):
 
 @pytest.mark.django_db
 def test_superuser_can_update_organization(client, superuser, organization):
+    """Test that a superuser can update an organization's details."""
     client.force_authenticate(user=superuser)
     url = reverse('organization-detail', args=[organization.id])
     data = {'name': 'Updated Organization', 'max_user_count': 15}
@@ -236,6 +311,7 @@ def test_superuser_can_update_organization(client, superuser, organization):
 
 @pytest.mark.django_db
 def test_analyst_cannot_update_organization(client, organization_analyst_user, organization):
+    """Test that an analyst cannot update an organization's details."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-detail', args=[organization.id])
     data = {'name': 'Unauthorized Update', 'max_user_count': 15}
@@ -245,6 +321,7 @@ def test_analyst_cannot_update_organization(client, organization_analyst_user, o
 
 @pytest.mark.django_db
 def test_agent_cannot_update_organization(client, agent, organization):
+    """Test that an agent cannot update an organization's details."""
     client.force_authenticate(user=agent.user)
     url = reverse('organization-detail', args=[organization.id])
     data = {'name': 'Unauthorized Update', 'max_user_count': 15}
@@ -253,7 +330,19 @@ def test_agent_cannot_update_organization(client, agent, organization):
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_update_organization(client, another_organization_analyst_user,
+                                                                 organization):
+    """Test that an analyst from another organization cannot update an organization's details."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    url = reverse('organization-detail', args=[organization.id])
+    data = {'name': 'Unauthorized Update', 'max_user_count': 20}
+    response = client.put(url, data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_update_organization(client, organization):
+    """Test that an unauthenticated user cannot update an organization's details."""
     url = reverse('organization-detail', args=[organization.id])
     data = {'name': 'Unauthorized Update', 'max_user_count': 15}
     response = client.put(url, data, format='json')
@@ -262,6 +351,7 @@ def test_unauthenticated_user_cannot_update_organization(client, organization):
 
 @pytest.mark.django_db
 def test_superuser_can_delete_organization(client, superuser, organization):
+    """Test that a superuser can delete an organization."""
     client.force_authenticate(user=superuser)
     url = reverse('organization-detail', args=[organization.id])
     response = client.delete(url)
@@ -271,6 +361,7 @@ def test_superuser_can_delete_organization(client, superuser, organization):
 
 @pytest.mark.django_db
 def test_analyst_cannot_delete_organization(client, organization_analyst_user, organization):
+    """Test that an analyst cannot delete an organization."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-detail', args=[organization.id])
     response = client.delete(url)
@@ -280,6 +371,7 @@ def test_analyst_cannot_delete_organization(client, organization_analyst_user, o
 
 @pytest.mark.django_db
 def test_agent_cannot_delete_organization(client, agent, organization):
+    """Test that an agent cannot delete an organization."""
     client.force_authenticate(user=agent.user)
     url = reverse('organization-detail', args=[organization.id])
     response = client.delete(url)
@@ -288,7 +380,18 @@ def test_agent_cannot_delete_organization(client, agent, organization):
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_delete_organization(client, another_organization_analyst_user,
+                                                                 organization):
+    """Test that an analyst from another organization cannot delete an organization."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    url = reverse('organization-detail', args=[organization.id])
+    response = client.delete(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_delete_organization(client, organization):
+    """Test that an unauthenticated user cannot delete an organization."""
     url = reverse('organization-detail', args=[organization.id])
     response = client.delete(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -298,6 +401,7 @@ def test_unauthenticated_user_cannot_delete_organization(client, organization):
 @pytest.mark.django_db
 def test_superuser_can_access_any_organization_conversations_action(client, superuser, organization,
                                                                     another_organization):
+    """Test that a superuser can access the conversations of any organization."""
     client.force_authenticate(user=superuser)
     url = reverse('organization-conversations', args=[organization.id])
     response = client.get(url)
@@ -311,6 +415,7 @@ def test_superuser_can_access_any_organization_conversations_action(client, supe
 @pytest.mark.django_db
 def test_analyst_can_access_own_organization_conversations_action(client, organization_analyst_user, organization,
                                                                   conversation):
+    """Test that an analyst can access the conversations of their own organization."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-conversations', args=[organization.id])
     response = client.get(url)
@@ -321,6 +426,7 @@ def test_analyst_can_access_own_organization_conversations_action(client, organi
 @pytest.mark.django_db
 def test_analyst_cannot_access_other_organization_conversations_action(client, organization_analyst_user,
                                                                        another_organization):
+    """Test that an analyst cannot access the conversations of another organization."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-conversations', args=[another_organization.id])
     response = client.get(url)
@@ -329,6 +435,7 @@ def test_analyst_cannot_access_other_organization_conversations_action(client, o
 
 @pytest.mark.django_db
 def test_agent_cannot_access_own_organization_conversations_action(client, agent, organization):
+    """Test that an agent cannot access the conversations of their own organization."""
     client.force_authenticate(user=agent.user)
     url = reverse('organization-conversations', args=[organization.id])
     response = client.get(url)
@@ -337,6 +444,7 @@ def test_agent_cannot_access_own_organization_conversations_action(client, agent
 
 @pytest.mark.django_db
 def test_agent_cannot_access_other_organization_conversations_action(client, agent, another_organization):
+    """Test that an agent cannot access the conversations of another organization."""
     client.force_authenticate(user=agent.user)
     url = reverse('organization-conversations', args=[another_organization.id])
     response = client.get(url)
@@ -344,7 +452,20 @@ def test_agent_cannot_access_other_organization_conversations_action(client, age
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_access_other_organization_conversations_action(
+        client,
+        another_organization_analyst_user,
+        organization):
+    """Test that an analyst from another organization cannot access the conversations of a different organization."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    url = reverse('organization-conversations', args=[organization.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_access_conversations_action(client, organization):
+    """Test that an unauthenticated user cannot access an organization's conversations."""
     url = reverse('organization-conversations', args=[organization.id])
     response = client.get(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -352,6 +473,7 @@ def test_unauthenticated_user_cannot_access_conversations_action(client, organiz
 
 @pytest.mark.django_db
 def test_superuser_can_access_any_organization_trends_actions(client, superuser, organization, another_organization):
+    """Test that a superuser can access the trend actions of any organization."""
     client.force_authenticate(user=superuser)
     for org in [organization, another_organization]:
         for action in TREND_ACTIONS:
@@ -362,6 +484,7 @@ def test_superuser_can_access_any_organization_trends_actions(client, superuser,
 
 @pytest.mark.django_db
 def test_analyst_can_access_own_organization_trends_actions(client, organization_analyst_user, organization):
+    """Test that an analyst can access the trend actions of their own organization."""
     client.force_authenticate(user=organization_analyst_user)
     for action in TREND_ACTIONS:
         url = reverse(f'organization-{action}', args=[organization.id])
@@ -372,6 +495,7 @@ def test_analyst_can_access_own_organization_trends_actions(client, organization
 @pytest.mark.django_db
 def test_analyst_cannot_access_other_organization_trends_actions(client, organization_analyst_user,
                                                                  another_organization):
+    """Test that an analyst cannot access the trend actions of another organization."""
     client.force_authenticate(user=organization_analyst_user)
     for action in TREND_ACTIONS:
         url = reverse(f'organization-{action}', args=[another_organization.id])
@@ -381,6 +505,7 @@ def test_analyst_cannot_access_other_organization_trends_actions(client, organiz
 
 @pytest.mark.django_db
 def test_agent_cannot_access_own_organization_trends_actions(client, agent, organization):
+    """Test that an agent cannot access the trend actions of their own organization."""
     client.force_authenticate(user=agent.user)
     for action in TREND_ACTIONS:
         url = reverse(f'organization-{action}', args=[organization.id])
@@ -390,6 +515,7 @@ def test_agent_cannot_access_own_organization_trends_actions(client, agent, orga
 
 @pytest.mark.django_db
 def test_agent_cannot_access_other_organization_trends_actions(client, agent, another_organization):
+    """Test that an agent cannot access the trend actions of another organization."""
     client.force_authenticate(user=agent.user)
     for action in TREND_ACTIONS:
         url = reverse(f'organization-{action}', args=[another_organization.id])
@@ -398,7 +524,22 @@ def test_agent_cannot_access_other_organization_trends_actions(client, agent, an
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_access_other_organization_trends_actions(
+        client,
+        another_organization_analyst_user,
+        organization
+):
+    """Test that an analyst from another organization cannot access the trend actions of a different organization."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    for action in TREND_ACTIONS:
+        url = reverse(f'organization-{action}', args=[organization.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_access_trends_actions(client, organization):
+    """Test that an unauthenticated user cannot access an organization's trend actions."""
     for action in TREND_ACTIONS:
         url = reverse(f'organization-{action}', args=[organization.id])
         response = client.get(url)
@@ -407,9 +548,7 @@ def test_unauthenticated_user_cannot_access_trends_actions(client, organization)
 
 @pytest.mark.django_db
 def test_conversations_action_returns_correct_data(client, organization_analyst_user, organization, conversation):
-    """
-    Check the content of the Organization's conversations
-    """
+    """Check the content of an organization's conversations."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-conversations', args=[organization.id])
     response = client.get(url)
@@ -424,9 +563,7 @@ def test_conversations_action_returns_correct_data(client, organization_analyst_
 
 @pytest.mark.django_db
 def test_conversations_action_pagination(client, organization_analyst_user, organization, agent, customer):
-    """
-    Check that pagination works when calling organization-conversations
-    """
+    """Check that pagination works when calling organization-conversations."""
     # Create multiple conversations to test pagination
     for i in range(15):
         Conversation.objects.create(
@@ -448,17 +585,14 @@ def test_conversations_action_pagination(client, organization_analyst_user, orga
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     conversations = data['conversations']['results']
-    # Assuming default page size is less than 15
-    assert len(conversations) <= 15
+    assert len(conversations) == 15
     assert 'next' in data['conversations']
 
 
 @pytest.mark.django_db
 def test_conversation_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent,
                                                         customer):
-    """
-    Check that the daily conversation trend responds as expected to the different period specifications
-    """
+    """Check that the daily conversation trend responds as expected to the different period specifications."""
     # Create conversations on different days
     for i in range(5):
         Conversation.objects.create(
@@ -491,9 +625,7 @@ def test_conversation_trend_action_returns_correct_data(client, organization_ana
 @pytest.mark.django_db
 def test_conversation_topic_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent,
                                                               customer):
-    """
-    Check that the organization's topic trends are as expected
-    """
+    """Check that the organization's topic trends are as expected."""
     # Create topics
     topic1 = Topic.objects.create(name='Topic 1', description='Description 1', organization=organization)
     topic2 = Topic.objects.create(name='Topic 2', description='Description 2', organization=organization)
@@ -531,11 +663,10 @@ def test_conversation_topic_trend_action_returns_correct_data(client, organizati
         assert entry['count'] == 1
         assert entry['topic'] in ['Topic 1', 'Topic 2']
 
+
 @pytest.mark.django_db
 def test_duration_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent, customer):
-    """
-    Check that the duration trend of the organization returns the expected results
-    """
+    """Check that the duration trend of the organization returns the expected results."""
     # Create conversations with varying durations
     for i in range(5):
         Conversation.objects.create(
@@ -567,9 +698,7 @@ def test_duration_trend_action_returns_correct_data(client, organization_analyst
 
 @pytest.mark.django_db
 def test_sentiment_trend_action_returns_correct_data(client, organization_analyst_user, organization, agent, customer):
-    """
-    Check that the sentiment trend of the organization returns the expected results
-    """
+    """Check that the sentiment trend of the organization returns the expected results."""
     # Create conversations with varying sentiments
     for i in range(5):
         Conversation.objects.create(
@@ -600,9 +729,7 @@ def test_sentiment_trend_action_returns_correct_data(client, organization_analys
 
 @pytest.mark.django_db
 def test_trend_actions_invalid_trend_period(client, organization_analyst_user, organization):
-    """
-    Test that an error is raised whenever an incorrect trend period is specified
-    """
+    """Test that an error is raised whenever an incorrect trend period is specified."""
     client.force_authenticate(user=organization_analyst_user)
     for action in TREND_ACTIONS:
         url = reverse(f'organization-{action}', args=[organization.id])
@@ -612,9 +739,7 @@ def test_trend_actions_invalid_trend_period(client, organization_analyst_user, o
 
 @pytest.mark.django_db
 def test_conversation_trend_action_weekly_period(client, organization_analyst_user, organization, agent, customer):
-    """
-    Test the conversation trend action when a weekly period is specified
-    """
+    """Test the conversation trend action when a weekly period is specified."""
     # Create conversations over several weeks
     for i in range(21):  # 3 weeks
         Conversation.objects.create(
@@ -643,10 +768,68 @@ def test_conversation_trend_action_weekly_period(client, organization_analyst_us
 
 
 @pytest.mark.django_db
+def test_conversation_trend_action_monthly_period(client, organization_analyst_user, organization, agent, customer):
+    """Test the conversation trend action when a monthly period is specified."""
+    # Create conversations over several months
+    for i in range(90):  # 3 months
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=date(2024, 1, 1) + timedelta(days=i),
+            duration=100,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-conversation-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'monthly'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    results = data['conversation_trend']['results']
+    assert len(results) == 3
+    for entry in results:
+        assert 'date' in entry
+        assert 'count' in entry
+
+
+@pytest.mark.django_db
+def test_duration_trend_action_weekly_period(client, organization_analyst_user, organization, agent, customer):
+    """Test the duration trend action when a weekly period is specified."""
+    # Create conversations over several weeks
+    for i in range(21):  # 3 weeks
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=date(2024, 1, 1) + timedelta(days=i),
+            duration=100 + i,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-duration-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'weekly'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    results = data['duration_trend']['results']
+    assert len(results) == 3
+    for entry in results:
+        assert 'date' in entry
+        assert 'avg_value' in entry
+
+
+@pytest.mark.django_db
 def test_duration_trend_action_monthly_period(client, organization_analyst_user, organization, agent, customer):
-    """
-    Test the conversation trend action when a monthly period is specified
-    """
+    """Test the duration trend action when a monthly period is specified."""
     # Create conversations over several months
     for i in range(90):  # Approx 3 months
         Conversation.objects.create(
@@ -668,17 +851,74 @@ def test_duration_trend_action_monthly_period(client, organization_analyst_user,
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     results = data['duration_trend']['results']
-    assert len(results) >= 3  # At least three months
+    assert len(results) == 3  # Three months
     for entry in results:
         assert 'date' in entry
         assert 'avg_value' in entry
 
 
 @pytest.mark.django_db
+def test_sentiment_trend_action_weekly_period(client, organization_analyst_user, organization, agent, customer):
+    """Test the sentiment trend action when a weekly period is specified."""
+    # Create conversations over several weeks
+    for i in range(21):  # 3 weeks
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=date(2024, 1, 1) + timedelta(days=i),
+            duration=100 + i,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-sentiment-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'weekly'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    results = data['sentiment_trend']['results']
+    assert len(results) == 3
+    for entry in results:
+        assert 'date' in entry
+        assert 'avg_value' in entry
+
+
+@pytest.mark.django_db
+def test_sentiment_trend_action_monthly_period(client, organization_analyst_user, organization, agent, customer):
+    """Test the sentiment trend action when a monthly period is specified."""
+    # Create conversations over several months
+    for i in range(90):  # Approx 3 months
+        Conversation.objects.create(
+            path=f'path/to/conversation_{i}',
+            date=date(2024, 1, 1) + timedelta(days=i),
+            duration=100 + i,
+            title=f'Test title {i}',
+            summary=f'Test summary {i}',
+            transcript=f'Test transcript {i}',
+            sentiment=0.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('organization-sentiment-trend', args=[organization.id])
+    response = client.get(url, {'trend_period': 'monthly'})
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    results = data['sentiment_trend']['results']
+    assert len(results) == 3  # Three months
+    for entry in results:
+        assert 'date' in entry
+        assert 'avg_value' in entry
+
+@pytest.mark.django_db
 def test_conversations_action_no_data(client, organization_analyst_user, organization):
-    """
-    Test that the conversations action can return an empty result when no conversations are present
-    """
+    """Test that the conversations action can return an empty result when no conversations are present."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('organization-conversations', args=[organization.id])
     response = client.get(url)
@@ -690,9 +930,7 @@ def test_conversations_action_no_data(client, organization_analyst_user, organiz
 
 @pytest.mark.django_db
 def test_trends_actions_no_data(client, organization_analyst_user, organization):
-    """
-    Test that the conversation trend actions can return an empty result when no conversations are present
-    """
+    """Test that the conversation trend actions can return an empty result when no conversations are present."""
     client.force_authenticate(user=organization_analyst_user)
     for action in TREND_ACTIONS:
         url = reverse(f'organization-{action}', args=[organization.id])
