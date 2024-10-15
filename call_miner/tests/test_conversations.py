@@ -7,6 +7,9 @@ from call_miner.models import Organization, Analyst, Agent, Customer, Conversati
 from datetime import datetime
 
 
+# TODO: Add tests for permissions of agents/analysts in other organizations
+
+
 @pytest.fixture
 def client():
     """Return an instance of the DRF APIClient for testing."""
@@ -164,6 +167,16 @@ def test_agent_can_list_conversations_in_organization(client, agent, conversatio
     assert len(response.data['results']) == 1
     assert response.data['results'][0]['title'] == conversation.title
 
+
+@pytest.mark.django_db
+def test_another_organization_analyst_cannot_list_conversations(client, another_organization_analyst_user,
+                                                                another_conversation):
+    """Test that an analyst from another organization cannot list conversations."""
+    client.force_authenticate(user=another_organization_analyst_user)
+    response = client.get(reverse('conversation-list'))
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.data['results']) == 1
+    assert response.data['results'][0]['title'] == another_conversation.title
 
 @pytest.mark.django_db
 def test_unauthenticated_user_cannot_retrieve_organization(client, organization):
@@ -500,6 +513,31 @@ def test_agent_cannot_create_conversation(client, agent, customer):
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_create_conversation(client, another_organization_analyst_user, agent,
+                                                                 customer):
+    """
+    Test that another organization's analyst cannot create a new conversation.
+    """
+    client.force_authenticate(user=another_organization_analyst_user)
+    data = {
+        'path': 'path/to/new_conversation',
+        'date': datetime.now().isoformat(),
+        'duration': 100.0,
+        'transcript': 'New transcript',
+        'summary': 'New summary',
+        'title': 'New Conversation',
+        'sentiment': 0.6,
+        'topics': [],
+        'agent': agent.id,
+        'customer': customer.id,
+        'input_tokens': 120,
+        'output_tokens': 60
+    }
+    response = client.post(reverse('conversation-list'), data, format='json')
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_create_conversation(client, agent, customer):
     """
     Test that an unauthenticated user cannot create a new conversation.
@@ -558,6 +596,18 @@ def test_agent_cannot_update_conversation(client, agent, conversation):
 
 
 @pytest.mark.django_db
+def test_another_organization_analyst_cannot_update_conversation(client, another_organization_analyst_user,
+                                                                 conversation):
+    """
+    Test that another organization's analyst cannot update an existing conversation.
+    """
+    client.force_authenticate(user=another_organization_analyst_user)
+    data = {'title': 'Updated Title'}
+    response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 def test_unauthenticated_user_cannot_update_conversation(client, conversation):
     """
     Test that an agent cannot update a conversation.
@@ -594,6 +644,17 @@ def test_agent_cannot_delete_conversation(client, agent, conversation):
     Test that an agent cannot delete a conversation.
     """
     client.force_authenticate(user=agent.user)
+    response = client.delete(reverse('conversation-detail', args=[conversation.id]))
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_another_organization_analyst_cannot_delete_conversation(client, another_organization_analyst_user,
+                                                                 conversation):
+    """
+    Test that another organization's analyst cannot delete a conversation.
+    """
+    client.force_authenticate(user=another_organization_analyst_user)
     response = client.delete(reverse('conversation-detail', args=[conversation.id]))
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
