@@ -7,9 +7,6 @@ from call_miner.models import Organization, Analyst, Agent, Customer, Conversati
 from datetime import datetime
 
 
-# TODO: Add tests for permissions of agents/analysts in other organizations
-
-
 @pytest.fixture
 def client():
     """Return an instance of the DRF APIClient for testing."""
