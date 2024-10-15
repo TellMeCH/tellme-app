@@ -139,7 +139,7 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
         return Organization.objects.none()
 
 
-class TopicViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
+class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
@@ -159,6 +159,8 @@ class TopicViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         """
         Return topics that belong to the user's organization
         """
+        if self.request.user.is_superuser:
+            return Topic.objects.all()
         if self.request.user.employee.organization:
             if self.action == 'list_active':
                 return Topic.objects.filter(organization=self.request.user.employee.organization, is_active=True)
