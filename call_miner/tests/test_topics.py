@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch
-from django.urls import reverse
+from django.urls import reverse, exceptions
 from rest_framework import status
 from rest_framework.test import APIClient
 from django.contrib.auth.models import User
@@ -620,6 +620,14 @@ def test_topic_conversations_action_returns_expected_content(client, organizatio
     results = response.data['conversations']['results']
     assert len(results) == 1
     assert results[0]['title'] == conversation.title
+
+
+@pytest.mark.django_db
+def test_topic_conversation_topic_trend_action_is_disabled(client, organization_analyst_user, topic, conversation):
+    client.force_authenticate(user=organization_analyst_user)
+    with pytest.raises(exceptions.NoReverseMatch):
+        url = reverse('topic-conversation-topic-trend', args=[topic.id])
+        response = client.get(url)
 
 
 @pytest.mark.django_db
