@@ -116,7 +116,7 @@ class ConversationTrendsSerializer(serializers.ModelSerializer):
         paginated_qs, paginator = paginate_queryset(
             topic_trend,
             self.context['request'],
-            ['date', 'topic']
+            ['date']
         )
         return {
             'results': paginated_qs,
@@ -134,9 +134,11 @@ class ConversationTrendsSerializer(serializers.ModelSerializer):
 
         # Fetch the appropriate trend based on the period
         duration_trend = obj.get_avg_for_periods('duration', trend_period)
+        print(len(duration_trend))
         paginated_qs, paginator = paginate_queryset(
             duration_trend,
-            self.context['request']
+            self.context['request'],
+            ['date']
         )
         return {
             'results': paginated_qs,
@@ -156,7 +158,8 @@ class ConversationTrendsSerializer(serializers.ModelSerializer):
         sentiment_trend = obj.get_avg_for_periods('sentiment', trend_period)
         paginated_qs, paginator = paginate_queryset(
             sentiment_trend,
-            self.context['request']
+            self.context['request'],
+            ['date']
         )
         return {
             'results': paginated_qs,
