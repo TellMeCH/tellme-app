@@ -15,6 +15,7 @@ class ConversationPermission(permissions.BasePermission):
             return True
         if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
             return hasattr(request.user, 'employee')
+        return False
 
     def has_object_permission(self, request, view, obj):
         """
@@ -72,6 +73,7 @@ class TopicPermission(permissions.BasePermission):
             return True
         if hasattr(request.user, 'employee'):
             return request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']
+        return False
 
     def has_object_permission(self, request, view, obj):
         """
@@ -91,9 +93,18 @@ class AgentPermission(permissions.BasePermission):
         """
         Only organization admins or superusers can modify an agent, and organization employees can list.
         """
-        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
-            return request.user.employee.is_organization_admin or request.user.is_superuser
-        return hasattr(request.user, 'employee')
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        if request.user.employee.is_organization_admin:
+            if request.method == 'POST':
+                organization_id = request.data.get('organization')
+                return organization_id and str(request.user.employee.organization.id) == str(organization_id)
+            return True
+        if hasattr(request.user, 'employee'):
+            return request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']
+        return False
 
     def has_object_permission(self, request, view, obj):
         """
@@ -101,10 +112,14 @@ class AgentPermission(permissions.BasePermission):
         For modification, check that the user is an organization admin
         Note that this expects obj to be an instance of Agent
         """
+        if request.user.is_superuser:
+            return True
+        if request.user.employee.is_organization_admin:
+            return request.user.employee.organization.id == obj.organization_id
         if hasattr(request.user.employee, 'agent'):
             managed_agents = request.user.employee.agent.agents.all()
             return (obj in managed_agents) or (obj == request.user.employee.agent)
-        return request.user.employee.is_organization_admin or request.user.is_superuser
+        return False
 
 
 class CustomerPermission(permissions.BasePermission):

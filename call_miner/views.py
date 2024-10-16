@@ -201,6 +201,8 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         """
         Return agents that belong to the user's organization
         """
+        if self.request.user.is_superuser:
+            return Agent.objects.all()
         if self.request.user.employee.organization:
             return Agent.objects.filter(organization=self.request.user.employee.organization)
         return Agent.objects.none()
