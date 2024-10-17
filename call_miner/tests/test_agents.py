@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic
 from datetime import datetime
 
-TREND_ACTIONS = ['conversations', 'conversation-trend', 'duration-trend', 'sentiment-trend']
+TREND_ACTIONS = ['conversations', 'conversation-trend', 'conversation-topic-trend', 'duration-trend', 'sentiment-trend']
 
 
 @pytest.fixture
@@ -355,6 +355,228 @@ def test_unauthenticated_user_cannot_retrieve_agent(client, agent):
     """
     url = reverse('agent-detail', args=[agent.id])
     response = client.get(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_superuser_cannot_create_agent(client, superuser, organization):
+    """
+    Test that a superuser can't create an agent via the AgentViewSet.
+    """
+    client.force_authenticate(user=superuser)
+    data = {
+        'username': 'new_agent',
+        'password': 'password',
+        'organization': organization.id,
+        'role': 'AGENT'
+    }
+    response = client.post(reverse('agent-list'), data=data)
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+@pytest.mark.django_db
+def test_organization_admin_cannot_create_agent_in_own_organization(client, organization_admin_user, organization):
+    """
+    Test that an organization admin can't create an agent in their own organization via the AgentViewSet.
+    """
+    client.force_authenticate(user=organization_admin_user)
+    data = {
+        'username': 'new_agent',
+        'password': 'password',
+        'organization': organization.id,
+        'role': 'AGENT'
+    }
+    response = client.post(reverse('agent-list'), data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_organization_admin_cannot_create_agent_in_another_organization(client, organization_admin_user, another_organization):
+    """
+    Test that an organization admin cannot create an agent in another organization.
+    """
+    client.force_authenticate(user=organization_admin_user)
+    data = {
+        'username': 'new_agent',
+        'password': 'password',
+        'organization': another_organization.id,
+        'role': 'AGENT'
+    }
+    response = client.post(reverse('agent-list'), data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_analyst_cannot_create_agent(client, organization_analyst_user, organization):
+    """
+    Test that an analyst cannot create an agent.
+    """
+    client.force_authenticate(user=organization_analyst_user)
+    data = {
+        'username': 'new_agent',
+        'password': 'password',
+        'organization': organization.id,
+        'role': 'AGENT'
+    }
+    response = client.post(reverse('agent-list'), data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_agent_cannot_create_agent(client, agent, organization):
+    """
+    Test that an agent cannot create another agent.
+    """
+    client.force_authenticate(user=agent.user)
+    data = {
+        'username': 'new_agent',
+        'password': 'password',
+        'organization': organization.id,
+        'role': 'AGENT'
+    }
+    response = client.post(reverse('agent-list'), data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_unauthenticated_user_cannot_create_agent(client, agent, organization):
+    """
+    Test that an unauthenticated user cannot create an agent.
+    """
+    data = {
+        'username': 'new_agent',
+        'password': 'password',
+        'organization': organization.id,
+        'role': 'AGENT'
+    }
+    response = client.post(reverse('agent-list'), data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_superuser_can_update_agent_manager(client, superuser, agent, agent_manager):
+    """
+    Test that a superuser cannot update an agent's manager via the AgentViewSet.
+    """
+    client.force_authenticate(user=superuser)
+    data = {'manager': agent_manager.id}
+    url = reverse('agent-detail', args=[agent.id])
+    response = client.patch(url, data=data)
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+@pytest.mark.django_db
+def test_organization_admin_cannot_update_agent_manager(client, organization_admin_user, agent, agent_manager):
+    """
+    Test that an organization admin cannot update an agent's manager in their own organization via the AgentViewSet.
+    """
+    client.force_authenticate(user=organization_admin_user)
+    data = {'manager': agent_manager.id}
+    url = reverse('agent-detail', args=[agent.id])
+    response = client.patch(url, data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_organization_admin_cannot_update_agent_in_another_organization(client, organization_admin_user, another_agent, agent_manager):
+    """
+    Test that an organization admin cannot update an agent in another organization.
+    """
+    client.force_authenticate(user=organization_admin_user)
+    data = {'manager': agent_manager.id}
+    url = reverse('agent-detail', args=[another_agent.id])
+    response = client.patch(url, data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_analyst_cannot_update_agent(client, organization_analyst_user, agent, agent_manager):
+    """
+    Test that an analyst cannot update an agent.
+    """
+    client.force_authenticate(user=organization_analyst_user)
+    data = {'manager': agent_manager.id}
+    url = reverse('agent-detail', args=[agent.id])
+    response = client.patch(url, data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_agent_cannot_update_another_agent(client, agent, another_agent_in_same_org, agent_manager):
+    """
+    Test that an agent cannot update another agent in their organization.
+    """
+    client.force_authenticate(user=agent.user)
+    data = {'manager': agent_manager.id}
+    url = reverse('agent-detail', args=[another_agent_in_same_org.id])
+    response = client.patch(url, data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_agent_cannot_update_self_manager(client, agent, agent_manager):
+    """
+    Test that an agent cannot update their own manager.
+    """
+    client.force_authenticate(user=agent.user)
+    data = {'manager': agent_manager.id}
+    url = reverse('agent-detail', args=[agent.id])
+    response = client.patch(url, data=data)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_superuser_cannot_delete_agent(client, superuser, agent):
+    """
+    Test that a superuser can't delete an agent via the AgentViewSet.
+    """
+    client.force_authenticate(user=superuser)
+    url = reverse('agent-detail', args=[agent.id])
+    response = client.delete(url)
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+
+@pytest.mark.django_db
+def test_organization_admin_cannot_delete_agent(client, organization_admin_user, agent):
+    """
+    Test that an organization admin can't delete an agent in their own organization via the AgentViewSet.
+    """
+    client.force_authenticate(user=organization_admin_user)
+    url = reverse('agent-detail', args=[agent.id])
+    response = client.delete(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_organization_admin_cannot_delete_agent_in_another_organization(client, organization_admin_user, another_agent):
+    """
+    Test that an organization admin cannot delete an agent in another organization.
+    """
+    client.force_authenticate(user=organization_admin_user)
+    url = reverse('agent-detail', args=[another_agent.id])
+    response = client.delete(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_analyst_cannot_delete_agent(client, organization_analyst_user, agent):
+    """
+    Test that an analyst cannot delete an agent.
+    """
+    client.force_authenticate(user=organization_analyst_user)
+    url = reverse('agent-detail', args=[agent.id])
+    response = client.delete(url)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_agent_cannot_delete_another_agent(client, agent, another_agent_in_same_org):
+    """
+    Test that an agent cannot delete another agent in their own organization.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('agent-detail', args=[another_agent_in_same_org.id])
+    response = client.delete(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 

@@ -91,16 +91,12 @@ class AgentPermission(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         """
-        Only organization admins or superusers can modify an agent, and organization employees can list.
+        Only superusers can modify an agent (although the AgentViewSet is not meant for it), and organization employees
+        can list.
         """
         if not request.user.is_authenticated:
             return False
         if request.user.is_superuser:
-            return True
-        if request.user.employee.is_organization_admin:
-            if request.method == 'POST':
-                organization_id = request.data.get('organization')
-                return organization_id and str(request.user.employee.organization.id) == str(organization_id)
             return True
         if hasattr(request.user, 'employee'):
             return request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']

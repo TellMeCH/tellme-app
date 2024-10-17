@@ -181,6 +181,10 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
 
 
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
+    """
+    This ViewSet allows to view details from all or a single Agent in an organization. Please note that it's read-only,
+    since Employee-level modifications should be done with the Employee ViewSet.
+    """
     permission_classes = [AgentPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'user_id']
