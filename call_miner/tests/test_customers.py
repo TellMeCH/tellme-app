@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -6,7 +7,8 @@ from django.contrib.auth.models import User
 from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic
 from datetime import datetime
 
-TREND_ACTIONS = ['conversations', 'conversation-trend', 'conversation-topic-trend', 'duration-trend', 'sentiment-trend']
+TREND_ACTIONS = ['conversations', 'conversation-trend', 'conversation-topic-trend', 'duration-trend',
+                 'sentiment-trend', 'summary-data']
 
 
 @pytest.fixture
@@ -150,6 +152,7 @@ def another_conversation(another_agent, another_customer, another_topic):
 
 @pytest.mark.django_db
 def test_customer_list_as_superuser(client, superuser, customer, another_customer):
+    """Test that a superuser can list all customers across organizations."""
     client.force_authenticate(user=superuser)
     url = reverse('customer-list')
     response = client.get(url)
@@ -159,6 +162,9 @@ def test_customer_list_as_superuser(client, superuser, customer, another_custome
 
 @pytest.mark.django_db
 def test_customer_list_as_analyst_in_org(client, organization_analyst_user, customer, another_customer):
+    """
+    Test that an analyst within the organization can list customers in their organization.
+    """
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('customer-list')
     response = client.get(url)
@@ -169,6 +175,9 @@ def test_customer_list_as_analyst_in_org(client, organization_analyst_user, cust
 
 @pytest.mark.django_db
 def test_customer_list_as_analyst_outside_org(client, another_organization_analyst_user, customer, another_customer):
+    """
+    Test that an analyst outside the organization sees only their own organization's customers.
+    """
     client.force_authenticate(user=another_organization_analyst_user)
     url = reverse('customer-list')
     response = client.get(url)
@@ -178,23 +187,30 @@ def test_customer_list_as_analyst_outside_org(client, another_organization_analy
 
 
 @pytest.mark.django_db
-def test_customer_list_as_agent_in_org(client, agent):
+def test_customer_list_as_agent_in_org(client, agent, customer):
+    """Test that an agent within the organization can list customers in their organization."""
     client.force_authenticate(user=agent.user)
     url = reverse('customer-list')
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
+    assert len(response.data['results']) == 1
+    assert response.data['results'][0]['name'] == customer.name
 
 
 @pytest.mark.django_db
-def test_customer_list_as_agent_outside_org(client, another_agent):
+def test_customer_list_as_agent_outside_org(client, another_agent, another_customer):
+    """Test that an agent outside the organization sees only their own organization's customers."""
     client.force_authenticate(user=another_agent.user)
     url = reverse('customer-list')
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
+    assert len(response.data['results']) == 1
+    assert response.data['results'][0]['name'] == another_customer.name
 
 
 @pytest.mark.django_db
 def test_customer_list_as_unauthenticated_user(client):
+    """Test that an unauthenticated user cannot list customers."""
     url = reverse('customer-list')
     response = client.get(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -202,22 +218,27 @@ def test_customer_list_as_unauthenticated_user(client):
 
 @pytest.mark.django_db
 def test_customer_retrieve_as_superuser(client, superuser, customer):
+    """Test that a superuser can retrieve any customer."""
     client.force_authenticate(user=superuser)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
+    assert response.data['name'] == customer.name
 
 
 @pytest.mark.django_db
 def test_customer_retrieve_as_analyst_in_org(client, organization_analyst_user, customer):
+    """Test that an analyst within the organization can retrieve a customer."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
+    assert response.data['name'] == customer.name
 
 
 @pytest.mark.django_db
 def test_customer_retrieve_as_analyst_outside_org(client, another_organization_analyst_user, customer):
+    """Test that an analyst outside the organization cannot retrieve customers from another organization."""
     client.force_authenticate(user=another_organization_analyst_user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.get(url)
@@ -226,14 +247,17 @@ def test_customer_retrieve_as_analyst_outside_org(client, another_organization_a
 
 @pytest.mark.django_db
 def test_customer_retrieve_as_agent_in_org(client, agent, customer):
+    """Test that an agent within the organization can retrieve a customer."""
     client.force_authenticate(user=agent.user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
+    assert response.data['name'] == customer.name
 
 
 @pytest.mark.django_db
 def test_customer_retrieve_as_agent_outside_org(client, another_agent, customer):
+    """Test that an agent outside the organization cannot retrieve customers from another organization."""
     client.force_authenticate(user=another_agent.user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.get(url)
@@ -242,6 +266,7 @@ def test_customer_retrieve_as_agent_outside_org(client, another_agent, customer)
 
 @pytest.mark.django_db
 def test_customer_retrieve_as_unauthenticated_user(client, customer):
+    """Test that an unauthenticated user cannot retrieve a customer."""
     url = reverse('customer-detail', args=[customer.pk])
     response = client.get(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -249,15 +274,18 @@ def test_customer_retrieve_as_unauthenticated_user(client, customer):
 
 @pytest.mark.django_db
 def test_customer_create_as_superuser(client, superuser, organization):
+    """Test that a superuser can create a new customer."""
     client.force_authenticate(user=superuser)
     url = reverse('customer-list')
     data = {'name': 'New Customer', 'organization': organization.pk}
     response = client.post(url, data)
     assert response.status_code == status.HTTP_201_CREATED
+    assert response.data['name'] == data['name']
 
 
 @pytest.mark.django_db
 def test_customer_create_as_analyst_in_org(client, organization_analyst_user, organization):
+    """Test that an analyst within the organization cannot create a new customer."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('customer-list')
     data = {'name': 'New Customer', 'organization': organization.pk}
@@ -267,6 +295,7 @@ def test_customer_create_as_analyst_in_org(client, organization_analyst_user, or
 
 @pytest.mark.django_db
 def test_customer_create_as_analyst_outside_org(client, another_organization_analyst_user, organization):
+    """Test that an analyst outside the organization cannot create a customer in another organization."""
     client.force_authenticate(user=another_organization_analyst_user)
     url = reverse('customer-list')
     data = {'name': 'New Customer', 'organization': organization.pk}
@@ -276,6 +305,7 @@ def test_customer_create_as_analyst_outside_org(client, another_organization_ana
 
 @pytest.mark.django_db
 def test_customer_create_as_agent_in_org(client, agent, organization):
+    """Test that an agent within the organization cannot create a new customer."""
     client.force_authenticate(user=agent.user)
     url = reverse('customer-list')
     data = {'name': 'New Customer', 'organization': organization.pk}
@@ -285,6 +315,7 @@ def test_customer_create_as_agent_in_org(client, agent, organization):
 
 @pytest.mark.django_db
 def test_customer_create_as_agent_outside_org(client, another_agent, organization):
+    """Test that an agent outside the organization cannot create a customer in another organization."""
     client.force_authenticate(user=another_agent.user)
     url = reverse('customer-list')
     data = {'name': 'New Customer', 'organization': organization.pk}
@@ -294,6 +325,7 @@ def test_customer_create_as_agent_outside_org(client, another_agent, organizatio
 
 @pytest.mark.django_db
 def test_customer_create_as_unauthenticated_user(client, organization):
+    """Test that an unauthenticated user cannot create a customer."""
     url = reverse('customer-list')
     data = {'name': 'New Customer', 'organization': organization.pk}
     response = client.post(url, data)
@@ -302,15 +334,18 @@ def test_customer_create_as_unauthenticated_user(client, organization):
 
 @pytest.mark.django_db
 def test_customer_update_as_superuser(client, superuser, customer):
+    """Test that a superuser can update a customer."""
     client.force_authenticate(user=superuser)
     url = reverse('customer-detail', args=[customer.pk])
     data = {'name': 'Updated Customer Name'}
     response = client.patch(url, data)
     assert response.status_code == status.HTTP_200_OK
+    assert response.data['name'] == data['name']
 
 
 @pytest.mark.django_db
 def test_customer_update_as_analyst_in_org(client, organization_analyst_user, customer):
+    """Test that an analyst within the organization cannot update a customer."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('customer-detail', args=[customer.pk])
     data = {'name': 'Updated Customer Name'}
@@ -320,6 +355,7 @@ def test_customer_update_as_analyst_in_org(client, organization_analyst_user, cu
 
 @pytest.mark.django_db
 def test_customer_update_as_analyst_outside_org(client, another_organization_analyst_user, customer):
+    """Test that an analyst outside the organization cannot update a customer."""
     client.force_authenticate(user=another_organization_analyst_user)
     url = reverse('customer-detail', args=[customer.pk])
     data = {'name': 'Updated Customer Name'}
@@ -329,6 +365,7 @@ def test_customer_update_as_analyst_outside_org(client, another_organization_ana
 
 @pytest.mark.django_db
 def test_customer_update_as_agent_in_org(client, agent, customer):
+    """Test that an agent within the organization cannot update a customer."""
     client.force_authenticate(user=agent.user)
     url = reverse('customer-detail', args=[customer.pk])
     data = {'name': 'Updated Customer Name'}
@@ -338,6 +375,7 @@ def test_customer_update_as_agent_in_org(client, agent, customer):
 
 @pytest.mark.django_db
 def test_customer_update_as_agent_outside_org(client, another_agent, customer):
+    """Test that an agent outside the organization cannot update a customer."""
     client.force_authenticate(user=another_agent.user)
     url = reverse('customer-detail', args=[customer.pk])
     data = {'name': 'Updated Customer Name'}
@@ -347,6 +385,7 @@ def test_customer_update_as_agent_outside_org(client, another_agent, customer):
 
 @pytest.mark.django_db
 def test_customer_update_as_unauthenticated_user(client, customer):
+    """Test that an unauthenticated user cannot update a customer."""
     url = reverse('customer-detail', args=[customer.pk])
     data = {'name': 'Updated Customer Name'}
     response = client.patch(url, data)
@@ -355,6 +394,7 @@ def test_customer_update_as_unauthenticated_user(client, customer):
 
 @pytest.mark.django_db
 def test_customer_delete_as_superuser(client, superuser, customer):
+    """Test that a superuser can delete a customer."""
     client.force_authenticate(user=superuser)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.delete(url)
@@ -363,6 +403,7 @@ def test_customer_delete_as_superuser(client, superuser, customer):
 
 @pytest.mark.django_db
 def test_customer_delete_as_analyst_in_org(client, organization_analyst_user, customer):
+    """Test that an analyst within the organization cannot delete a customer."""
     client.force_authenticate(user=organization_analyst_user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.delete(url)
@@ -371,6 +412,7 @@ def test_customer_delete_as_analyst_in_org(client, organization_analyst_user, cu
 
 @pytest.mark.django_db
 def test_customer_delete_as_analyst_outside_org(client, another_organization_analyst_user, customer):
+    """Test that an analyst outside the organization cannot delete a customer."""
     client.force_authenticate(user=another_organization_analyst_user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.delete(url)
@@ -379,6 +421,7 @@ def test_customer_delete_as_analyst_outside_org(client, another_organization_ana
 
 @pytest.mark.django_db
 def test_customer_delete_as_agent_in_org(client, agent, customer):
+    """Test that an agent within the organization cannot delete a customer."""
     client.force_authenticate(user=agent.user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.delete(url)
@@ -387,6 +430,7 @@ def test_customer_delete_as_agent_in_org(client, agent, customer):
 
 @pytest.mark.django_db
 def test_customer_delete_as_agent_outside_org(client, another_agent, customer):
+    """Test that an agent outside the organization cannot delete a customer."""
     client.force_authenticate(user=another_agent.user)
     url = reverse('customer-detail', args=[customer.pk])
     response = client.delete(url)
@@ -395,6 +439,7 @@ def test_customer_delete_as_agent_outside_org(client, another_agent, customer):
 
 @pytest.mark.django_db
 def test_customer_delete_as_unauthenticated_user(client, customer):
+    """Test that an unauthenticated user cannot delete a customer."""
     url = reverse('customer-detail', args=[customer.pk])
     response = client.delete(url)
     assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -402,6 +447,7 @@ def test_customer_delete_as_unauthenticated_user(client, customer):
 
 @pytest.mark.django_db
 def test_customer_trend_actions_as_superuser(client, superuser, customer):
+    """Test that a superuser can access trend actions for a customer."""
     client.force_authenticate(user=superuser)
     for action in TREND_ACTIONS:
         url = reverse(f'customer-{action}', args=[customer.pk])
@@ -411,6 +457,7 @@ def test_customer_trend_actions_as_superuser(client, superuser, customer):
 
 @pytest.mark.django_db
 def test_customer_trend_actions_as_analyst_in_org(client, organization_analyst_user, customer):
+    """Test that an analyst within the organization can access trend actions for a customer."""
     client.force_authenticate(user=organization_analyst_user)
     for action in TREND_ACTIONS:
         url = reverse(f'customer-{action}', args=[customer.pk])
@@ -420,6 +467,7 @@ def test_customer_trend_actions_as_analyst_in_org(client, organization_analyst_u
 
 @pytest.mark.django_db
 def test_customer_trend_actions_as_analyst_outside_org(client, another_organization_analyst_user, customer):
+    """Test that an analyst outside the organization cannot access trend actions for a customer."""
     client.force_authenticate(user=another_organization_analyst_user)
     for action in TREND_ACTIONS:
         url = reverse(f'customer-{action}', args=[customer.pk])
@@ -429,6 +477,7 @@ def test_customer_trend_actions_as_analyst_outside_org(client, another_organizat
 
 @pytest.mark.django_db
 def test_customer_trend_actions_as_agent_in_org(client, agent, customer):
+    """Test that an agent within the organization can access trend actions for a customer."""
     client.force_authenticate(user=agent.user)
     for action in TREND_ACTIONS:
         url = reverse(f'customer-{action}', args=[customer.pk])
@@ -438,6 +487,7 @@ def test_customer_trend_actions_as_agent_in_org(client, agent, customer):
 
 @pytest.mark.django_db
 def test_customer_trend_actions_as_agent_outside_org(client, another_agent, customer):
+    """Test that an agent outside the organization cannot access trend actions for a customer."""
     client.force_authenticate(user=another_agent.user)
     for action in TREND_ACTIONS:
         url = reverse(f'customer-{action}', args=[customer.pk])
@@ -447,7 +497,102 @@ def test_customer_trend_actions_as_agent_outside_org(client, another_agent, cust
 
 @pytest.mark.django_db
 def test_customer_trend_actions_as_unauthenticated_user(client, customer):
+    """Test that an unauthenticated user cannot access trend actions for a customer."""
     for action in TREND_ACTIONS:
         url = reverse(f'customer-{action}', args=[customer.pk])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_customer_conversations_action_returns_expected_content(client, agent, customer, conversation):
+    """
+    Test that the 'conversations' action for a customer retrieves the expected conversation data.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('customer-conversations', args=[customer.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'conversations' in response.data
+    results = response.data['conversations']['results']
+    assert len(results) == 1
+    assert results[0]['title'] == conversation.title
+
+
+@pytest.mark.django_db
+def test_customer_conversation_trend_action_returns_expected_content(client, agent, customer, conversation):
+    """
+    Test that the 'conversation_trend' action for an agent retrieves the expected conversation data.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('customer-conversation-trend', args=[customer.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'conversation_trend' in response.data
+    results = response.data['conversation_trend']['results']
+    assert len(results) == 1
+    assert results[0]['count'] == 1
+    assert results[0]['date'].date() == conversation.date.date()
+
+
+@pytest.mark.django_db
+def test_customer_conversation_topic_trend_action_returns_expected_content(client, agent, customer, conversation):
+    """
+    Test that the 'conversation_topic_trend' action for a customer retrieves the expected conversation data.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('customer-conversation-topic-trend', args=[customer.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'conversation_topic_trend' in response.data
+    results = response.data['conversation_topic_trend']['results']
+    assert len(results) == 1
+    assert results[0]['count'] == 1
+    assert results[0]['date'].date() == conversation.date.date()
+    assert results[0]['topic'] == str(conversation.topics.all()[0])
+
+
+@pytest.mark.django_db
+def test_customer_duration_trend_action_returns_expected_content(client, agent, customer, conversation):
+    """
+    Test that the 'duration-trend' action for a customer retrieves the expected duration trend data.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('customer-duration-trend', args=[customer.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'duration_trend' in response.data
+    results = response.data['duration_trend']['results']
+    assert len(results) == 1
+    assert results[0]['avg_value'] == conversation.duration
+
+
+@pytest.mark.django_db
+def test_customer_sentiment_trend_action_returns_expected_content(client, agent, customer, conversation):
+    """
+    Test that the 'sentiment-trend' action for a customer retrieves the expected sentiment trend data.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('customer-sentiment-trend', args=[customer.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'sentiment_trend' in response.data
+    results = response.data['sentiment_trend']['results']
+    assert len(results) == 1
+    assert results[0]['avg_value'] == conversation.sentiment
+
+
+@pytest.mark.django_db
+def test_customer_summary_data_returns_expected_content(client, agent, customer):
+    """
+    Test that the 'summary-data' action for a customer retrieves the expected summary data.
+    """
+    with patch('call_miner.models.condense_summaries') as mock_condense_summaries:
+        mock_condense_summaries.return_value = 'Mocked summary text'
+        client.force_authenticate(user=agent.user)
+        url = reverse('customer-summary-data', args=[customer.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'summary_data' in response.data
+        summary_data = response.data['summary_data']
+        assert summary_data['summary'] == 'Mocked summary text'
