@@ -130,9 +130,13 @@ class CustomerPermission(permissions.BasePermission):
         """
         Only superusers can modify a customer, and organization employees can list them all.
         """
-        if request.method in ['POST', 'PATCH', 'PUT', 'DELETE']:
-            return request.user.is_superuser
-        return hasattr(request.user, 'employee')
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser:
+            return True
+        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return hasattr(request.user, 'employee')
+        return False
 
     def has_object_permission(self, request, view, obj):
         """
@@ -140,9 +144,10 @@ class CustomerPermission(permissions.BasePermission):
         For modification, check that the user is a superuser
         Note that this expects obj to be an instance of Customer
         """
+        if request.user.is_superuser:
+            return True
         if hasattr(request.user, 'employee'):
             return request.user.employee.organization == obj.organization
-        return request.user.is_superuser
 
 
 class EmployeePermission(permissions.BasePermission):

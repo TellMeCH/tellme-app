@@ -214,7 +214,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         return response.Response({'managed_agents': serializer.get_agent_data(obj)})
 
 
-class CustomerViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
+class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'name']
@@ -235,6 +235,8 @@ class CustomerViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         """
         Return agents that belong to the user's organization
         """
+        if self.request.user.is_superuser:
+            return Customer.objects.all()
         if self.request.user.employee.organization:
             return Customer.objects.filter(organization=self.request.user.employee.organization)
         return Customer.objects.none()
