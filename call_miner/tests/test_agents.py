@@ -937,6 +937,39 @@ def test_agent_conversations_action_returns_expected_content(client, agent, conv
 
 
 @pytest.mark.django_db
+def test_agent_conversation_trend_action_returns_expected_content(client, agent, conversation):
+    """
+    Test that the 'conversation_trend' action for an agent retrieves the expected conversation data.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('agent-conversation-trend', args=[agent.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'conversation_trend' in response.data
+    results = response.data['conversation_trend']['results']
+    assert len(results) == 1
+    assert results[0]['count'] == 1
+    assert results[0]['date'].date() == conversation.date.date()
+
+
+@pytest.mark.django_db
+def test_agent_conversation_topic_trend_action_returns_expected_content(client, agent, conversation):
+    """
+    Test that the 'conversation_topic_trend' action for an agent retrieves the expected conversation data.
+    """
+    client.force_authenticate(user=agent.user)
+    url = reverse('agent-conversation-topic-trend', args=[agent.id])
+    response = client.get(url)
+    assert response.status_code == status.HTTP_200_OK
+    assert 'conversation_topic_trend' in response.data
+    results = response.data['conversation_topic_trend']['results']
+    assert len(results) == 1
+    assert results[0]['count'] == 1
+    assert results[0]['date'].date() == conversation.date.date()
+    assert results[0]['topic'] == str(conversation.topics.all()[0])
+
+
+@pytest.mark.django_db
 def test_agent_duration_trend_action_returns_expected_content(client, agent, conversation):
     """
     Test that the 'duration-trend' action for an agent retrieves the expected duration trend data.
