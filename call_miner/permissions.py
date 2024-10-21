@@ -144,6 +144,7 @@ class CustomerPermission(permissions.BasePermission):
             return True
         if hasattr(request.user, 'employee'):
             return request.user.employee.organization == obj.organization
+        return False
 
 
 class EmployeePermission(permissions.BasePermission):
@@ -152,18 +153,25 @@ class EmployeePermission(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         """
-        Only organization admins can create a new employee or list all existing employees.
+        Superusers can do anything. Organization admins can create a new employee or list all existing employees.
         """
-        if (request.method == 'GET' and view.action == 'list') or request.method == 'POST':
-            return request.user.employee.is_organization_admin or request.user.is_superuser
-        return True
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser or request.user.employee.is_organization_admin:
+            return True
+        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE'] and view.action != 'list':
+            return hasattr(request.user, 'employee')
+        return False
 
     def has_object_permission(self, request, view, obj):
         """
-        The retrieve action for an Employee is possible for organization admins and the employee itself
+        The retrieve action for an Employee is possible for superusers, organization admins and the employee itself
         All other actions are only possible for organization admins or superusers
         """
-        if view.action == 'retrieve':
-            return request.user.employee.is_organization_admin or request.user.employee == obj
-        return request.user.employee.is_organization_admin or request.user.is_superuser
-
+        if request.user.is_superuser:
+            return True
+        if request.user.employee.is_organization_admin:
+            return request.user.employee.organization == obj.organization
+        if request.user.employee.id == obj.id:
+            return True
+        return False

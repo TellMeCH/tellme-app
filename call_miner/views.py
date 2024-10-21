@@ -261,6 +261,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         """
         Return employees that belong to the user's organization
         """
+        if self.request.user.is_superuser:
+            return Employee.objects.all()
         if self.request.user.employee.organization:
             return Employee.objects.filter(organization=self.request.user.employee.organization)
         return Employee.objects.none()

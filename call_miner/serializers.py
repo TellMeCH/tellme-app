@@ -403,8 +403,12 @@ class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):
 
 
 class EmployeeModifySerializer(serializers.ModelSerializer):
+    """
+    This serializer is used for superusers and organization admins to create new Employees. It contains separate methods
+    for validating, creating, and updating an Employee.
+    """
     user = UserSerializer()
-    organization = serializers.PrimaryKeyRelatedField(read_only=True)
+    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all(), required=False, default=None)
     manager = serializers.PrimaryKeyRelatedField(queryset=Agent.objects.all(), required=False, allow_null=True)
 
     class Meta:
@@ -413,34 +417,62 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
         read_only_fields = ('created', 'updated')
 
     def validate(self, data):
+        """
+        Validates the provided request data. It assumes that superusers don't need validation, whereas organization
+        admins' requests are checked to ensure that:
+        - The resulting employee will have the same organization as the organization admin (this is enforced)
+        - If a manager is specified, it belongs to the same organization as the organization admin and the Employee
+        - If a manager is specified, the Employee role is not 'ANALYST'.
+        """
         request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            current_user = request.user
-
-            # Make sure current user has an associated organization
-            if not hasattr(current_user, 'employee'):
-                raise serializers.ValidationError("Current user is not associated with an Employee profile.")
-
-            user_organization = current_user.employee.organization
-            data['organization'] = user_organization  # Enforce the request user's organization
-
-            # If manager is specified, check that they are in the same organization
-            manager = data.get('manager')
-            if manager and manager.organization != user_organization:
-                raise serializers.ValidationError({
-                    'manager': 'Manager must belong to the same organization as the current user.'
-                })
-
-            if manager and data.get('role') == 'ANALYST':
-                raise serializers.ValidationError({
-                    'role': "Analysts can't have managers."
-                })
-        else:
+        if not request or not hasattr(request, 'user'):
             raise serializers.ValidationError("Request user is not available.")
+
+        current_user = request.user
+
+        # For superusers, make sure that the creation has specified an organization
+        if current_user.is_superuser:
+            if self.instance is None:
+                if not data.get('organization'):
+                    raise serializers.ValidationError({
+                        "organization": "Superusers must provide an organization when creating an Employee."
+                    })
+            return data
+
+        # For non-superusers, check more things
+        if not hasattr(current_user, 'employee'):
+            raise serializers.ValidationError("Current user is not associated with an Employee profile.")
+
+        user_organization = current_user.employee.organization
+
+        # Non-superusers should not specify an organization
+        if 'organization' in data:
+            if data['organization'] is not None:
+                raise serializers.ValidationError({
+                    "organization": f"Org Admins should not provide an organization when modifying an Employee."
+                })
+
+        # Enforce the user's organization
+        data['organization'] = user_organization
+
+        # If manager is specified, check that they are in the same organization
+        manager = data.get('manager')
+        if manager and manager.organization != user_organization:
+            raise serializers.ValidationError({
+                'manager': 'Manager must belong to the same organization as the current user.'
+            })
+
+        if manager and data.get('role') == 'ANALYST':
+            raise serializers.ValidationError({
+                'role': "Analysts can't have managers."
+            })
 
         return data
 
     def create(self, validated_data):
+        """
+        Based on the validated data, create a new User, and depending on the specified role, a new Analyst or Agent.
+        """
         user_data = validated_data.pop('user')
         user_serializer = UserSerializer(data=user_data)
         user_serializer.is_valid(raise_exception=True)
@@ -458,13 +490,22 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
             else:
                 raise serializers.ValidationError(f'Could not create new Employee. Invalid role: {role}')
             return employee
-        except Exception:
+        except Exception as e:
             user.delete()
-            raise
+            raise e
 
     def update(self, instance, validated_data):
+        """
+        Update an already existing Employee. If this update involves a role change, this will not be allowed, to ensure
+        data consistency.
+        """
         user_data = validated_data.pop('user', None)
-        manager = validated_data.pop('manager', None)
+
+        # Handle role change
+        role = validated_data.get('role')
+        if role is not None and role != instance.role:
+            raise serializers.ValidationError(
+                f'Could not update Employee. It is not possible to change role from {instance.role} to {role}.')
 
         if user_data:
             user_serializer = UserSerializer(instance=instance.user, data=user_data, partial=True)
@@ -474,13 +515,11 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
         # Update Employee fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        instance.save()
 
-        # Handle role change
-        role = validated_data.get('role', instance.role)
-        if role != instance.role:
-            raise serializers.ValidationError(f'Could not update Employee. It is not possible to change role from {instance.role} to {role}.')
-        else:
-            if isinstance(instance, Agent) and manager is not None:
-                instance.manager = manager
-            instance.save()
+        # Update Manager only if 'manager' is provided in the request data
+        if 'manager' in self.initial_data and hasattr(instance, 'agent'):
+            manager = validated_data.pop('manager', None)
+            instance.agent.manager = manager
+            instance.agent.save()
         return instance
