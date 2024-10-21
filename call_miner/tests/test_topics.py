@@ -150,703 +150,642 @@ def another_topic(another_organization):
 
 
 @pytest.mark.django_db
-def test_superuser_can_list_all_topics(client, superuser, topic, another_topic):
-    """
-    Test that a superuser can list all topics across organizations.
-    """
-    client.force_authenticate(user=superuser)
-    response = client.get(reverse('topic-list'))
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 2
+class TestTopicList:
+    """Tests for the topic-list API endpoint."""
+
+    def test_superuser_can_list_all_topics(self, client, superuser, topic, another_topic):
+        """
+        Test that a superuser can list all topics across organizations.
+        """
+        client.force_authenticate(user=superuser)
+        response = client.get(reverse('topic-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 2
+
+    def test_organization_admin_can_list_topics(self, client, organization_admin_user, topic, another_topic):
+        """
+        Test that an organization admin can list topics only in their own organization.
+        """
+        client.force_authenticate(user=organization_admin_user)
+        response = client.get(reverse('topic-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_organization_analyst_can_list_topics(self, client, organization_analyst_user, topic, another_topic):
+        """
+        Test that an analyst can list topics in their own organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        response = client.get(reverse('topic-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_agent_in_same_organization_can_list_topics(self, client, agent, topic, another_topic):
+        """
+        Test that an agent in the same organization can list topics.
+        """
+        client.force_authenticate(user=agent.user)
+        response = client.get(reverse('topic-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_analyst_in_other_organization_can_list_topics(self, client, another_organization_analyst_user, topic,
+                                                           another_topic):
+        """
+        Test that an analyst in another organization can only list topics in their own organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        response = client.get(reverse('topic-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == another_topic.name
+
+    def test_agent_in_other_organization_can_list_topics(self, client, another_agent, topic, another_topic):
+        """
+        Test that an agent in another organization can only list topics in their own organization.
+        """
+        client.force_authenticate(user=another_agent.user)
+        response = client.get(reverse('topic-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == another_topic.name
+
+    def test_unauthenticated_user_cannot_list_topics(self, client, topic, another_topic):
+        """
+        Test that an unauthenticated user cannot list topics.
+        """
+        response = client.get(reverse('topic-list'))
+        assert response.status_code == status.HTTP_403_FORBIDDEN or response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.django_db
-def test_organization_admin_can_list_topics(client, organization_admin_user, topic, another_topic):
-    """
-    Test that an organization admin can list topics only in their own organization.
-    """
-    client.force_authenticate(user=organization_admin_user)
-    response = client.get(reverse('topic-list'))
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_list_topics(client, organization_analyst_user, topic, another_topic):
-    """
-    Test that an analyst can list topics in their own organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    response = client.get(reverse('topic-list'))
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_can_list_topics(client, agent, topic, another_topic):
-    """
-    Test that an agent in the same organization can list topics.
-    """
-    client.force_authenticate(user=agent.user)
-    response = client.get(reverse('topic-list'))
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_can_list_topics(client, another_organization_analyst_user, topic, another_topic):
-    """
-    Test that an analyst in another organization can only list topics in their own organization.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    response = client.get(reverse('topic-list'))
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == another_topic.name
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_can_list_topics(client, another_agent, topic, another_topic):
-    """
-    Test that an agent in another organization can only list topics in their own organization.
-    """
-    client.force_authenticate(user=another_agent.user)
-    response = client.get(reverse('topic-list'))
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == another_topic.name
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_list_topics(client, topic, another_topic):
-    """
-    Test that an unauthenticated user cannot list topics.
-    """
-    response = client.get(reverse('topic-list'))
-    assert response.status_code == status.HTTP_403_FORBIDDEN or response.status_code == status.HTTP_401_UNAUTHORIZED
-
-
-@pytest.mark.django_db
-def test_superuser_can_retrieve_topic(client, superuser, topic):
-    """
-    Test that a superuser can retrieve any topic.
-    """
-    client.force_authenticate(user=superuser)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert response.data['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_retrieve_topic(client, organization_analyst_user, topic):
-    """
-    Test that an analyst can retrieve a topic in their own organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert response.data['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_cannot_retrieve_topic(client, agent, topic):
-    """
-    Test that an agent cannot retrieve a topic in their own organization.
-    """
-    client.force_authenticate(user=agent.user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_cannot_retrieve_topic(client, another_organization_analyst_user, topic):
-    """
-    Test that an analyst cannot retrieve a topic in another organization.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_cannot_retrieve_topic(client, another_agent, topic):
-    """
-    Test that an agent cannot retrieve a topic in another organization.
-    """
-    client.force_authenticate(user=another_agent.user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_retrieve_topic(client, topic):
-    """
-    Test that an unauthenticated user cannot retrieve a topic.
-    """
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN or response.status_code == status.HTTP_401_UNAUTHORIZED
-
-
-@pytest.mark.django_db
-def test_superuser_can_create_topic(client, superuser, organization):
-    """
-    Test that a superuser can create a new topic.
-    """
-    client.force_authenticate(user=superuser)
-    data = {
-        'name': 'New Topic',
-        'description': 'A new topic',
-        'organization': organization.id,
-        'is_active': True
-    }
-    response = client.post(reverse('topic-list'), data)
-    assert response.status_code == status.HTTP_201_CREATED
-    assert response.data['name'] == 'New Topic'
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_create_topic(client, organization_analyst_user, organization):
-    """
-    Test that an analyst can create a new topic within their own organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    data = {
-        'name': 'Analyst Topic',
-        'description': 'Created by analyst',
-        'organization': organization.id,
-        'is_active': True
-    }
-    response = client.post(reverse('topic-list'), data)
-    assert response.status_code == status.HTTP_201_CREATED
-    assert response.data['name'] == 'Analyst Topic'
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_cannot_create_topic(client, agent, organization):
-    """
-    Test that an agent cannot create a topic in their organization.
-    """
-    client.force_authenticate(user=agent.user)
-    data = {
-        'name': 'Agent Topic',
-        'description': 'Created by agent',
-        'organization': organization.id,
-        'is_active': True
-    }
-    response = client.post(reverse('topic-list'), data)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_cannot_create_topic(client, another_organization_analyst_user, organization):
-    """
-    Test that an analyst cannot create a topic in another organization.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    data = {
-        'name': 'Cross Org Topic',
-        'description': 'Attempt to create in another org',
-        'organization': organization.id,
-        'is_active': True
-    }
-    response = client.post(reverse('topic-list'), data)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_cannot_create_topic(client, another_agent, organization):
-    """
-    Test that an agent cannot create a topic in another organization.
-    """
-    client.force_authenticate(user=another_agent.user)
-    data = {
-        'name': 'Another Agent Topic',
-        'description': 'Created by another agent',
-        'organization': organization.id,
-        'is_active': True
-    }
-    response = client.post(reverse('topic-list'), data)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_create_topic(client, organization):
-    """
-    Test that an unauthenticated user cannot create a topic.
-    """
-    data = {
-        'name': 'Unauthenticated Topic',
-        'description': 'Should not be created',
-        'organization': organization.id,
-        'is_active': True
-    }
-    response = client.post(reverse('topic-list'), data)
-    assert response.status_code == status.HTTP_403_FORBIDDEN or response.status_code == status.HTTP_401_UNAUTHORIZED
-
-
-@pytest.mark.django_db
-def test_superuser_can_update_topic(client, superuser, topic):
-    """
-    Test that a superuser can update an existing topic.
-    """
-    client.force_authenticate(user=superuser)
-    data = {'name': 'Updated Topic Name'}
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.patch(url, data)
-    assert response.status_code == status.HTTP_200_OK
-    assert response.data['name'] == 'Updated Topic Name'
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_update_topic(client, organization_analyst_user, topic):
-    """
-    Test that an analyst can update a topic in their own organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    data = {'description': 'Updated by analyst'}
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.patch(url, data)
-    assert response.status_code == status.HTTP_200_OK
-    assert response.data['description'] == 'Updated by analyst'
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_cannot_update_topic(client, agent, topic):
-    """
-    Test that an agent cannot update a topic in their own organization.
-    """
-    client.force_authenticate(user=agent.user)
-    data = {'description': 'Attempted update by agent'}
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.patch(url, data)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_cannot_update_topic(client, another_organization_analyst_user, topic):
-    """
-    Test that an analyst cannot update a topic in another organization.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    data = {'description': 'Attempted cross-org update'}
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.patch(url, data)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_cannot_update_topic(client, another_agent, topic):
-    """
-    Test that an agent cannot update a topic in another organization.
-    """
-    client.force_authenticate(user=another_agent.user)
-    data = {'description': 'Attempted update by another agent'}
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.patch(url, data)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_update_topic(client, topic):
-    """
-    Test that an unauthenticated user cannot update a topic.
-    """
-    data = {'description': 'Attempted update by unauthenticated user'}
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.patch(url, data)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_superuser_can_delete_topic(client, superuser, topic):
-    """
-    Test that a superuser can delete a topic.
-    """
-    client.force_authenticate(user=superuser)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.delete(url)
-    assert response.status_code == status.HTTP_204_NO_CONTENT
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_delete_topic(client, organization_analyst_user, topic):
-    """
-    Test that an analyst can delete a topic in their own organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.delete(url)
-    assert response.status_code == status.HTTP_204_NO_CONTENT
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_cannot_delete_topic(client, agent, topic):
-    """
-    Test that an agent cannot delete a topic in their own organization.
-    """
-    client.force_authenticate(user=agent.user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.delete(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_cannot_delete_topic(client, another_organization_analyst_user, topic):
-    """
-    Test that an analyst cannot delete a topic in another organization.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.delete(url)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_cannot_delete_topic(client, another_agent, topic):
-    """
-    Test that an agent cannot delete a topic in another organization.
-    """
-    client.force_authenticate(user=another_agent.user)
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.delete(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_delete_topic(client, topic):
-    """
-    Test that an unauthenticated user cannot delete a topic.
-    """
-    url = reverse('topic-detail', args=[topic.id])
-    response = client.delete(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-def _test_trend_action(client, url, expected_status):
-    """
-    Helper function to test trend actions.
-    """
-    response = client.get(url)
-    assert response.status_code == expected_status
-
-
-@pytest.mark.django_db
-def test_superuser_can_access_trend_actions(client, superuser, topic):
-    """
-    Test that a superuser can access all trend actions.
-    """
-    client.force_authenticate(user=superuser)
-    for action in TREND_ACTIONS:
-        url = reverse(f'topic-{action}', args=[topic.id])
-        _test_trend_action(client, url, status.HTTP_200_OK)
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_access_trend_actions(client, organization_analyst_user, topic):
-    """
-    Test that an analyst can access trend actions for their own organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    for action in TREND_ACTIONS:
-        url = reverse(f'topic-{action}', args=[topic.id])
-        _test_trend_action(client, url, status.HTTP_200_OK)
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_cannot_access_trend_actions(client, agent, topic):
-    """
-    Test that an agent cannot access trend actions in their own organization.
-    """
-    client.force_authenticate(user=agent.user)
-    for action in TREND_ACTIONS:
-        url = reverse(f'topic-{action}', args=[topic.id])
-        _test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_cannot_access_trend_actions(client, another_organization_analyst_user, topic):
-    """
-    Test that an analyst in another organization cannot access trend actions.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    for action in TREND_ACTIONS:
-        url = reverse(f'topic-{action}', args=[topic.id])
-        _test_trend_action(client, url, status.HTTP_404_NOT_FOUND)
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_cannot_access_trend_actions(client, another_agent, topic):
-    """
-    Test that an agent in another organization cannot access trend actions.
-    """
-    client.force_authenticate(user=another_agent.user)
-    for action in TREND_ACTIONS:
-        url = reverse(f'topic-{action}', args=[topic.id])
-        _test_trend_action(client, url, status.HTTP_404_NOT_FOUND)
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_access_trend_actions(client, topic):
-    """
-    Test that an unauthenticated user cannot access trend actions.
-    """
-    for action in TREND_ACTIONS:
-        url = reverse(f'topic-{action}', args=[topic.id])
-        _test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
-
-
-@pytest.mark.django_db
-def test_superuser_can_access_summary_data(client, superuser, topic):
-    """
-    Test that a superuser can access the summary data of a topic.
-    """
-    client.force_authenticate(user=superuser)
-    url = reverse('topic-summary-data', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_access_summary_data(client, organization_analyst_user, topic):
-    """
-    Test that an analyst can access the summary data of a topic in their own organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-summary-data', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_cannot_access_summary_data(client, agent, topic):
-    """
-    Test that an agent cannot access the summary data of a topic in their own organization.
-    """
-    client.force_authenticate(user=agent.user)
-    url = reverse('topic-summary-data', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_cannot_access_summary_data(client, another_organization_analyst_user, topic):
-    """
-    Test that an analyst cannot access the summary data of a topic in another organization.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    url = reverse('topic-summary-data', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_cannot_access_summary_data(client, another_agent, topic):
-    """
-    Test that an agent cannot access the summary data of a topic in another organization.
-    """
-    client.force_authenticate(user=another_agent.user)
-    url = reverse('topic-summary-data', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_access_summary_data(client, topic):
-    """
-    Test that an unauthenticated user cannot access the summary data of a topic.
-    """
-    url = reverse('topic-summary-data', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_superuser_can_list_active_topics(client, superuser, topic, another_topic):
-    """
-    Test that a superuser can list all active topics.
-    """
-    client.force_authenticate(user=superuser)
-    url = reverse('topic-list-active')
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 2
-
-
-@pytest.mark.django_db
-def test_organization_analyst_can_list_active_topics(client, organization_analyst_user, topic, another_topic):
-    """
-    Test that an analyst can list only active topics in their organization.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-list-active')
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_agent_in_same_organization_can_list_active_topics(client, agent, topic, another_topic):
-    """
-    Test that an agent can list only active topics in their organization.
-    """
-    client.force_authenticate(user=agent.user)
-    url = reverse('topic-list-active')
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_analyst_in_other_organization_can_list_active_topics(client, another_organization_analyst_user, topic, another_topic):
-    """
-    Test that an analyst can list only active topics in their own organization.
-    """
-    client.force_authenticate(user=another_organization_analyst_user)
-    url = reverse('topic-list-active')
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == another_topic.name
-
-
-@pytest.mark.django_db
-def test_agent_in_other_organization_can_list_active_topics(client, another_agent, topic, another_topic):
-    """
-    Test that an agent can list only active topics in their own organization.
-    """
-    client.force_authenticate(user=another_agent.user)
-    url = reverse('topic-list-active')
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == another_topic.name
-
-
-@pytest.mark.django_db
-def test_unauthenticated_user_cannot_list_active_topics(client, topic, another_topic):
-    """
-    Test that an unauthenticated user cannot list active topics.
-    """
-    url = reverse('topic-list-active')
-    response = client.get(url)
-    assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-@pytest.mark.django_db
-def test_list_active_topics_excludes_inactive_topics(client, organization_analyst_user, topic, organization):
-    """
-    Test that inactive topics are excluded from the active topics list.
-    """
-    # Create an inactive topic
-    Topic.objects.create(
-        name='Inactive Topic',
-        description='Should not appear in active list',
-        organization=organization,
-        is_active=False
-    )
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-list-active')
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.data['results']) == 1
-    assert response.data['results'][0]['name'] == topic.name
-
-
-@pytest.mark.django_db
-def test_topic_conversations_action_returns_expected_content(client, organization_analyst_user, topic, conversation):
-    """
-    Test that the 'conversations' action for a topic retrieves the expected conversation data.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-conversations', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert 'conversations' in response.data
-    results = response.data['conversations']['results']
-    assert len(results) == 1
-    assert results[0]['title'] == conversation.title
-
-
-@pytest.mark.django_db
-def test_topic_conversation_topic_trend_action_is_disabled(client, organization_analyst_user, topic, conversation):
-    """
-    Test that the 'conversation-topic-trend' action for a topic is disabled and not available via URL.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    with pytest.raises(exceptions.NoReverseMatch):
-        url = reverse('topic-conversation-topic-trend', args=[topic.id])
+class TestTopicRetrieve:
+    """Test the topic-detail API endpoint for obtaining Topic instance details"""
+
+    def test_superuser_can_retrieve_topic(self, client, superuser, topic):
+        """
+        Test that a superuser can retrieve any topic.
+        """
+        client.force_authenticate(user=superuser)
+        url = reverse('topic-detail', args=[topic.id])
         response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['name'] == topic.name
+
+    def test_organization_analyst_can_retrieve_topic(self, client, organization_analyst_user, topic):
+        """
+        Test that an analyst can retrieve a topic in their own organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['name'] == topic.name
+
+    def test_agent_in_same_organization_cannot_retrieve_topic(self, client, agent, topic):
+        """
+        Test that an agent cannot retrieve a topic in their own organization.
+        """
+        client.force_authenticate(user=agent.user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_analyst_in_other_organization_cannot_retrieve_topic(self, client, another_organization_analyst_user,
+                                                                 topic):
+        """
+        Test that an analyst cannot retrieve a topic in another organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_agent_in_other_organization_cannot_retrieve_topic(self, client, another_agent, topic):
+        """
+        Test that an agent cannot retrieve a topic in another organization.
+        """
+        client.force_authenticate(user=another_agent.user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unauthenticated_user_cannot_retrieve_topic(self, client, topic):
+        """
+        Test that an unauthenticated user cannot retrieve a topic.
+        """
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN or response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.django_db
-def test_topic_conversation_trend_action_returns_expected_content(client, organization_analyst_user, topic, conversation):
-    """
-    Test that the 'conversation-trend' action for a topic retrieves the expected conversation trend data.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-conversation-trend', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert 'conversation_trend' in response.data
-    results = response.data['conversation_trend']['results']
-    assert len(results) == 1  # Depending on date truncation
-    assert results[0]['count'] == 1
+class TestTopicCreate:
+    """Tests for the creation of new Topic instances via the ViewSet"""
+
+    def test_superuser_can_create_topic(self, client, superuser, organization):
+        """
+        Test that a superuser can create a new topic.
+        """
+        client.force_authenticate(user=superuser)
+        data = {
+            'name': 'New Topic',
+            'description': 'A new topic',
+            'organization': organization.id,
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Topic.objects.filter(name='New Topic').exists()
+
+    def test_organization_analyst_can_create_topic(self, client, organization_analyst_user, organization):
+        """
+        Test that an analyst can create a new topic within their own organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        data = {
+            'name': 'Analyst Topic',
+            'description': 'Created by analyst',
+            'organization': organization.id,
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Topic.objects.filter(name='Analyst Topic').exists()
+
+    def test_agent_in_same_organization_cannot_create_topic(self, client, agent, organization):
+        """
+        Test that an agent cannot create a topic in their organization.
+        """
+        client.force_authenticate(user=agent.user)
+        data = {
+            'name': 'Agent Topic',
+            'description': 'Created by agent',
+            'organization': organization.id,
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_analyst_in_other_organization_cannot_create_topic(self, client, another_organization_analyst_user,
+                                                               organization):
+        """
+        Test that an analyst cannot create a topic in another organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        data = {
+            'name': 'Cross Org Topic',
+            'description': 'Attempt to create in another org',
+            'organization': organization.id,
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_agent_in_other_organization_cannot_create_topic(self, client, another_agent, organization):
+        """
+        Test that an agent cannot create a topic in another organization.
+        """
+        client.force_authenticate(user=another_agent.user)
+        data = {
+            'name': 'Another Agent Topic',
+            'description': 'Created by another agent',
+            'organization': organization.id,
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_unauthenticated_user_cannot_create_topic(self, client, organization):
+        """
+        Test that an unauthenticated user cannot create a topic.
+        """
+        data = {
+            'name': 'Unauthenticated Topic',
+            'description': 'Should not be created',
+            'organization': organization.id,
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db
-def test_topic_duration_trend_action_returns_expected_content(client, organization_analyst_user, topic, conversation):
-    """
-    Test that the 'duration-trend' action for a topic retrieves the expected duration trend data.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-duration-trend', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert 'duration_trend' in response.data
-    results = response.data['duration_trend']['results']
-    assert len(results) == 1
-    assert results[0]['avg_value'] == conversation.duration
+class TestTopicUpdate:
+    """Tests for the update of an existing Topic instance."""
+
+    def test_superuser_can_update_topic(self, client, superuser, topic):
+        """
+        Test that a superuser can update an existing topic.
+        """
+        client.force_authenticate(user=superuser)
+        data = {'name': 'Updated Topic Name'}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_200_OK
+        assert Topic.objects.filter(name='Updated Topic Name').exists()
+
+    def test_organization_analyst_can_update_topic(self, client, organization_analyst_user, topic):
+        """
+        Test that an analyst can update a topic in their own organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        data = {'description': 'Updated by analyst'}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_200_OK
+        assert Topic.objects.filter(description='Updated by analyst').exists()
+
+    def test_agent_in_same_organization_cannot_update_topic(self, client, agent, topic):
+        """
+        Test that an agent cannot update a topic in their own organization.
+        """
+        client.force_authenticate(user=agent.user)
+        data = {'description': 'Attempted update by agent'}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_analyst_in_other_organization_cannot_update_topic(self, client, another_organization_analyst_user, topic):
+        """
+        Test that an analyst cannot update a topic in another organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        data = {'description': 'Attempted cross-org update'}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_agent_in_other_organization_cannot_update_topic(self, client, another_agent, topic):
+        """
+        Test that an agent cannot update a topic in another organization.
+        """
+        client.force_authenticate(user=another_agent.user)
+        data = {'description': 'Attempted update by another agent'}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_unauthenticated_user_cannot_update_topic(self, client, topic):
+        """
+        Test that an unauthenticated user cannot update a topic.
+        """
+        data = {'description': 'Attempted update by unauthenticated user'}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db
-def test_topic_sentiment_trend_action_returns_expected_content(client, organization_analyst_user, topic, conversation):
-    """
-    Test that the 'sentiment-trend' action for a topic retrieves the expected sentiment trend data.
-    """
-    client.force_authenticate(user=organization_analyst_user)
-    url = reverse('topic-sentiment-trend', args=[topic.id])
-    response = client.get(url)
-    assert response.status_code == status.HTTP_200_OK
-    assert 'sentiment_trend' in response.data
-    results = response.data['sentiment_trend']['results']
-    assert len(results) == 1
-    assert results[0]['avg_value'] == conversation.sentiment
+class TestTopicDelete:
+    """Tests for the deletion of an existing Topic instance"""
+
+    def test_superuser_can_delete_topic(self, client, superuser, topic):
+        """
+        Test that a superuser can delete a topic.
+        """
+        client.force_authenticate(user=superuser)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.delete(url)
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_organization_analyst_can_delete_topic(self, client, organization_analyst_user, topic):
+        """
+        Test that an analyst can delete a topic in their own organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.delete(url)
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_agent_in_same_organization_cannot_delete_topic(self, client, agent, topic):
+        """
+        Test that an agent cannot delete a topic in their own organization.
+        """
+        client.force_authenticate(user=agent.user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.delete(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_analyst_in_other_organization_cannot_delete_topic(self, client, another_organization_analyst_user, topic):
+        """
+        Test that an analyst cannot delete a topic in another organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.delete(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_agent_in_other_organization_cannot_delete_topic(self, client, another_agent, topic):
+        """
+        Test that an agent cannot delete a topic in another organization.
+        """
+        client.force_authenticate(user=another_agent.user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.delete(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_unauthenticated_user_cannot_delete_topic(self, client, topic):
+        """
+        Test that an unauthenticated user cannot delete a topic.
+        """
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.delete(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.django_db
-def test_topic_summary_data_returns_expected_content(client, organization_analyst_user, topic, conversation):
-    """
-    Test that the 'summary-data' action for a topic retrieves the expected summary data and mocks the summary generation.
-    """
-    with patch('call_miner.models.condense_summaries') as mock_condense_summaries:
-        mock_condense_summaries.return_value = 'Mocked summary text'
+class TestTopicTrendActions:
+    """Tests to obtain trends about a Topic instance's activity over time"""
+
+    @staticmethod
+    def _test_trend_action(client, url, expected_status):
+        """
+        Helper function to test trend actions.
+        """
+        response = client.get(url)
+        assert response.status_code == expected_status
+
+    def test_superuser_can_access_trend_actions(self, client, superuser, topic):
+        """
+        Test that a superuser can access all trend actions.
+        """
+        client.force_authenticate(user=superuser)
+        for action in TREND_ACTIONS:
+            url = reverse(f'topic-{action}', args=[topic.id])
+            self._test_trend_action(client, url, status.HTTP_200_OK)
+
+    def test_organization_analyst_can_access_trend_actions(self, client, organization_analyst_user, topic):
+        """
+        Test that an analyst can access trend actions for their own organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        for action in TREND_ACTIONS:
+            url = reverse(f'topic-{action}', args=[topic.id])
+            self._test_trend_action(client, url, status.HTTP_200_OK)
+
+    def test_agent_in_same_organization_cannot_access_trend_actions(self, client, agent, topic):
+        """
+        Test that an agent cannot access trend actions in their own organization.
+        """
+        client.force_authenticate(user=agent.user)
+        for action in TREND_ACTIONS:
+            url = reverse(f'topic-{action}', args=[topic.id])
+            self._test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
+
+    def test_analyst_in_other_organization_cannot_access_trend_actions(self, client, another_organization_analyst_user,
+                                                                       topic):
+        """
+        Test that an analyst in another organization cannot access trend actions.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        for action in TREND_ACTIONS:
+            url = reverse(f'topic-{action}', args=[topic.id])
+            self._test_trend_action(client, url, status.HTTP_404_NOT_FOUND)
+
+    def test_agent_in_other_organization_cannot_access_trend_actions(self, client, another_agent, topic):
+        """
+        Test that an agent in another organization cannot access trend actions.
+        """
+        client.force_authenticate(user=another_agent.user)
+        for action in TREND_ACTIONS:
+            url = reverse(f'topic-{action}', args=[topic.id])
+            self._test_trend_action(client, url, status.HTTP_404_NOT_FOUND)
+
+    def test_unauthenticated_user_cannot_access_trend_actions(self, client, topic):
+        """
+        Test that an unauthenticated user cannot access trend actions.
+        """
+        for action in TREND_ACTIONS:
+            url = reverse(f'topic-{action}', args=[topic.id])
+            self._test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
+
+    def test_topic_conversations_action_returns_expected_content(self, client, organization_analyst_user, topic,
+                                                                 conversation):
+        """
+        Test that the 'conversations' action for a topic retrieves the expected conversation data.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-conversations', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'conversations' in response.data
+        results = response.data['conversations']['results']
+        assert len(results) == 1
+        assert results[0]['title'] == conversation.title
+
+    def test_topic_conversation_topic_trend_action_is_disabled(self, client, organization_analyst_user, topic,
+                                                               conversation):
+        """
+        Test that the 'conversation-topic-trend' action for a topic is disabled and not available via URL.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        with pytest.raises(exceptions.NoReverseMatch):
+            url = reverse('topic-conversation-topic-trend', args=[topic.id])
+            _ = client.get(url)
+
+    def test_topic_conversation_trend_action_returns_expected_content(self, client, organization_analyst_user, topic,
+                                                                      conversation):
+        """
+        Test that the 'conversation-trend' action for a topic retrieves the expected conversation trend data.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-conversation-trend', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'conversation_trend' in response.data
+        results = response.data['conversation_trend']['results']
+        assert len(results) == 1
+        assert results[0]['count'] == 1
+
+    def test_topic_duration_trend_action_returns_expected_content(self, client, organization_analyst_user, topic,
+                                                                  conversation):
+        """
+        Test that the 'duration-trend' action for a topic retrieves the expected duration trend data.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-duration-trend', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'duration_trend' in response.data
+        results = response.data['duration_trend']['results']
+        assert len(results) == 1
+        assert results[0]['avg_value'] == conversation.duration
+
+    def test_topic_sentiment_trend_action_returns_expected_content(self, client, organization_analyst_user, topic,
+                                                                   conversation):
+        """
+        Test that the 'sentiment-trend' action for a topic retrieves the expected sentiment trend data.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-sentiment-trend', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'sentiment_trend' in response.data
+        results = response.data['sentiment_trend']['results']
+        assert len(results) == 1
+        assert results[0]['avg_value'] == conversation.sentiment
+
+
+@pytest.mark.django_db
+class TestTopicSummary:
+    """Tests for the topic-summary-data API endpoint and its access settings."""
+
+    def test_superuser_can_access_summary_data(self, client, superuser, topic):
+        """
+        Test that a superuser can access the summary data of a topic.
+        """
+        client.force_authenticate(user=superuser)
+        url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_organization_analyst_can_access_summary_data(self, client, organization_analyst_user, topic):
+        """
+        Test that an analyst can access the summary data of a topic in their own organization.
+        """
         client.force_authenticate(user=organization_analyst_user)
         url = reverse('topic-summary-data', args=[topic.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'summary_data' in response.data
-        summary_data = response.data['summary_data']
-        assert summary_data['summary'] == 'Mocked summary text'
-        assert summary_data['summary_call_count'] == 1  # Only one conversation
-        assert summary_data['summary_date'].date() == conversation.date.date()
+
+    def test_agent_in_same_organization_cannot_access_summary_data(self, client, agent, topic):
+        """
+        Test that an agent cannot access the summary data of a topic in their own organization.
+        """
+        client.force_authenticate(user=agent.user)
+        url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_analyst_in_other_organization_cannot_access_summary_data(self, client, another_organization_analyst_user,
+                                                                      topic):
+        """
+        Test that an analyst cannot access the summary data of a topic in another organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_agent_in_other_organization_cannot_access_summary_data(self, client, another_agent, topic):
+        """
+        Test that an agent cannot access the summary data of a topic in another organization.
+        """
+        client.force_authenticate(user=another_agent.user)
+        url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_unauthenticated_user_cannot_access_summary_data(self, client, topic):
+        """
+        Test that an unauthenticated user cannot access the summary data of a topic.
+        """
+        url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_topic_summary_data_returns_expected_content(self, client, organization_analyst_user, topic, conversation):
+        """
+        Test that the 'summary-data' action for a topic retrieves the expected summary data and mocks the summary generation.
+        """
+        with patch('call_miner.models.condense_summaries') as mock_condense_summaries:
+            mock_condense_summaries.return_value = 'Mocked summary text'
+            client.force_authenticate(user=organization_analyst_user)
+            url = reverse('topic-summary-data', args=[topic.id])
+            response = client.get(url)
+            assert response.status_code == status.HTTP_200_OK
+            assert 'summary_data' in response.data
+            summary_data = response.data['summary_data']
+            assert summary_data['summary'] == 'Mocked summary text'
+            assert summary_data['summary_call_count'] == 1
+            assert summary_data['summary_date'].date() == conversation.date.date()
+
+
+@pytest.mark.django_db
+class TestTopicListActive:
+    """Tests for the topic-list-active action"""
+
+    def test_superuser_can_list_active_topics(self, client, superuser, topic, another_topic):
+        """
+        Test that a superuser can list all active topics.
+        """
+        client.force_authenticate(user=superuser)
+        url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 2
+
+    def test_organization_analyst_can_list_active_topics(self, client, organization_analyst_user, topic, another_topic):
+        """
+        Test that an analyst can list only active topics in their organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_agent_in_same_organization_can_list_active_topics(self, client, agent, topic, another_topic):
+        """
+        Test that an agent can list only active topics in their organization.
+        """
+        client.force_authenticate(user=agent.user)
+        url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_analyst_in_other_organization_can_list_active_topics(self, client, another_organization_analyst_user,
+                                                                  topic, another_topic):
+        """
+        Test that an analyst can list only active topics in their own organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == another_topic.name
+
+    def test_agent_in_other_organization_can_list_active_topics(self, client, another_agent, topic, another_topic):
+        """
+        Test that an agent can list only active topics in their own organization.
+        """
+        client.force_authenticate(user=another_agent.user)
+        url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == another_topic.name
+
+    def test_unauthenticated_user_cannot_list_active_topics(self, client, topic, another_topic):
+        """
+        Test that an unauthenticated user cannot list active topics.
+        """
+        url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_list_active_topics_excludes_inactive_topics(self, client, organization_analyst_user, topic, organization):
+        """
+        Test that inactive topics are excluded from the active topics list.
+        """
+        # Create an inactive topic
+        Topic.objects.create(
+            name='Inactive Topic',
+            description='Should not appear in active list',
+            organization=organization,
+            is_active=False
+        )
+        client.force_authenticate(user=organization_analyst_user)
+        url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
