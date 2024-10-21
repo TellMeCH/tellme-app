@@ -275,11 +275,49 @@ class TopicModifySerializer(serializers.ModelSerializer):
     This serializer is used for POST, PUT, PATCH and DELETE requests creating or modifying a Topic instance.
     Note that the topic's organization has to be specified with its primary key.
     """
-    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all())
+    organization = serializers.PrimaryKeyRelatedField(queryset=Organization.objects.all(), required=False, default=None)
 
     class Meta:
         model = Topic
         fields = ['name', 'description', 'organization', 'is_active']
+
+    def validate(self, data):
+        """
+        Validates the provided request data, in particular the specified organization. Superusers are expected to
+        provide an organization, whereas non-superusers can only create Topics in their own organization.
+        """
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            raise serializers.ValidationError("Request user is not available.")
+
+        current_user = request.user
+
+        # For superusers, make sure that the creation has specified an organization
+        if current_user.is_superuser:
+            if self.instance is None:
+                if not data.get('organization'):
+                    raise serializers.ValidationError({
+                        "organization": "Superusers must provide an organization when creating a Topic."
+                    })
+            return data
+
+        # For non-superusers, enforce the organization
+        if not hasattr(current_user, 'employee'):
+            raise serializers.ValidationError("Current user is not associated with an Employee profile.")
+
+        user_organization = current_user.employee.organization
+
+        # Non-superusers should not specify an organization
+        if 'organization' in data:
+            if data['organization'] is not None:
+                raise serializers.ValidationError({
+                    "organization": f"Org Admins should not provide an organization when modifying a Topic."
+                })
+
+        # Enforce the user's organization
+        data['organization'] = user_organization
+
+        return data
 
 
 class TopicListSerializer(serializers.HyperlinkedModelSerializer):
@@ -398,8 +436,8 @@ class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ('url', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated')
-        read_only_fields = ('created', 'updated')
+        fields = ['url', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
+        read_only_fields = ['created', 'updated']
 
 
 class EmployeeModifySerializer(serializers.ModelSerializer):
@@ -413,8 +451,8 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ('id', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated')
-        read_only_fields = ('created', 'updated')
+        fields = ['id', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
+        read_only_fields = ['created', 'updated']
 
     def validate(self, data):
         """

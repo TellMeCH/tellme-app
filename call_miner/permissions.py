@@ -64,15 +64,10 @@ class TopicPermission(permissions.BasePermission):
         """
         if not request.user.is_authenticated:
             return False
-        if request.user.is_superuser:
+        if request.user.is_superuser or hasattr(request.user.employee, 'analyst'):
             return True
-        if hasattr(request.user.employee, 'analyst'):
-            if request.method == 'POST':
-                organization_id = request.data.get('organization')
-                return organization_id and str(request.user.employee.organization.id) == str(organization_id)
-            return True
-        if hasattr(request.user, 'employee'):
-            return request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']
+        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
+            return hasattr(request.user, 'employee')
         return False
 
     def has_object_permission(self, request, view, obj):
@@ -80,9 +75,11 @@ class TopicPermission(permissions.BasePermission):
         For retrieve, check that the user belongs to the Topic's Organization, or whether it's a superuser
         Note that this expects obj to be an instance of Topic
         """
+        if request.user.is_superuser:
+            return True
         if hasattr(request.user, 'employee'):
             return request.user.employee.organization == obj.organization and hasattr(request.user.employee, 'analyst')
-        return request.user.is_superuser
+        return False
 
 
 class AgentPermission(permissions.BasePermission):

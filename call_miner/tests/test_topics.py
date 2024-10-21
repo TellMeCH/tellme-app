@@ -301,9 +301,38 @@ class TestTopicCreate:
         assert response.status_code == status.HTTP_201_CREATED
         assert Topic.objects.filter(name='New Topic').exists()
 
-    def test_organization_analyst_can_create_topic(self, client, organization_analyst_user, organization):
+    def test_superuser_cannot_create_topic_without_organization(self, client, superuser):
+        """
+        Test that a superuser cannot create a new topic without specifying an organization.
+        """
+        client.force_authenticate(user=superuser)
+        data = {
+            'name': 'New Topic',
+            'description': 'A new topic',
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'organization' in response.data
+
+    def test_organization_analyst_can_create_topic(self, client, organization_analyst_user):
         """
         Test that an analyst can create a new topic within their own organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        data = {
+            'name': 'Analyst Topic',
+            'description': 'Created by analyst',
+            'is_active': True
+        }
+        response = client.post(reverse('topic-list'), data)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Topic.objects.filter(name='Analyst Topic').exists()
+
+    def test_organization_analyst_cannot_create_topic_specifying_organization(self, client, organization_analyst_user,
+                                                                              organization):
+        """
+        Test that an analyst cannot create a new topic specifying organization.
         """
         client.force_authenticate(user=organization_analyst_user)
         data = {
@@ -313,8 +342,8 @@ class TestTopicCreate:
             'is_active': True
         }
         response = client.post(reverse('topic-list'), data)
-        assert response.status_code == status.HTTP_201_CREATED
-        assert Topic.objects.filter(name='Analyst Topic').exists()
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'organization' in response.data
 
     def test_agent_in_same_organization_cannot_create_topic(self, client, agent, organization):
         """
@@ -324,13 +353,12 @@ class TestTopicCreate:
         data = {
             'name': 'Agent Topic',
             'description': 'Created by agent',
-            'organization': organization.id,
             'is_active': True
         }
         response = client.post(reverse('topic-list'), data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_analyst_in_other_organization_cannot_create_topic(self, client, another_organization_analyst_user,
+    def test_analyst_in_other_organization_cannot_create_topic_elsewhere(self, client, another_organization_analyst_user,
                                                                organization):
         """
         Test that an analyst cannot create a topic in another organization.
@@ -343,7 +371,8 @@ class TestTopicCreate:
             'is_active': True
         }
         response = client.post(reverse('topic-list'), data)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'organization' in response.data
 
     def test_agent_in_other_organization_cannot_create_topic(self, client, another_agent, organization):
         """
@@ -353,7 +382,6 @@ class TestTopicCreate:
         data = {
             'name': 'Another Agent Topic',
             'description': 'Created by another agent',
-            'organization': organization.id,
             'is_active': True
         }
         response = client.post(reverse('topic-list'), data)
@@ -366,7 +394,6 @@ class TestTopicCreate:
         data = {
             'name': 'Unauthenticated Topic',
             'description': 'Should not be created',
-            'organization': organization.id,
             'is_active': True
         }
         response = client.post(reverse('topic-list'), data)
@@ -388,6 +415,17 @@ class TestTopicUpdate:
         assert response.status_code == status.HTTP_200_OK
         assert Topic.objects.filter(name='Updated Topic Name').exists()
 
+    def test_superuser_can_update_topic_organization(self, client, superuser, topic, another_organization):
+        """
+        Test that a superuser can update an existing topic's organization.
+        """
+        client.force_authenticate(user=superuser)
+        data = {'organization': another_organization.id}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_200_OK
+        assert Topic.objects.filter(id=topic.id)[0].organization == another_organization
+
     def test_organization_analyst_can_update_topic(self, client, organization_analyst_user, topic):
         """
         Test that an analyst can update a topic in their own organization.
@@ -398,6 +436,18 @@ class TestTopicUpdate:
         response = client.patch(url, data)
         assert response.status_code == status.HTTP_200_OK
         assert Topic.objects.filter(description='Updated by analyst').exists()
+
+    def test_organization_analyst_cannot_update_topic_organization(self, client, organization_analyst_user, topic,
+                                                        another_organization):
+        """
+        Test that an analyst cannot update an existing topic's organization.
+        """
+        client.force_authenticate(user=organization_analyst_user)
+        data = {'organization': another_organization.id}
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.patch(url, data)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'organization' in response.data
 
     def test_agent_in_same_organization_cannot_update_topic(self, client, agent, topic):
         """
