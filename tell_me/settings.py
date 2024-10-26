@@ -130,5 +130,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
-    'PAGE_SIZE': 15
+    'PAGE_SIZE': 15,
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'call_miner.authentication.FirebaseAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
 }
+
+# User model for authentication
+AUTH_USER_MODEL = 'call_miner.User'
