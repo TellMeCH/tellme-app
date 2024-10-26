@@ -1,10 +1,10 @@
 import time
-from django.utils import timezone
-from django.core.management.base import BaseCommand, CommandError
-from django.contrib.auth.models import User
-from call_miner.models import Organization, Analyst, Agent, Topic, Customer, Conversation
 from datetime import datetime, timedelta
 import random
+from django.utils import timezone
+from django.core.management.base import BaseCommand, CommandError
+from firebase_admin import auth
+from call_miner.models import Organization, Analyst, Agent, Topic, Customer, Conversation, User
 
 COMMON_PASSWORD = 'tell_me_long'
 
@@ -38,16 +38,43 @@ class Command(BaseCommand):
             raise CommandError(f'Failed creation of Sample Topics: {e}')
 
         try:
+            self.stdout.write('Creating Organization Admin')
+            user = User.objects.create_user(
+                username='org_admin',
+                password=COMMON_PASSWORD,
+                email='org_admin@acme.org',
+            )
+            auth.update_user(
+                user.id,
+                email_verified=True
+            )
+
+            analyst = Analyst(
+                organization=org,
+                user=user,
+                is_organization_admin=True,
+            )
+            analyst.save()
+
+        except Exception as e:
+            raise CommandError(f'Failed creation of Organization Admin: {e}')
+
+        try:
             self.stdout.write('Creating Sample Analysts')
             user = User.objects.create_user(
                 username='analyst_01',
                 password=COMMON_PASSWORD,
                 email='analyst_01@acme.org'
             )
+            auth.update_user(
+                user.id,
+                email_verified=True
+            )
+
             analyst = Analyst(
                 organization=org,
                 user=user,
-                is_organization_admin=True,
+                is_organization_admin=False,
             )
             analyst.save()
 
@@ -56,6 +83,11 @@ class Command(BaseCommand):
                 password=COMMON_PASSWORD,
                 email='analyst_01@competitors.inc'
             )
+            auth.update_user(
+                user.id,
+                email_verified=True
+            )
+
             competitor_analyst = Analyst(
                 organization=other_org,
                 user=user
@@ -71,10 +103,15 @@ class Command(BaseCommand):
                 password=COMMON_PASSWORD,
                 email='manager_01@acme.org'
             )
+            auth.update_user(
+                user.id,
+                email_verified=True
+            )
+
             manager = Agent(
                 organization=org,
                 user=user,
-                is_organization_admin=True,
+                is_organization_admin=False,
             )
             manager.save()
 
@@ -85,6 +122,11 @@ class Command(BaseCommand):
                     password=COMMON_PASSWORD,
                     email=f'agent_{i:02d}@acme.org'
                 )
+                auth.update_user(
+                    user.id,
+                    email_verified=True
+                )
+
                 agent = Agent(
                     organization=org,
                     user=user,
@@ -188,6 +230,20 @@ class Command(BaseCommand):
                 topic.save()
         except Exception as e:
             raise CommandError(f'Failed setting topics to inactive: {e}')
+
+        try:
+            self.stdout.write('Creating Superuser')
+            user = User.objects.create_superuser(
+                username='altogi',
+                password=COMMON_PASSWORD,
+                email='altogi@tellme.ch'
+            )
+            auth.update_user(
+                user.id,
+                email_verified=True
+            )
+        except Exception as e:
+            raise CommandError(f'Failed to create Superuser: {e}')
 
         self.stdout.write(
             self.style.SUCCESS('Successfully created expanded sample data')
