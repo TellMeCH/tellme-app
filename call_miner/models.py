@@ -1,7 +1,9 @@
 import re
 from django.db import models
+from django.conf import settings
 from django.dispatch import receiver
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from firebase_admin import auth
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
 from django.db.models.signals import post_save, post_delete
@@ -235,6 +237,61 @@ class Topic(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Conversati
         ]
 
 
+class CustomUserManager(BaseUserManager):
+    """
+    This Model Manager is aimed at making sure that whenever a user is created, a Firebase User is associated to it
+    """
+    def create_user(self, username, email, password, **extra_fields):
+        if not email:
+            raise ValueError('The Email must be set.')
+        email = self.normalize_email(email)
+
+        if not password:
+            raise ValueError('The password must be set.')
+
+        # Create the Firebase user first
+        firebase_user = auth.create_user(
+            email=email,
+            password=password,
+            display_name=username
+        )
+        uid = firebase_user.uid
+
+        try:
+            # Try creating a user with the Firebase UID as ID. If this fails, delete the Firebase User
+            user = self.model(id=uid, username=username, email=email, **extra_fields)
+            user.set_password(password)
+            user.save(using=self._db)
+            return user
+        except Exception as e:
+            auth.delete_user(uid)
+            raise e
+
+    def create_superuser(self, username, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(username, email, password, **extra_fields)
+
+
+class User(AbstractBaseUser, PermissionsMixin):
+    """
+    Custom user class, making use of the CustomUserManager and defining the email as main field
+    """
+    id = models.CharField(primary_key=True, max_length=128)
+    username = models.CharField(max_length=150, unique=True)
+    email = models.EmailField(unique=True)
+    is_staff = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']
+
+    objects = CustomUserManager()
+
+    def __str__(self):
+        return self.username
+
+
 class Employee(models.Model):
     """
     A versatile role. An employee can be an analyst, an agent, or a manager. Contains the basic attributes that all
@@ -249,7 +306,7 @@ class Employee(models.Model):
     ]
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='employees')
-    user = models.OneToOneField('auth.User', on_delete=models.SET_NULL, related_name='employee', null=True)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='employee', null=True)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='ANALYST')
     is_organization_admin = models.BooleanField(default=False)
     created = models.DateTimeField(auto_now_add=True)
@@ -270,11 +327,19 @@ class Employee(models.Model):
 
 
 class Analyst(Employee):
+    """
+    Analyst: A subclass of Employee, describing employees that do not take part in Conversations and only explore the
+    broader trends of the topics being discussed.
+    """
     class Meta:
         verbose_name_plural = "Analysts"
 
 
 class Agent(Employee, MetaSummaryAbstractModel, ConversationStatsAbstractModel, ConversationTrendMixin):
+    """
+    Agent: A subclass of Employee describing Customer Center agents. Agents can appear related to Conversations, thus
+    resulting in their associated trend, stats, and summary actions.
+    """
     manager = models.ForeignKey(
         'self',
         null=True,
