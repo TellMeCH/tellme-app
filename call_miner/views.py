@@ -1,5 +1,5 @@
-from .models import Conversation, Organization, Topic, Employee, Agent, Customer
 from rest_framework import viewsets, decorators, response, status
+from .models import Conversation, Organization, Topic, Employee, Agent, Customer
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
@@ -9,16 +9,7 @@ from call_miner.serializers import (
 from call_miner.permissions import (ConversationPermission, OrganizationPermission, TopicPermission, AgentPermission,
                                     CustomerPermission, EmployeePermission)
 from call_miner.utils.paginators import CustomListViewPaginator
-
-
-"""
-Breaking down desired behavior on ViewSet Access:
-- ConversationViewSet: viewable by anyone in the org. Anyone can view the details of a single call
-- OrganizationViewSet: Users can only list and view their own organization
-- TopicViewSet: topics can be listed by anyone in the org, but only Analysts can view and alter the details of a topic
-- AgentViewSet: agents can be listed by anyone in the org, but only an agent or its manager can view the agent details
-- CustomerViewSet: viewable by anyone in the org. Anyone can view the details of a single customer 
-"""
+from call_miner.authentication import FirebaseAuthentication
 
 
 class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
@@ -84,6 +75,7 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-date']
@@ -119,6 +111,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
 
 class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
+    authentication_classes = [FirebaseAuthentication]
     permission_classes = [OrganizationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['name']
@@ -140,6 +133,7 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
 
 
 class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
+    authentication_classes = [FirebaseAuthentication]
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
@@ -185,6 +179,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     This ViewSet allows to view details from all or a single Agent in an organization. Please note that it's read-only,
     since Employee-level modifications should be done with the Employee ViewSet.
     """
+    authentication_classes = [FirebaseAuthentication]
     permission_classes = [AgentPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'user_id']
@@ -219,6 +214,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
 
 
 class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
+    authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'name']
@@ -247,6 +243,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
     permission_classes = [EmployeePermission]
     serializer_class = EmployeeModifySerializer
 
