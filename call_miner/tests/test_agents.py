@@ -2,77 +2,9 @@ import pytest
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APIClient
-from django.contrib.auth.models import User
-from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic
-from datetime import datetime
+from call_miner.models import Agent, User
 
 TREND_ACTIONS = ['conversations', 'conversation-trend', 'conversation-topic-trend', 'duration-trend', 'sentiment-trend']
-
-
-@pytest.fixture
-def client():
-    """Return an instance of the DRF APIClient for testing."""
-    return APIClient()
-
-
-@pytest.fixture
-def organization():
-    """Create and return a test Organization."""
-    return Organization.objects.create(name='Test Organization', max_user_count=10)
-
-
-@pytest.fixture
-def another_organization():
-    """Create and return another test Organization."""
-    return Organization.objects.create(name='Another Organization', max_user_count=10)
-
-
-@pytest.fixture
-def superuser():
-    """Create and return a superuser for testing."""
-    user = User.objects.create_superuser('superuser', 'superuser@example.com', 'superpassword')
-    return user
-
-
-@pytest.fixture
-def organization_admin_user(organization):
-    """Create and return an organization admin user associated with the given organization."""
-    user = User.objects.create_user('orgadmin', 'orgadmin@example.com', 'password')
-    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=True)
-    return user
-
-
-@pytest.fixture
-def organization_analyst_user(organization):
-    """Create and return an analyst user associated with the given organization."""
-    user = User.objects.create_user('analyst', 'analyst@example.com', 'password')
-    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=False)
-    return user
-
-
-@pytest.fixture
-def another_organization_analyst_user(another_organization):
-    """Create and return an analyst user associated with another organization."""
-    user = User.objects.create_user('another_analyst', 'another_analyst@example.com', 'password')
-    Analyst.objects.create(user=user, organization=another_organization, role='ANALYST', is_organization_admin=False)
-    return user
-
-
-@pytest.fixture
-def agent(organization):
-    """Create and return an agent associated with the given organization."""
-    user = User.objects.create_user('agent', 'agent@example.com', 'password')
-    agent = Agent.objects.create(user=user, organization=organization, role='AGENT')
-    return agent
-
-
-@pytest.fixture
-def another_agent(another_organization):
-    """Create and return an agent associated with another organization."""
-    user = User.objects.create_user('another_agent', 'another_agent@example.com', 'password')
-    agent = Agent.objects.create(user=user, organization=another_organization, role='AGENT')
-    return agent
 
 
 @pytest.fixture
@@ -99,85 +31,11 @@ def another_agent_in_same_org(organization):
     return agent
 
 
-@pytest.fixture
-def customer(organization):
-    """Create and return a customer associated with the given organization."""
-    return Customer.objects.create(name='Test Customer', organization=organization)
-
-
-@pytest.fixture
-def another_customer(another_organization):
-    """Create and return a customer associated with another organization."""
-    return Customer.objects.create(name='Another Customer', organization=another_organization)
-
-
-@pytest.fixture
-def conversation(agent, customer, topic):
-    """Create and return a conversation between the given agent and customer."""
-    conv = Conversation.objects.create(
-        path='path/to/conversation',
-        date=datetime.now(),
-        duration=123.45,
-        title='Test Conversation',
-        summary='Test summary',
-        transcript='Test transcript',
-        sentiment=0.5,
-        agent=agent,
-        customer=customer,
-        input_tokens=100,
-        output_tokens=50
-    )
-    conv.topics.add(topic)
-    return conv
-
-
-@pytest.fixture
-def another_conversation(another_agent, another_customer, another_topic):
-    """Create and return another conversation between the given agent and customer."""
-    conv = Conversation.objects.create(
-        path='path/to/another_conversation',
-        date=datetime.now(),
-        duration=123.45,
-        title='Another Conversation',
-        summary='Another summary',
-        transcript='Another test transcript',
-        sentiment=0.5,
-        agent=another_agent,
-        customer=another_customer,
-        input_tokens=100,
-        output_tokens=50
-    )
-    conv.topics.add(another_topic)
-    return conv
-
-
-@pytest.fixture
-def topic(organization):
-    """Create and return a topic associated with the given organization."""
-    return Topic.objects.create(
-        name='Test Topic',
-        description='A test topic',
-        organization=organization,
-        is_active=True
-    )
-
-
-@pytest.fixture
-def another_topic(another_organization):
-    """Create and return another topic associated with another organization."""
-    return Topic.objects.create(
-        name='Another Topic',
-        description='Another test topic',
-        organization=another_organization,
-        is_active=True
-    )
-
-
 @pytest.mark.django_db
 class TestAgentList:
     """Tests for the agent-list API endpoint"""
 
-    def test_superuser_can_list_all_agents(self, client, superuser, agent, another_agent):
+    def test_superuser_can_list_all_agents(self, client, superuser, agent, another_organization_agent):
         """
         Test that a superuser can list all agents across organizations.
         """
@@ -195,32 +53,33 @@ class TestAgentList:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 3
 
-    def test_analyst_can_list_agents(self, client, organization_analyst_user, agent, agent_managed_by_manager,
-                                     another_agent):
+    def test_analyst_can_list_agents(self, client, analyst_user, agent, agent_managed_by_manager,
+                                     another_organization_agent):
         """
         Test that an organization analyst can list agents in their own organization.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         response = client.get(reverse('agent-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 3
 
-    def test_agent_can_list_agents_in_own_organization(self, client, agent, agent_managed_by_manager, another_agent):
+    def test_agent_can_list_agents_in_own_organization(self, client, agent_user, agent_managed_by_manager,
+                                                       another_organization_agent):
         """
         Test that an agent can list agents in their own organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         response = client.get(reverse('agent-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 3
 
     def test_another_organization_agent_cannot_list_agents_in_another_organization(self, client, agent,
                                                                                    agent_managed_by_manager,
-                                                                                   another_agent):
+                                                                                   another_organization_agent):
         """
         Test that an agent can list agents in their own organization.
         """
-        client.force_authenticate(user=another_agent.user)
+        client.force_authenticate(user=another_organization_agent.user)
         response = client.get(reverse('agent-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
@@ -237,7 +96,7 @@ class TestAgentList:
 class TestAgentRetrieve:
     """Tests for the agent-detail API endpoint"""
 
-    def test_superuser_can_retrieve_any_agent(self, client, superuser, agent, another_agent):
+    def test_superuser_can_retrieve_any_agent(self, client, superuser, agent, another_organization_agent):
         """
         Test that a superuser can retrieve any agent.
         """
@@ -247,10 +106,10 @@ class TestAgentRetrieve:
         assert response.status_code == status.HTTP_200_OK
         assert response.data['username'] == agent.user.username
 
-        url = reverse('agent-detail', args=[another_agent.id])
+        url = reverse('agent-detail', args=[another_organization_agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['username'] == another_agent.user.username
+        assert response.data['username'] == another_organization_agent.user.username
 
     def test_organization_admin_can_retrieve_other_agent_details(self, client, organization_admin_user, agent):
         """
@@ -264,20 +123,20 @@ class TestAgentRetrieve:
 
     def test_organization_admin_cannot_retrieve_another_organization_agent_details(self, client,
                                                                                    organization_admin_user,
-                                                                                   another_agent):
+                                                                                   another_organization_agent):
         """
         Test that an organization admin cannot retrieve an agent's details in another organization.
         """
         client.force_authenticate(user=organization_admin_user)
-        url = reverse('agent-detail', args=[another_agent.id])
+        url = reverse('agent-detail', args=[another_organization_agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_organization_analyst_cannot_retrieve_other_agent_details(self, client, organization_analyst_user, agent):
+    def test_organization_analyst_cannot_retrieve_other_agent_details(self, client, analyst_user, agent):
         """
         Test that an analyst cannot retrieve an agent's details in their own organization.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('agent-detail', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -311,20 +170,20 @@ class TestAgentRetrieve:
         assert response.status_code == status.HTTP_200_OK
         assert response.data['username'] == agent.user.username
 
-    def test_agent_cannot_retrieve_other_agent_details(self, client, agent, another_agent_in_same_org):
+    def test_agent_cannot_retrieve_other_agent_details(self, client, agent_user, another_agent_in_same_org):
         """
         Test that an agent cannot retrieve another agent's details in their own organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('agent-detail', args=[another_agent_in_same_org.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_in_other_organization_cannot_retrieve_agent(self, client, another_agent, agent):
+    def test_agent_in_other_organization_cannot_retrieve_agent(self, client, another_organization_agent_user, agent):
         """
         Test that an agent in another organization cannot retrieve an agent.
         """
-        client.force_authenticate(user=another_agent.user)
+        client.force_authenticate(user=another_organization_agent_user)
         url = reverse('agent-detail', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -386,11 +245,11 @@ class TestAgentCreate:
         response = client.post(reverse('agent-list'), data=data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_analyst_cannot_create_agent(self, client, organization_analyst_user, organization):
+    def test_analyst_cannot_create_agent(self, client, analyst_user, organization):
         """
         Test that an analyst cannot create an agent.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         data = {
             'username': 'new_agent',
             'password': 'password',
@@ -400,11 +259,11 @@ class TestAgentCreate:
         response = client.post(reverse('agent-list'), data=data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_create_agent(self, client, agent, organization):
+    def test_agent_cannot_create_agent(self, client, agent_user, organization):
         """
         Test that an agent cannot create another agent.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         data = {
             'username': 'new_agent',
             'password': 'password',
@@ -454,31 +313,31 @@ class TestAgentUpdate:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_organization_admin_cannot_update_agent_in_another_organization(self, client, organization_admin_user,
-                                                                            another_agent, agent_manager):
+                                                                            another_organization_agent, agent_manager):
         """
         Test that an organization admin cannot update an agent in another organization.
         """
         client.force_authenticate(user=organization_admin_user)
         data = {'manager': agent_manager.id}
-        url = reverse('agent-detail', args=[another_agent.id])
+        url = reverse('agent-detail', args=[another_organization_agent.id])
         response = client.patch(url, data=data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_analyst_cannot_update_agent(self, client, organization_analyst_user, agent, agent_manager):
+    def test_analyst_cannot_update_agent(self, client, analyst_user, agent, agent_manager):
         """
         Test that an analyst cannot update an agent.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         data = {'manager': agent_manager.id}
         url = reverse('agent-detail', args=[agent.id])
         response = client.patch(url, data=data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_update_another_agent(self, client, agent, another_agent_in_same_org, agent_manager):
+    def test_agent_cannot_update_another_agent(self, client, agent_user, another_agent_in_same_org, agent_manager):
         """
         Test that an agent cannot update another agent in their organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         data = {'manager': agent_manager.id}
         url = reverse('agent-detail', args=[another_agent_in_same_org.id])
         response = client.patch(url, data=data)
@@ -527,29 +386,29 @@ class TestAgentDelete:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_organization_admin_cannot_delete_agent_in_another_organization(self, client, organization_admin_user,
-                                                                            another_agent):
+                                                                            another_organization_agent):
         """
         Test that an organization admin cannot delete an agent in another organization.
         """
         client.force_authenticate(user=organization_admin_user)
-        url = reverse('agent-detail', args=[another_agent.id])
+        url = reverse('agent-detail', args=[another_organization_agent.id])
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_analyst_cannot_delete_agent(self, client, organization_analyst_user, agent):
+    def test_analyst_cannot_delete_agent(self, client, analyst_user, agent):
         """
         Test that an analyst cannot delete an agent.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('agent-detail', args=[agent.id])
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_delete_another_agent(self, client, agent, another_agent_in_same_org):
+    def test_agent_cannot_delete_another_agent(self, client, agent_user, another_agent_in_same_org):
         """
         Test that an agent cannot delete another agent in their own organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('agent-detail', args=[another_agent_in_same_org.id])
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -568,7 +427,7 @@ class TestAgentTrendActions:
     """Tests for retrieving activity trends of each Agent"""
 
     @staticmethod
-    def _test_trend_action(self, client, url, expected_status):
+    def _test_trend_action(client, url, expected_status):
         """
         Helper function to test trend actions.
         """
@@ -582,7 +441,7 @@ class TestAgentTrendActions:
         client.force_authenticate(user=superuser)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_200_OK)
+            self._test_trend_action(client, url, status.HTTP_200_OK)
 
     def test_organization_admin_can_access_agent_trend_actions(self, client, organization_admin_user, agent):
         """
@@ -591,27 +450,27 @@ class TestAgentTrendActions:
         client.force_authenticate(user=organization_admin_user)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_200_OK)
+            self._test_trend_action(client, url, status.HTTP_200_OK)
 
     def test_organization_admin_cannot_access_another_organization_agent_trend_actions(self, client,
                                                                                        organization_admin_user,
-                                                                                       another_agent):
+                                                                                       another_organization_agent):
         """
         Test that an organization admin cannot access trend actions for agents in other organizations.
         """
         client.force_authenticate(user=organization_admin_user)
         for action in TREND_ACTIONS:
-            url = reverse(f'agent-{action}', args=[another_agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_404_NOT_FOUND)
+            url = reverse(f'agent-{action}', args=[another_organization_agent.id])
+            self._test_trend_action(client, url, status.HTTP_404_NOT_FOUND)
 
-    def test_organization_analyst_cannot_access_agent_trend_actions(self, client, organization_analyst_user, agent):
+    def test_organization_analyst_cannot_access_agent_trend_actions(self, client, analyst_user, agent):
         """
         Test that an analyst cannot access trend actions for agents.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_403_FORBIDDEN)
+            self._test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
 
     def test_agent_manager_can_access_managed_agent_trend_actions(self, client, agent_manager,
                                                                   agent_managed_by_manager):
@@ -621,16 +480,16 @@ class TestAgentTrendActions:
         client.force_authenticate(user=agent_manager.user)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent_managed_by_manager.id])
-            self._test_trend_action(self, client, url, status.HTTP_200_OK)
+            self._test_trend_action(client, url, status.HTTP_200_OK)
 
-    def test_agent_manager_cannot_access_non_managed_agent_trend_actions(self, client, agent_manager, agent):
+    def test_agent_manager_cannot_access_non_managed_agent_trend_actions(self, client, agent_manager_user, agent):
         """
         Test that an agent manager cannot access trend actions for managed agents.
         """
-        client.force_authenticate(user=agent_manager.user)
+        client.force_authenticate(user=agent_manager_user)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_403_FORBIDDEN)
+            self._test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
 
     def test_agent_can_access_own_trend_actions(self, client, agent):
         """
@@ -639,25 +498,26 @@ class TestAgentTrendActions:
         client.force_authenticate(user=agent.user)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_200_OK)
+            self._test_trend_action(client, url, status.HTTP_200_OK)
 
-    def test_agent_cannot_access_other_agent_trend_actions(self, client, agent, another_agent_in_same_org):
+    def test_agent_cannot_access_other_agent_trend_actions(self, client, agent_user, another_agent_in_same_org):
         """
         Test that an agent cannot access trend actions for other agents in the same organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[another_agent_in_same_org.id])
-            self._test_trend_action(self, client, url, status.HTTP_403_FORBIDDEN)
+            self._test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
 
-    def test_agent_in_other_organization_cannot_access_agent_trend_actions(self, client, another_agent, agent):
+    def test_agent_in_other_organization_cannot_access_agent_trend_actions(self, client,
+                                                                           another_organization_agent_user, agent):
         """
         Test that an agent in another organization cannot access trend actions for an agent.
         """
-        client.force_authenticate(user=another_agent.user)
+        client.force_authenticate(user=another_organization_agent_user)
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_404_NOT_FOUND)
+            self._test_trend_action(client, url, status.HTTP_404_NOT_FOUND)
 
     def test_unauthenticated_user_cannot_access_agent_trend_actions(self, client, agent):
         """
@@ -665,7 +525,7 @@ class TestAgentTrendActions:
         """
         for action in TREND_ACTIONS:
             url = reverse(f'agent-{action}', args=[agent.id])
-            self._test_trend_action(self, client, url, status.HTTP_403_FORBIDDEN)
+            self._test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
 
     def test_agent_conversations_action_returns_expected_content(self, client, agent, conversation):
         """
@@ -692,7 +552,7 @@ class TestAgentTrendActions:
         results = response.data['conversation_trend']['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
-        assert results[0]['date'].date() == conversation.date.date()
+        assert results[0]['date'].date() == conversation.date
 
     def test_agent_conversation_topic_trend_action_returns_expected_content(self, client, agent, conversation):
         """
@@ -706,7 +566,7 @@ class TestAgentTrendActions:
         results = response.data['conversation_topic_trend']['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
-        assert results[0]['date'].date() == conversation.date.date()
+        assert results[0]['date'].date() == conversation.date
         assert results[0]['topic'] == str(conversation.topics.all()[0])
 
     def test_agent_duration_trend_action_returns_expected_content(self, client, agent, conversation):
@@ -760,20 +620,20 @@ class TestAgentSummary:
 
     def test_organization_admin_cannot_access_another_organization_agent_summary_data(self, client,
                                                                                       organization_admin_user,
-                                                                                      another_agent):
+                                                                                      another_organization_agent):
         """
         Test that an organization admin cannot access the summary data of an agent in another organization.
         """
         client.force_authenticate(user=organization_admin_user)
-        url = reverse('agent-summary-data', args=[another_agent.id])
+        url = reverse('agent-summary-data', args=[another_organization_agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_organization_analyst_cannot_access_agent_summary_data(self, client, organization_analyst_user, agent):
+    def test_organization_analyst_cannot_access_agent_summary_data(self, client, analyst_user, agent):
         """
         Test that an analyst cannot access the summary data of an agent.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('agent-summary-data', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -805,20 +665,21 @@ class TestAgentSummary:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
-    def test_agent_cannot_access_other_agent_summary_data(self, client, agent, another_agent_in_same_org):
+    def test_agent_cannot_access_other_agent_summary_data(self, client, agent_user, another_agent_in_same_org):
         """
         Test that an agent cannot access the summary data of other agents in the same organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('agent-summary-data', args=[another_agent_in_same_org.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_in_other_organization_cannot_access_agent_summary_data(self, client, another_agent, agent):
+    def test_agent_in_other_organization_cannot_access_agent_summary_data(self, client,
+                                                                          another_organization_agent_user, agent):
         """
         Test that an agent in another organization cannot access the summary data of an agent.
         """
-        client.force_authenticate(user=another_agent.user)
+        client.force_authenticate(user=another_organization_agent_user)
         url = reverse('agent-summary-data', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -878,21 +739,21 @@ class TestAgentManagedAgents:
 
     def test_organization_admin_cannot_access_another_organization_agent_managed_agents(self, client,
                                                                                         organization_admin_user,
-                                                                                        another_agent):
+                                                                                        another_organization_agent):
         """
         Test that an analyst cannot access an agent's managed_agents action.
         """
         client.force_authenticate(user=organization_admin_user)
-        url = reverse('agent-managed-agents', args=[another_agent.id])
+        url = reverse('agent-managed-agents', args=[another_organization_agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_organization_analyst_cannot_access_agent_managed_agents(self, client, organization_analyst_user,
+    def test_organization_analyst_cannot_access_agent_managed_agents(self, client, analyst_user,
                                                                      agent_manager):
         """
         Test that an analyst cannot access an agent's managed_agents action.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('agent-managed-agents', args=[agent_manager.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -909,11 +770,11 @@ class TestAgentManagedAgents:
         assert len(managed_agents) == 1
         assert managed_agents[0]['name'] == agent_managed_by_manager.user.username
 
-    def test_agent_cannot_access_other_agents_managed_agents(self, client, agent, agent_manager):
+    def test_agent_cannot_access_other_agents_managed_agents(self, client, agent_user, agent_manager):
         """
         Test that an agent cannot access another agent's managed_agents action.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('agent-managed-agents', args=[agent_manager.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -930,13 +791,13 @@ class TestAgentManagedAgents:
         assert len(managed_agents) == 0
 
     def test_agent_in_other_organization_cannot_access_other_organization_agent_summary_data(self, client,
-                                                                                             another_agent,
+                                                                                             another_organization_agent_user,
                                                                                              agent_manager,
                                                                                              agent_managed_by_manager):
         """
         Test that an agent in another organization cannot access the managed agents of an agent manager.
         """
-        client.force_authenticate(user=another_agent.user)
+        client.force_authenticate(user=another_organization_agent_user)
         url = reverse('agent-managed-agents', args=[agent_manager.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND

@@ -1,9 +1,7 @@
 import pytest
-from datetime import datetime, timedelta, date
-from unittest.mock import MagicMock, patch
-from django.core.exceptions import ValidationError
+from datetime import timedelta, date
+from unittest.mock import patch
 from django.db import IntegrityError
-from django.contrib.auth.models import User
 from django.utils import timezone
 
 from call_miner.models import (
@@ -29,31 +27,6 @@ def register_signals():
 
 
 @pytest.fixture
-def organization():
-    return Organization.objects.create(name="Test Organization")
-
-
-@pytest.fixture
-def another_organization():
-    return Organization.objects.create(name="Another Organization")
-
-
-@pytest.fixture
-def user():
-    return User.objects.create_user(username="testuser", password="testpass")
-
-
-@pytest.fixture
-def another_user():
-    return User.objects.create_user(username="anotheruser", password="anotherpass")
-
-
-@pytest.fixture
-def employee(organization, user):
-    return Employee.objects.create(organization=organization, user=user)
-
-
-@pytest.fixture
 def analyst(organization, user):
     return Analyst.objects.create(organization=organization, user=user)
 
@@ -69,41 +42,12 @@ def manager(another_user, organization):
 
 
 @pytest.fixture
-def customer(organization):
-    return Customer.objects.create(name="Test Customer", organization=organization)
-
-
-@pytest.fixture
-def topic(organization):
-    return Topic.objects.create(name="Test Topic", description="Test Description", organization=organization)
-
-
-@pytest.fixture
-def another_topic(organization):
+def another_topic_same_organization(organization):
     return Topic.objects.create(name="Another Topic", description="Another Description", organization=organization)
 
 
 @pytest.fixture
-def conversation(agent, customer, topic):
-    conv = Conversation.objects.create(
-        path="Test Call",
-        date=date(2024, 1, 1),
-        duration=60,
-        transcript="<agent>: Hello <customer>: Hi",
-        sentiment=0.5,
-        summary="Test Summary",
-        title='Test Title',
-        customer=customer,
-        agent=agent,
-        input_tokens=10,
-        output_tokens=20
-    )
-    conv.topics.add(topic)
-    return conv
-
-
-@pytest.fixture
-def another_conversation(agent, customer, another_topic):
+def another_conversation_same_organization(agent, customer, another_topic_same_organization):
     another_conv = Conversation.objects.create(
         path="Another Test Call",
         date=date(2024, 1, 1) + timedelta(days=1),
@@ -117,7 +61,7 @@ def another_conversation(agent, customer, another_topic):
         input_tokens=5,
         output_tokens=15
     )
-    another_conv.topics.add(another_topic)
+    another_conv.topics.add(another_topic_same_organization)
     return another_conv
 
 
@@ -195,15 +139,16 @@ class TestConversationStatsAbstractModel:
         assert topic.first_conversation_date.date() == conversation.date
         assert topic.last_conversation_date.date() == conversation.date
 
-    def test_conversation_stats_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_conversation_stats_multiple_conversations(self, topic, conversation,
+                                                       another_conversation_same_organization):
         """
         Test that the conversation stats are correctly updated when there are multiple conversations.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         topic.update_conversation_stats()
         topic.refresh_from_db()
-        expected_first_date = min(conversation.date, another_conversation.date)
-        expected_last_date = max(conversation.date, another_conversation.date)
+        expected_first_date = min(conversation.date, another_conversation_same_organization.date)
+        expected_last_date = max(conversation.date, another_conversation_same_organization.date)
         assert topic.conversation_count == 2
         assert topic.first_conversation_date.date() == expected_first_date
         assert topic.last_conversation_date.date() == expected_last_date
@@ -228,16 +173,17 @@ class TestConversationStatsAbstractModel:
         assert agent.first_conversation_date.date() == conversation.date
         assert agent.last_conversation_date.date() == conversation.date
 
-    def test_agent_conversation_stats_multiple_conversations(self, agent, conversation, another_conversation):
+    def test_agent_conversation_stats_multiple_conversations(self, agent, conversation,
+                                                             another_conversation_same_organization):
         """
         Test that conversation stats are correctly updated for an agent with multiple conversations.
         """
-        another_conversation.agent = agent
-        another_conversation.save()
+        another_conversation_same_organization.agent = agent
+        another_conversation_same_organization.save()
         agent.update_conversation_stats()
         agent.refresh_from_db()
-        expected_first_date = min(conversation.date, another_conversation.date)
-        expected_last_date = max(conversation.date, another_conversation.date)
+        expected_first_date = min(conversation.date, another_conversation_same_organization.date)
+        expected_last_date = max(conversation.date, another_conversation_same_organization.date)
         assert agent.conversation_count == 2
         assert agent.first_conversation_date.date() == expected_first_date
         assert agent.last_conversation_date.date() == expected_last_date
@@ -262,16 +208,17 @@ class TestConversationStatsAbstractModel:
         assert customer.first_conversation_date.date() == conversation.date
         assert customer.last_conversation_date.date() == conversation.date
 
-    def test_customer_conversation_stats_multiple_conversations(self, customer, conversation, another_conversation):
+    def test_customer_conversation_stats_multiple_conversations(self, customer, conversation,
+                                                                another_conversation_same_organization):
         """
         Test that conversation stats are correctly updated for a customer with multiple conversations.
         """
-        another_conversation.customer = customer
-        another_conversation.save()
+        another_conversation_same_organization.customer = customer
+        another_conversation_same_organization.save()
         customer.update_conversation_stats()
         customer.refresh_from_db()
-        expected_first_date = min(conversation.date, another_conversation.date)
-        expected_last_date = max(conversation.date, another_conversation.date)
+        expected_first_date = min(conversation.date, another_conversation_same_organization.date)
+        expected_last_date = max(conversation.date, another_conversation_same_organization.date)
         assert customer.conversation_count == 2
         assert customer.first_conversation_date.date() == expected_first_date
         assert customer.last_conversation_date.date() == expected_last_date
@@ -338,11 +285,12 @@ class TestConversationTrendMixin:
         assert len(trend) == 1
         assert trend[0]['count'] == 1
 
-    def test_get_conversation_trend_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_get_conversation_trend_multiple_conversations(self, topic, conversation,
+                                                           another_conversation_same_organization):
         """
         Test that get_conversation_trend returns the correct trend for multiple conversations on different dates.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         trend = list(topic.get_conversation_trend('daily'))
         assert len(trend) == 2
 
@@ -369,12 +317,14 @@ class TestConversationTrendMixin:
         assert trend[0]['count'] == 1
         assert trend[0]['topic'] == topic.name
 
-    def test_get_conversation_trend_per_topic_multiple_conversations(self, customer, conversation, another_conversation,
-                                                                     another_topic):
+    def test_get_conversation_trend_per_topic_multiple_conversations(self, customer, conversation,
+                                                                     another_conversation_same_organization,
+                                                                     another_topic_same_organization):
         """
-        Test that get_conversation_trend_per_topic returns the correct trend for multiple conversations with different topics.
+        Test that get_conversation_trend_per_topic returns the correct trend for multiple conversations with different
+        topics.
         """
-        another_conversation.topics.add(another_topic)
+        another_conversation_same_organization.topics.add(another_topic_same_organization)
         trend = list(customer.get_conversation_trend_per_topic('daily'))
         assert len(trend) == 2
 
@@ -404,27 +354,33 @@ class TestConversationTrendMixin:
         assert len(avg_duration) == 1
         assert avg_duration[0]['avg_value'] == conversation.duration
 
-    def test_get_daily_avg_duration_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_get_daily_avg_duration_multiple_conversations(self, topic, conversation,
+                                                           another_conversation_same_organization):
         """
-        Test that get_avg_duration returns the correct average daily duration for multiple conversations over different days.
+        Test that get_avg_duration returns the correct average daily duration for multiple conversations over different
+        days.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         avg_duration = list(topic.get_avg_for_periods('duration', 'daily'))
         assert len(avg_duration) == 2
 
-    def test_get_weekly_avg_duration_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_get_weekly_avg_duration_multiple_conversations(self, topic, conversation,
+                                                            another_conversation_same_organization):
         """
-        Test that get_avg_duration returns the correct average weekly duration for multiple conversations over different days.
+        Test that get_avg_duration returns the correct average weekly duration for multiple conversations over different
+        days.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         avg_duration = list(topic.get_avg_for_periods('duration', 'weekly'))
         assert len(avg_duration) == 1
 
-    def test_get_monthly_avg_duration_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_get_monthly_avg_duration_multiple_conversations(self, topic, conversation,
+                                                             another_conversation_same_organization):
         """
-        Test that get_avg_duration returns the correct average monthly duration for multiple conversations over different days.
+        Test that get_avg_duration returns the correct average monthly duration for multiple conversations over
+        different days.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         avg_duration = list(topic.get_avg_for_periods('duration', 'monthly'))
         assert len(avg_duration) == 1
 
@@ -443,27 +399,33 @@ class TestConversationTrendMixin:
         assert len(avg_sentiment) == 1
         assert avg_sentiment[0]['avg_value'] == conversation.sentiment
 
-    def test_get_daily_avg_sentiment_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_get_daily_avg_sentiment_multiple_conversations(self, topic, conversation,
+                                                            another_conversation_same_organization):
         """
-        Test that get_avg_sentiment returns the correct daily average sentiment for multiple conversations over different days.
+        Test that get_avg_sentiment returns the correct daily average sentiment for multiple conversations over
+        different days.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'daily'))
         assert len(avg_sentiment) == 2
 
-    def test_get_weekly_avg_sentiment_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_get_weekly_avg_sentiment_multiple_conversations(self, topic, conversation,
+                                                             another_conversation_same_organization):
         """
-        Test that get_avg_sentiment returns the correct weekly average sentiment for multiple conversations over different days.
+        Test that get_avg_sentiment returns the correct weekly average sentiment for multiple conversations over
+        different days.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'weekly'))
         assert len(avg_sentiment) == 1
 
-    def test_get_monthly_avg_sentiment_multiple_conversations(self, topic, conversation, another_conversation):
+    def test_get_monthly_avg_sentiment_multiple_conversations(self, topic, conversation,
+                                                              another_conversation_same_organization):
         """
-        Test that get_avg_sentiment returns the correct monthly average sentiment for multiple conversations over different days.
+        Test that get_avg_sentiment returns the correct monthly average sentiment for multiple conversations over
+        different days.
         """
-        another_conversation.topics.add(topic)
+        another_conversation_same_organization.topics.add(topic)
         avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'monthly'))
         assert len(avg_sentiment) == 1
 
@@ -512,7 +474,7 @@ class TestTopic:
         Test that a Topic instance is created with the correct attributes.
         """
         assert topic.name == "Test Topic"
-        assert topic.description == "Test Description"
+        assert topic.description == "A test topic"
         assert topic.organization == organization
         assert str(topic) == "Test Topic"
 
@@ -659,18 +621,18 @@ class TestConversation:
         """
         Test that a Conversation instance is created with the correct attributes.
         """
-        assert conversation.path == "Test Call"
+        assert conversation.path == "path/to/conversation"
         assert conversation.agent == agent
         assert conversation.customer == customer
         assert topic in conversation.topics.all()
-        assert conversation.input_tokens == 10
-        assert conversation.output_tokens == 20
+        assert conversation.input_tokens == 100
+        assert conversation.output_tokens == 50
 
     def test_conversation_str(self, conversation):
         """
         Test that the string representation of a Conversation is its path.
         """
-        assert str(conversation) == "Test Call"
+        assert str(conversation) == "path/to/conversation"
 
     def test_conversation_organization_consistency(self, agent, topic):
         """
@@ -698,7 +660,8 @@ class TestConversation:
         """
         Test that a Topic from a different organization cannot be added to a Conversation.
         """
-        external_topic = Topic.objects.create(name="External Topic", description="Desc", organization=another_organization)
+        external_topic = Topic.objects.create(name="External Topic", description="Desc",
+                                              organization=another_organization)
         with pytest.raises(ValueError):
             conversation.topics.add(external_topic)
 
@@ -742,6 +705,7 @@ class TestConversation:
         """
         Test that validate_topics_organization signal prevents adding topics from a different organization.
         """
-        topic_other_org = Topic.objects.create(name="Other Topic", description="Desc", organization=another_organization)
+        topic_other_org = Topic.objects.create(name="Other Topic", description="Desc",
+                                               organization=another_organization)
         with pytest.raises(ValueError):
             conversation.topics.add(topic_other_org)

@@ -1,137 +1,16 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APIClient
-from django.contrib.auth.models import User
-from call_miner.models import Organization, Analyst, Agent, Customer, Conversation
+from call_miner.models import Conversation
 from datetime import datetime
-
-
-@pytest.fixture
-def client():
-    """Return an instance of the DRF APIClient for testing."""
-    return APIClient()
-
-
-@pytest.fixture
-def organization():
-    """Create and return a test Organization."""
-    return Organization.objects.create(name='Test Organization', max_user_count=10)
-
-
-@pytest.fixture
-def another_organization():
-    """Create and return another test Organization."""
-    return Organization.objects.create(name='Another Organization', max_user_count=10)
-
-
-@pytest.fixture
-def superuser():
-    """Create and return a superuser for testing."""
-    user = User.objects.create_superuser('superuser', 'superuser@example.com', 'superpassword')
-    return user
-
-
-@pytest.fixture
-def organization_admin_user(organization):
-    """Create and return an organization admin user associated with the given organization."""
-    user = User.objects.create_user('orgadmin', 'orgadmin@example.com', 'password')
-    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=True)
-    return user
-
-
-@pytest.fixture
-def organization_analyst_user(organization):
-    """Create and return an employee user associated with the given organization."""
-    user = User.objects.create_user('employee', 'employee@example.com', 'password')
-    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=False)
-    return user
-
-
-@pytest.fixture
-def another_organization_analyst_user(another_organization):
-    """Create and return an employee user associated with another organization."""
-    user = User.objects.create_user('another_employee', 'another_employee@example.com', 'password')
-    Analyst.objects.create(user=user, organization=another_organization, role='ANALYST', is_organization_admin=False)
-    return user
-
-
-@pytest.fixture
-def agent(organization):
-    """Create and return an agent associated with the given organization."""
-    user = User.objects.create_user('agent', 'agent@example.com', 'password')
-    agent = Agent.objects.create(user=user, organization=organization, role='AGENT')
-    return agent
-
-
-@pytest.fixture
-def customer(organization):
-    """Create and return a customer associated with the given organization."""
-    return Customer.objects.create(name='Test Customer', organization=organization)
-
-
-@pytest.fixture
-def conversation(agent, customer):
-    """Create and return a conversation between the given agent and customer."""
-    return Conversation.objects.create(
-        path='path/to/conversation',
-        date=datetime.now(),
-        duration=123.45,
-        title='Test title',
-        summary='Test summary',
-        transcript=f"""
-        <agent>: Hello, {agent.user.username}, how can I assist you today?
-        <customer>: Hi, I have an issue with my product. It's acting weird.
-        <agent>: Could you describe the problem?
-        <customer>: Yes, it keeps making a strange noise and flashing red lights.
-        <agent>: That doesn't sound right. Let me look into that for you.
-        <customer>: Thank you, it's driving me crazy!
-        """ * 4,
-        sentiment=0.5,
-        agent=agent,
-        customer=customer,
-        input_tokens=100,
-        output_tokens=50
-    )
-
-
-@pytest.fixture
-def another_agent(another_organization):
-    """Create and return an agent associated with another organization."""
-    user = User.objects.create_user('another_agent', 'another_agent@example.com', 'password')
-    agent = Agent.objects.create(user=user, organization=another_organization, role='AGENT')
-    return agent
-
-
-@pytest.fixture
-def another_customer(another_organization):
-    """Create and return a customer associated with another organization."""
-    return Customer.objects.create(name='Another Customer', organization=another_organization)
-
-
-@pytest.fixture
-def another_conversation(another_agent, another_customer):
-    """Create and return another conversation between the given agent and customer."""
-    return Conversation.objects.create(
-        path='path/to/another_conversation',
-        date=datetime.now(),
-        duration=123.45,
-        transcript='Another test transcript',
-        summary='Another summary',
-        title='Another Conversation',
-        sentiment=0.5,
-        agent=another_agent,
-        customer=another_customer,
-        input_tokens=100,
-        output_tokens=50
-    )
 
 
 @pytest.mark.django_db
 class TestConversationList:
     """Tests for the conversation-list API endpoint"""
 
-    def test_superuser_can_list_all_conversations(self, client, superuser, conversation, another_conversation):
+    def test_superuser_can_list_all_conversations(self, client, superuser, conversation,
+                                                  another_organization_conversation):
         """
         Test that a superuser can list all conversations across all organizations.
         """
@@ -141,36 +20,36 @@ class TestConversationList:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) >= 2
 
-    def test_analyst_can_list_conversations_in_organization(self, client, organization_analyst_user, conversation):
+    def test_analyst_can_list_conversations_in_organization(self, client, analyst_user, conversation):
         """
         Test that an analyst can list conversations within their own organization,
         and does not see conversations from other organizations.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         response = client.get(reverse('conversation-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
         assert response.data['results'][0]['title'] == conversation.title
 
-    def test_agent_can_list_conversations_in_organization(self, client, agent, conversation):
+    def test_agent_can_list_conversations_in_organization(self, client, agent_user, conversation):
         """
         Test that an agent can list conversations within their own organization,
         and does not see conversations from other organizations.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         response = client.get(reverse('conversation-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
         assert response.data['results'][0]['title'] == conversation.title
 
     def test_another_organization_analyst_cannot_list_conversations(self, client, another_organization_analyst_user,
-                                                                    another_conversation):
+                                                                    another_organization_conversation):
         """Test that an analyst from another organization cannot list conversations."""
         client.force_authenticate(user=another_organization_analyst_user)
         response = client.get(reverse('conversation-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
-        assert response.data['results'][0]['title'] == another_conversation.title
+        assert response.data['results'][0]['title'] == another_organization_conversation.title
 
     def test_unauthenticated_user_cannot_list_conversations(self, client, organization):
         """
@@ -185,7 +64,8 @@ class TestConversationList:
 class TestConversationRetrieve:
     """Tests for the conversation-detail API endpoint"""
 
-    def test_superuser_can_view_any_conversation(self, client, superuser, conversation, another_conversation):
+    def test_superuser_can_view_any_conversation(self, client, superuser, conversation,
+                                                 another_organization_conversation):
         """
         Test that a superuser can view any conversation across all organizations.
         """
@@ -194,40 +74,41 @@ class TestConversationRetrieve:
         response = client.get(reverse('conversation-detail', args=[conversation.id]))
         assert response.status_code == status.HTTP_200_OK
 
-        response = client.get(reverse('conversation-detail', args=[another_conversation.id]))
+        response = client.get(reverse('conversation-detail', args=[another_organization_conversation.id]))
         assert response.status_code == status.HTTP_200_OK
 
-    def test_analyst_can_view_conversation_in_organization(self, client, organization_analyst_user, conversation):
+    def test_analyst_can_view_conversation_in_organization(self, client, analyst_user, conversation):
         """
         Test that an analyst can view a conversation within their own organization.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         response = client.get(reverse('conversation-detail', args=[conversation.id]))
         assert response.status_code == status.HTTP_200_OK
 
-    def test_analyst_cannot_view_conversation_in_other_organization(self, client, organization_analyst_user,
-                                                                    another_conversation):
+    def test_analyst_cannot_view_conversation_in_other_organization(self, client, analyst_user,
+                                                                    another_organization_conversation):
         """
         Test that an analyst cannot view a conversation from another organization.
         """
-        client.force_authenticate(user=organization_analyst_user)
-        response = client.get(reverse('conversation-detail', args=[another_conversation.id]))
+        client.force_authenticate(user=analyst_user)
+        response = client.get(reverse('conversation-detail', args=[another_organization_conversation.id]))
         assert response.status_code == status.HTTP_404_NOT_FOUND  # Not found due to queryset filtering
 
-    def test_agent_can_view_conversation_in_organization(self, client, agent, conversation):
+    def test_agent_can_view_conversation_in_organization(self, client, agent_user, conversation):
         """
         Test that an agent can view a conversation within their own organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         response = client.get(reverse('conversation-detail', args=[conversation.id]))
         assert response.status_code == status.HTTP_200_OK
 
-    def test_agent_cannot_view_conversation_in_other_organization(self, client, agent, another_conversation):
+    def test_agent_cannot_view_conversation_in_other_organization(self, client, agent_user,
+                                                                  another_organization_conversation):
         """
         Test that an agent cannot view a conversation from another organization.
         """
-        client.force_authenticate(user=agent.user)
-        response = client.get(reverse('conversation-detail', args=[another_conversation.id]))
+        client.force_authenticate(user=agent_user)
+        response = client.get(reverse('conversation-detail', args=[another_organization_conversation.id]))
         assert response.status_code == status.HTTP_404_NOT_FOUND  # Not found due to queryset filtering
 
     def test_unauthenticated_user_cannot_view_conversation(self, client, conversation):
@@ -242,7 +123,7 @@ class TestConversationRetrieve:
 @pytest.mark.django_db
 class TestConversationTranscript:
     def test_superuser_can_view_any_conversation_transcript(self, client, superuser, conversation,
-                                                            another_conversation):
+                                                            another_organization_conversation):
         """
         Test that a superuser can view the transcript of any conversation across all organizations.
         """
@@ -252,15 +133,15 @@ class TestConversationTranscript:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
-        url = reverse('conversation-transcript', args=[another_conversation.id])
+        url = reverse('conversation-transcript', args=[another_organization_conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
-    def test_analyst_can_view_conversation_transcript(self, client, organization_analyst_user, conversation):
+    def test_analyst_can_view_conversation_transcript(self, client, analyst_user, conversation):
         """
         Test that an analyst can view the transcript of a conversation within their own organization.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('conversation-transcript', args=[conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -268,21 +149,21 @@ class TestConversationTranscript:
         assert 'results' in response.data['transcript']
         assert len(response.data['transcript']['results']) > 0
 
-    def test_analyst_cannot_view_other_organization_conversation_transcript(self, client, organization_analyst_user,
-                                                                            another_conversation):
+    def test_analyst_cannot_view_other_organization_conversation_transcript(self, client, analyst_user,
+                                                                            another_organization_conversation):
         """
         Test that an analyst cannot view the transcript of a conversation from another organization.
         """
-        client.force_authenticate(user=organization_analyst_user)
-        url = reverse('conversation-transcript', args=[another_conversation.id])
+        client.force_authenticate(user=analyst_user)
+        url = reverse('conversation-transcript', args=[another_organization_conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND  # Not found due to queryset filtering
 
-    def test_agent_can_view_conversation_transcript(self, client, agent, conversation):
+    def test_agent_can_view_conversation_transcript(self, client, agent_user, conversation):
         """
         Test that an agent can view the transcript of a conversation within their own organization.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('conversation-transcript', args=[conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -290,21 +171,22 @@ class TestConversationTranscript:
         assert 'results' in response.data['transcript']
         assert len(response.data['transcript']['results']) > 0
 
-    def test_agent_cannot_view_other_organization_conversation_transcript(self, client, agent, another_conversation):
+    def test_agent_cannot_view_other_organization_conversation_transcript(self, client, agent_user,
+                                                                          another_organization_conversation):
         """
         Test that an agent cannot view the transcript of a conversation from another organization.
         """
-        client.force_authenticate(user=agent.user)
-        url = reverse('conversation-transcript', args=[another_conversation.id])
+        client.force_authenticate(user=agent_user)
+        url = reverse('conversation-transcript', args=[another_organization_conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND  # Not found due to queryset filtering
 
-    def test_process_transcript_output(self, client, organization_analyst_user, conversation):
+    def test_process_transcript_output(self, client, analyst_user, conversation):
         """
         Test that the process_transcript() method correctly processes the transcript and
         the ViewSet returns the expected paginated response.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('conversation-transcript', args=[conversation.id])
 
         # Fetch all pages of the transcript
@@ -354,14 +236,14 @@ class TestConversationTranscript:
             assert msg['message'] == expected_msg['message']
             assert msg['class'] == expected_msg['class']
 
-    def test_transcript_pagination(self, client, organization_analyst_user, conversation, settings):
+    def test_transcript_pagination(self, client, analyst_user, conversation, settings):
         """
         Test that the processed transcript is paginated correctly based on the PAGE_SIZE setting.
         """
         # Set page size for testing pagination
         settings.REST_FRAMEWORK['PAGE_SIZE'] = 15
 
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('conversation-transcript', args=[conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -440,11 +322,11 @@ class TestConversationCreate:
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_analyst_cannot_create_conversation(self, client, organization_analyst_user, agent, customer):
+    def test_analyst_cannot_create_conversation(self, client, analyst_user, agent, customer):
         """
         Test that an analyst cannot create a new conversation.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         data = {
             'path': 'path/to/new_conversation',
             'date': datetime.now().isoformat(),
@@ -462,11 +344,11 @@ class TestConversationCreate:
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_create_conversation(self, client, agent, customer):
+    def test_agent_cannot_create_conversation(self, client, agent_user, agent, customer):
         """
         Test that an agent cannot create a new conversation.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         data = {
             'path': 'path/to/new_conversation',
             'date': datetime.now().isoformat(),
@@ -545,20 +427,20 @@ class TestConversationUpdate:
         assert response.status_code == status.HTTP_200_OK
         assert Conversation.objects.filter(title='Updated Title').exists()
 
-    def test_analyst_cannot_update_conversation(self, client, organization_analyst_user, conversation):
+    def test_analyst_cannot_update_conversation(self, client, analyst_user, conversation):
         """
         Test that an analyst cannot update an existing conversation.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         data = {'title': 'Updated Title'}
         response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_update_conversation(self, client, agent, conversation):
+    def test_agent_cannot_update_conversation(self, client, agent_user, conversation):
         """
         Test that an agent cannot update an existing conversation.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         data = {'title': 'Updated Title'}
         response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -595,19 +477,19 @@ class TestConversationDelete:
         response = client.delete(reverse('conversation-detail', args=[conversation.id]))
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
-    def test_analyst_cannot_delete_conversation(self, client, organization_analyst_user, conversation):
+    def test_analyst_cannot_delete_conversation(self, client, analyst_user, conversation):
         """
         Test that an analyst cannot delete a conversation.
         """
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         response = client.delete(reverse('conversation-detail', args=[conversation.id]))
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_delete_conversation(self, client, agent, conversation):
+    def test_agent_cannot_delete_conversation(self, client, agent_user, conversation):
         """
         Test that an agent cannot delete a conversation.
         """
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         response = client.delete(reverse('conversation-detail', args=[conversation.id]))
         assert response.status_code == status.HTTP_403_FORBIDDEN
 

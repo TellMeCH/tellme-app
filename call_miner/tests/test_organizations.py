@@ -1,132 +1,10 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APIClient
-from django.contrib.auth.models import User
-from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic
+from call_miner.models import Organization, Conversation, Topic
 from datetime import datetime, timedelta, date
 
 TREND_ACTIONS = ['conversation-trend', 'conversation-topic-trend', 'duration-trend', 'sentiment-trend']
-
-
-@pytest.fixture
-def client():
-    """Return an instance of the DRF APIClient for testing."""
-    return APIClient()
-
-
-@pytest.fixture
-def organization():
-    """Create and return a test Organization."""
-    return Organization.objects.create(name='Test Organization', max_user_count=10)
-
-
-@pytest.fixture
-def another_organization():
-    """Create and return another test Organization."""
-    return Organization.objects.create(name='Another Organization', max_user_count=10)
-
-
-@pytest.fixture
-def superuser():
-    """Create and return a superuser for testing."""
-    user = User.objects.create_superuser('superuser', 'superuser@example.com', 'superpassword')
-    return user
-
-
-@pytest.fixture
-def organization_admin_user(organization):
-    """Create and return an organization admin user associated with the given organization."""
-    user = User.objects.create_user('orgadmin', 'orgadmin@example.com', 'password')
-    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=True)
-    return user
-
-
-@pytest.fixture
-def organization_analyst_user(organization):
-    """Create and return an analyst user associated with the given organization."""
-    user = User.objects.create_user('employee', 'employee@example.com', 'password')
-    Analyst.objects.create(user=user, organization=organization, role='ANALYST', is_organization_admin=False)
-    return user
-
-
-@pytest.fixture
-def another_organization_analyst_user(another_organization):
-    """Create and return an analyst user associated with another organization."""
-    user = User.objects.create_user('another_employee', 'another_employee@example.com', 'password')
-    Analyst.objects.create(user=user, organization=another_organization, role='ANALYST', is_organization_admin=False)
-    return user
-
-
-@pytest.fixture
-def agent(organization):
-    """Create and return an agent associated with the given organization."""
-    user = User.objects.create_user('agent', 'agent@example.com', 'password')
-    agent = Agent.objects.create(user=user, organization=organization, role='AGENT')
-    return agent
-
-
-@pytest.fixture
-def customer(organization):
-    """Create and return a customer associated with the given organization."""
-    return Customer.objects.create(name='Test Customer', organization=organization)
-
-
-@pytest.fixture
-def conversation(agent, customer):
-    """Create and return a conversation between the given agent and customer."""
-    return Conversation.objects.create(
-        path='path/to/conversation',
-        date=datetime.now(),
-        duration=123.45,
-        title='Test title',
-        summary='Test summary',
-        transcript=f"""
-        <agent>: Hello, {agent.user.username}, how can I assist you today?
-        <customer>: Hi, I have an issue with my product. It's acting weird.
-        <agent>: Could you describe the problem?
-        <customer>: Yes, it keeps making a strange noise and flashing red lights.
-        <agent>: That doesn't sound right. Let me look into that for you.
-        <customer>: Thank you, it's driving me crazy!
-        """ * 4,
-        sentiment=0.5,
-        agent=agent,
-        customer=customer,
-        input_tokens=100,
-        output_tokens=50
-    )
-
-
-@pytest.fixture
-def another_agent(another_organization):
-    """Create and return an agent associated with another organization."""
-    user = User.objects.create_user('another_agent', 'another_agent@example.com', 'password')
-    agent = Agent.objects.create(user=user, organization=another_organization, role='AGENT')
-    return agent
-
-
-@pytest.fixture
-def another_customer(another_organization):
-    """Create and return a customer associated with another organization."""
-    return Customer.objects.create(name='Another Customer', organization=another_organization)
-
-
-@pytest.fixture
-def another_conversation(another_agent, another_customer):
-    """Create and return another conversation between the given agent and customer."""
-    return Conversation.objects.create(
-        path='path/to/another_conversation',
-        date=datetime.now(),
-        duration=123.45,
-        transcript='Another test transcript',
-        title='Another Conversation',
-        summary='Another summary',
-        sentiment=0.5,
-        agent=another_agent,
-        customer=another_customer,
-        input_tokens=100,
-        output_tokens=50
-    )
 
 
 @pytest.mark.django_db
@@ -140,16 +18,16 @@ class TestOrganizationList:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) > 0  # Check that organizations are returned
 
-    def test_analyst_cannot_list_all_organizations(self, client, organization_analyst_user):
+    def test_analyst_cannot_list_all_organizations(self, client, analyst_user):
         """Test that a regular analyst cannot list all organizations."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-list')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_list_all_organizations(self, client, agent):
+    def test_agent_cannot_list_all_organizations(self, client, agent_user):
         """Test that an agent cannot list all organizations."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-list')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -161,9 +39,9 @@ class TestOrganizationList:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_unauthenticated_user_cannot_list_all_organizations(self, client, agent):
+    def test_unauthenticated_user_cannot_list_all_organizations(self, client, agent_user):
         """Test that an unauthenticated user cannot list all organizations."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-list')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -183,31 +61,31 @@ class TestOrganizationRetrieve:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
-    def test_analyst_can_retrieve_own_organization(self, client, organization_analyst_user, organization):
+    def test_analyst_can_retrieve_own_organization(self, client, analyst_user, organization):
         """Test that an analyst can retrieve their own organization."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-detail', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert response.data['name'] == 'Test Organization'
 
-    def test_analyst_cannot_retrieve_other_organization(self, client, organization_analyst_user, another_organization):
+    def test_analyst_cannot_retrieve_other_organization(self, client, analyst_user, another_organization):
         """Test that an analyst cannot retrieve another organization's details."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-detail', args=[another_organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_agent_cannot_retrieve_own_organization(self, client, agent, organization):
+    def test_agent_cannot_retrieve_own_organization(self, client, agent_user, organization):
         """Test that an agent cannot retrieve their own organization's details."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-detail', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_retrieve_other_organization(self, client, agent, another_organization):
+    def test_agent_cannot_retrieve_other_organization(self, client, agent_user, another_organization):
         """Test that an agent cannot retrieve another organization's details."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-detail', args=[another_organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -239,18 +117,18 @@ class TestOrganizationCreate:
         assert response.status_code == status.HTTP_201_CREATED
         assert Organization.objects.filter(name='New Organization').exists()
 
-    def test_analyst_cannot_create_organization(self, client, organization_analyst_user):
+    def test_analyst_cannot_create_organization(self, client, analyst_user):
         """Test that an analyst cannot create an organization."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-list')
         data = {'name': 'Unauthorized Organization', 'max_user_count': 20}
         response = client.post(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert not Organization.objects.filter(name='Unauthorized Organization').exists()
 
-    def test_agent_cannot_create_organization(self, client, agent):
+    def test_agent_cannot_create_organization(self, client, agent_user):
         """Test that an agent cannot create an organization."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-list')
         data = {'name': 'Unauthorized Organization', 'max_user_count': 20}
         response = client.post(url, data)
@@ -288,17 +166,17 @@ class TestOrganizationUpdate:
         assert organization.name == 'Updated Organization'
         assert organization.max_user_count == 15
 
-    def test_analyst_cannot_update_organization(self, client, organization_analyst_user, organization):
+    def test_analyst_cannot_update_organization(self, client, analyst_user, organization):
         """Test that an analyst cannot update an organization's details."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-detail', args=[organization.id])
         data = {'name': 'Unauthorized Update', 'max_user_count': 15}
         response = client.put(url, data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_update_organization(self, client, agent, organization):
+    def test_agent_cannot_update_organization(self, client, agent_user, organization):
         """Test that an agent cannot update an organization's details."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-detail', args=[organization.id])
         data = {'name': 'Unauthorized Update', 'max_user_count': 15}
         response = client.put(url, data, format='json')
@@ -332,17 +210,17 @@ class TestOrganizationDelete:
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not Organization.objects.filter(id=organization.id).exists()
 
-    def test_analyst_cannot_delete_organization(self, client, organization_analyst_user, organization):
+    def test_analyst_cannot_delete_organization(self, client, analyst_user, organization):
         """Test that an analyst cannot delete an organization."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-detail', args=[organization.id])
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert Organization.objects.filter(id=organization.id).exists()
 
-    def test_agent_cannot_delete_organization(self, client, agent, organization):
+    def test_agent_cannot_delete_organization(self, client, agent_user, organization):
         """Test that an agent cannot delete an organization."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-detail', args=[organization.id])
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -379,34 +257,35 @@ class TestOrganizationActions:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
-    def test_analyst_can_access_own_organization_conversations_action(self, client, organization_analyst_user,
+    def test_analyst_can_access_own_organization_conversations_action(self, client, analyst_user,
                                                                       organization,
                                                                       conversation):
         """Test that an analyst can access the conversations of their own organization."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversations', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['conversations']['results']) == 1
 
-    def test_analyst_cannot_access_other_organization_conversations_action(self, client, organization_analyst_user,
+    def test_analyst_cannot_access_other_organization_conversations_action(self, client, analyst_user,
                                                                            another_organization):
         """Test that an analyst cannot access the conversations of another organization."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversations', args=[another_organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_agent_cannot_access_own_organization_conversations_action(self, client, agent, organization):
+    def test_agent_cannot_access_own_organization_conversations_action(self, client, agent_user, organization):
         """Test that an agent cannot access the conversations of their own organization."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-conversations', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_access_other_organization_conversations_action(self, client, agent, another_organization):
+    def test_agent_cannot_access_other_organization_conversations_action(self, client, agent_user,
+                                                                         another_organization):
         """Test that an agent cannot access the conversations of another organization."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         url = reverse('organization-conversations', args=[another_organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -440,34 +319,34 @@ class TestOrganizationActions:
                 response = client.get(url)
                 assert response.status_code == status.HTTP_200_OK
 
-    def test_analyst_can_access_own_organization_trends_actions(self, client, organization_analyst_user, organization):
+    def test_analyst_can_access_own_organization_trends_actions(self, client, analyst_user, organization):
         """Test that an analyst can access the trend actions of their own organization."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         for action in TREND_ACTIONS:
             url = reverse(f'organization-{action}', args=[organization.id])
             response = client.get(url)
             assert response.status_code == status.HTTP_200_OK
 
-    def test_analyst_cannot_access_other_organization_trends_actions(self, client, organization_analyst_user,
+    def test_analyst_cannot_access_other_organization_trends_actions(self, client, analyst_user,
                                                                      another_organization):
         """Test that an analyst cannot access the trend actions of another organization."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         for action in TREND_ACTIONS:
             url = reverse(f'organization-{action}', args=[another_organization.id])
             response = client.get(url)
             assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_agent_cannot_access_own_organization_trends_actions(self, client, agent, organization):
+    def test_agent_cannot_access_own_organization_trends_actions(self, client, agent_user, organization):
         """Test that an agent cannot access the trend actions of their own organization."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         for action in TREND_ACTIONS:
             url = reverse(f'organization-{action}', args=[organization.id])
             response = client.get(url)
             assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_cannot_access_other_organization_trends_actions(self, client, agent, another_organization):
+    def test_agent_cannot_access_other_organization_trends_actions(self, client, agent_user, another_organization):
         """Test that an agent cannot access the trend actions of another organization."""
-        client.force_authenticate(user=agent.user)
+        client.force_authenticate(user=agent_user)
         for action in TREND_ACTIONS:
             url = reverse(f'organization-{action}', args=[another_organization.id])
             response = client.get(url)
@@ -495,10 +374,10 @@ class TestOrganizationActions:
             response = client.get(url)
             assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_conversations_action_returns_correct_data(self, client, organization_analyst_user, organization,
+    def test_conversations_action_returns_correct_data(self, client, analyst_user, organization,
                                                        conversation):
         """Check the content of an organization's conversations."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversations', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -507,9 +386,9 @@ class TestOrganizationActions:
         conversations = data['conversations']['results']
         assert len(conversations) == 1
         assert conversations[0]['title'] == conversation.title
-        assert conversations[0]['date'].replace('Z', '') == conversation.date.isoformat()  # Adjust for timezone
+        assert conversations[0]['date'].replace('Z', '') == conversation.date.strftime('%Y-%m-%dT%H:%M:%S')
 
-    def test_conversations_action_pagination(self, client, organization_analyst_user, organization, agent, customer):
+    def test_conversations_action_pagination(self, client, analyst_user, organization, agent, customer):
         """Check that pagination works when calling organization-conversations."""
         # Create multiple conversations to test pagination
         for i in range(15):
@@ -526,7 +405,7 @@ class TestOrganizationActions:
                 input_tokens=100 + i,
                 output_tokens=50 + i
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversations', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -535,7 +414,7 @@ class TestOrganizationActions:
         assert len(conversations) == 15
         assert 'next' in data['conversations']
 
-    def test_conversation_trend_action_returns_correct_data(self, client, organization_analyst_user, organization,
+    def test_conversation_trend_action_returns_correct_data(self, client, analyst_user, organization,
                                                             agent,
                                                             customer):
         """Check that the daily conversation trend responds as expected to the different period specifications."""
@@ -554,7 +433,7 @@ class TestOrganizationActions:
                 input_tokens=100 + i,
                 output_tokens=50 + i
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversation-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
@@ -567,7 +446,7 @@ class TestOrganizationActions:
             assert 'count' in entry
             assert entry['count'] == 1
 
-    def test_conversation_topic_trend_action_returns_correct_data(self, client, organization_analyst_user, organization,
+    def test_conversation_topic_trend_action_returns_correct_data(self, client, analyst_user, organization,
                                                                   agent,
                                                                   customer):
         """Check that the organization's topic trends are as expected."""
@@ -593,7 +472,7 @@ class TestOrganizationActions:
                 conv.topics.add(topic1)
             else:
                 conv.topics.add(topic2)
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversation-topic-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
@@ -608,7 +487,7 @@ class TestOrganizationActions:
             assert entry['count'] == 1
             assert entry['topic'] in ['Topic 1', 'Topic 2']
 
-    def test_duration_trend_action_returns_correct_data(self, client, organization_analyst_user, organization, agent,
+    def test_duration_trend_action_returns_correct_data(self, client, analyst_user, organization, agent,
                                                         customer):
         """Check that the duration trend of the organization returns the expected results."""
         # Create conversations with varying durations
@@ -626,7 +505,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-duration-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
@@ -639,7 +518,7 @@ class TestOrganizationActions:
             assert 'avg_value' in entry
             assert entry['avg_value'] in [100.0, 110.0, 120.0, 130.0, 140.0]
 
-    def test_sentiment_trend_action_returns_correct_data(self, client, organization_analyst_user, organization, agent,
+    def test_sentiment_trend_action_returns_correct_data(self, client, analyst_user, organization, agent,
                                                          customer):
         """Check that the sentiment trend of the organization returns the expected results."""
         # Create conversations with varying sentiments
@@ -657,7 +536,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-sentiment-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
@@ -669,15 +548,15 @@ class TestOrganizationActions:
             assert 'date' in entry
             assert 'avg_value' in entry
 
-    def test_trend_actions_invalid_trend_period(self, client, organization_analyst_user, organization):
+    def test_trend_actions_invalid_trend_period(self, client, analyst_user, organization):
         """Test that an error is raised whenever an incorrect trend period is specified."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         for action in TREND_ACTIONS:
             url = reverse(f'organization-{action}', args=[organization.id])
             response = client.get(url, {'trend_period': 'invalid_period'})
             assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_conversation_trend_action_weekly_period(self, client, organization_analyst_user, organization, agent,
+    def test_conversation_trend_action_weekly_period(self, client, analyst_user, organization, agent,
                                                      customer):
         """Test the conversation trend action when a weekly period is specified."""
         # Create conversations over several weeks
@@ -695,7 +574,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversation-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'weekly'})
         assert response.status_code == status.HTTP_200_OK
@@ -706,7 +585,7 @@ class TestOrganizationActions:
             assert 'date' in entry
             assert 'count' in entry
 
-    def test_conversation_trend_action_monthly_period(self, client, organization_analyst_user, organization, agent,
+    def test_conversation_trend_action_monthly_period(self, client, analyst_user, organization, agent,
                                                       customer):
         """Test the conversation trend action when a monthly period is specified."""
         # Create conversations over several months
@@ -724,7 +603,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversation-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
@@ -735,7 +614,7 @@ class TestOrganizationActions:
             assert 'date' in entry
             assert 'count' in entry
 
-    def test_duration_trend_action_weekly_period(self, client, organization_analyst_user, organization, agent,
+    def test_duration_trend_action_weekly_period(self, client, analyst_user, organization, agent,
                                                  customer):
         """Test the duration trend action when a weekly period is specified."""
         # Create conversations over several weeks
@@ -753,7 +632,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-duration-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'weekly'})
         assert response.status_code == status.HTTP_200_OK
@@ -764,7 +643,7 @@ class TestOrganizationActions:
             assert 'date' in entry
             assert 'avg_value' in entry
 
-    def test_duration_trend_action_monthly_period(self, client, organization_analyst_user, organization, agent,
+    def test_duration_trend_action_monthly_period(self, client, analyst_user, organization, agent,
                                                   customer):
         """Test the duration trend action when a monthly period is specified."""
         # Create conversations over several months
@@ -782,7 +661,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-duration-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
@@ -793,7 +672,7 @@ class TestOrganizationActions:
             assert 'date' in entry
             assert 'avg_value' in entry
 
-    def test_sentiment_trend_action_weekly_period(self, client, organization_analyst_user, organization, agent,
+    def test_sentiment_trend_action_weekly_period(self, client, analyst_user, organization, agent,
                                                   customer):
         """Test the sentiment trend action when a weekly period is specified."""
         # Create conversations over several weeks
@@ -811,7 +690,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-sentiment-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'weekly'})
         assert response.status_code == status.HTTP_200_OK
@@ -822,7 +701,7 @@ class TestOrganizationActions:
             assert 'date' in entry
             assert 'avg_value' in entry
 
-    def test_sentiment_trend_action_monthly_period(self, client, organization_analyst_user, organization, agent,
+    def test_sentiment_trend_action_monthly_period(self, client, analyst_user, organization, agent,
                                                    customer):
         """Test the sentiment trend action when a monthly period is specified."""
         # Create conversations over several months
@@ -840,7 +719,7 @@ class TestOrganizationActions:
                 input_tokens=100,
                 output_tokens=50
             )
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-sentiment-trend', args=[organization.id])
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
@@ -851,9 +730,9 @@ class TestOrganizationActions:
             assert 'date' in entry
             assert 'avg_value' in entry
 
-    def test_conversations_action_no_data(self, client, organization_analyst_user, organization):
+    def test_conversations_action_no_data(self, client, analyst_user, organization):
         """Test that the conversations action can return an empty result when no conversations are present."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         url = reverse('organization-conversations', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
@@ -861,9 +740,9 @@ class TestOrganizationActions:
         assert 'conversations' in data
         assert data['conversations']['results'] == []
 
-    def test_trends_actions_no_data(self, client, organization_analyst_user, organization):
+    def test_trends_actions_no_data(self, client, analyst_user, organization):
         """Test that the conversation trend actions can return an empty result when no conversations are present."""
-        client.force_authenticate(user=organization_analyst_user)
+        client.force_authenticate(user=analyst_user)
         for action in TREND_ACTIONS:
             url = reverse(f'organization-{action}', args=[organization.id])
             response = client.get(url, {'trend_period': 'daily'})
