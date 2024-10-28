@@ -87,7 +87,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             return ConversationDetailSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return ConversationModifySerializer
-        return ConversationListSerializer
+        raise ValueError(f'Action {self.action} not permitted.')
 
     def get_queryset(self):
         """
@@ -122,7 +122,7 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
             return ConversationTrendsSerializer
-        return OrganizationDetailSerializer
+        raise ValueError(f'Action {self.action} not permitted.')
 
     def get_queryset(self):
         if self.request.user.is_superuser:
@@ -147,7 +147,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
             return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return TopicModifySerializer
-        return TopicListSerializer
+        raise ValueError(f'Action {self.action} not permitted.')
 
     def get_queryset(self):
         """
@@ -194,7 +194,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
             return ConversationTrendsSerializer
-        return AgentListSerializer
+        raise ValueError(f'Action {self.action} not permitted.')
 
     def get_queryset(self):
         """
@@ -229,7 +229,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
             return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return CustomerModifySerializer
-        return CustomerListSerializer
+        raise ValueError(f'Action {self.action} not permitted.')
 
     def get_queryset(self):
         """
@@ -252,7 +252,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             return EmployeeListSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return EmployeeModifySerializer
-        return EmployeeListSerializer
+        raise ValueError(f'Action {self.action} not permitted.')
 
     def get_queryset(self):
         """
