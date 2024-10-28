@@ -1,8 +1,7 @@
 from django.urls import reverse
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
-from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Analyst, Customer
-from django.contrib.auth.models import User
+from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Analyst, Customer, User
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 
 
@@ -406,16 +405,15 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ('id', 'username', 'password', 'email')
+        fields = ('username', 'password', 'email')
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
-        user = User(
+        user = User.objects.create_user(
             email=validated_data['email'],
-            username=validated_data['username']
+            username=validated_data['username'],
+            password=validated_data['password']
         )
-        user.set_password(validated_data['password'])
-        user.save()
         return user
 
     def update(self, instance, validated_data):
@@ -451,7 +449,7 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ['id', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
+        fields = ['organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
         read_only_fields = ['created', 'updated']
 
     def validate(self, data):
