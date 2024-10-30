@@ -1,8 +1,9 @@
+import pytz
 import pytest
 from django.urls import reverse
 from rest_framework import status
 from call_miner.models import Organization, Conversation, Topic
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 
 TREND_ACTIONS = ['conversation-trend', 'conversation-topic-trend', 'duration-trend', 'sentiment-trend']
 
@@ -394,7 +395,7 @@ class TestOrganizationActions:
         for i in range(15):
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=datetime.now() - timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) - timedelta(days=i),
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -422,7 +423,7 @@ class TestOrganizationActions:
         for i in range(5):
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=datetime.now() - timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) - timedelta(days=i),
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -457,7 +458,7 @@ class TestOrganizationActions:
         for i in range(5):
             conv = Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=datetime.now() - timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) - timedelta(days=i),
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -494,7 +495,7 @@ class TestOrganizationActions:
         for i in range(5):
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=datetime.now() - timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) - timedelta(days=i),
                 duration=100 + i * 10,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -525,7 +526,7 @@ class TestOrganizationActions:
         for i in range(5):
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=datetime.now() - timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) - timedelta(days=i),
                 duration=100,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -563,7 +564,7 @@ class TestOrganizationActions:
         for i in range(21):  # 3 weeks
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=date(2024, 1, 1) + timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=i),
                 duration=100,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -592,7 +593,7 @@ class TestOrganizationActions:
         for i in range(90):  # 3 months
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=date(2024, 1, 1) + timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=i),
                 duration=100,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -621,7 +622,7 @@ class TestOrganizationActions:
         for i in range(21):  # 3 weeks
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=date(2024, 1, 1) + timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=i),
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -650,7 +651,7 @@ class TestOrganizationActions:
         for i in range(90):  # Approx 3 months
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=date(2024, 1, 1) + timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=i),
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -679,7 +680,7 @@ class TestOrganizationActions:
         for i in range(21):  # 3 weeks
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=date(2024, 1, 1) + timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=i),
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -708,7 +709,7 @@ class TestOrganizationActions:
         for i in range(90):  # Approx 3 months
             Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=date(2024, 1, 1) + timedelta(days=i),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=i),
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',

@@ -1,5 +1,6 @@
 import pytest
-from datetime import timedelta, date
+import pytz
+from datetime import timedelta, datetime
 from unittest.mock import patch
 from django.db import IntegrityError
 from django.utils import timezone
@@ -50,7 +51,7 @@ def another_topic_same_organization(organization):
 def another_conversation_same_organization(agent, customer, another_topic_same_organization):
     another_conv = Conversation.objects.create(
         path="Another Test Call",
-        date=date(2024, 1, 1) + timedelta(days=1),
+        date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=1),
         duration=45,
         transcript="<agent>: How can I help you? <customer>: I have an issue.",
         sentiment=0.6,
@@ -76,7 +77,7 @@ class TestMetaSummaryAbstractModel:
         mock_condense.assert_called_once_with([conversation.summary])
         assert topic.summary == "Mocked Summary"
         assert topic.summary_call_count == 1
-        assert topic.summary_date.date() == conversation.date
+        assert topic.summary_date == conversation.date
 
     def test_meta_summary_no_update_when_deviation_not_significant(self, topic, conversation, mocker):
         """
@@ -136,8 +137,8 @@ class TestConversationStatsAbstractModel:
         topic.update_conversation_stats()
         topic.refresh_from_db()
         assert topic.conversation_count == 1
-        assert topic.first_conversation_date.date() == conversation.date
-        assert topic.last_conversation_date.date() == conversation.date
+        assert topic.first_conversation_date == conversation.date
+        assert topic.last_conversation_date == conversation.date
 
     def test_conversation_stats_multiple_conversations(self, topic, conversation,
                                                        another_conversation_same_organization):
@@ -150,8 +151,8 @@ class TestConversationStatsAbstractModel:
         expected_first_date = min(conversation.date, another_conversation_same_organization.date)
         expected_last_date = max(conversation.date, another_conversation_same_organization.date)
         assert topic.conversation_count == 2
-        assert topic.first_conversation_date.date() == expected_first_date
-        assert topic.last_conversation_date.date() == expected_last_date
+        assert topic.first_conversation_date == expected_first_date
+        assert topic.last_conversation_date == expected_last_date
 
     def test_conversation_stats_updates_on_delete(self, topic, conversation):
         """
@@ -170,8 +171,8 @@ class TestConversationStatsAbstractModel:
         agent.update_conversation_stats()
         agent.refresh_from_db()
         assert agent.conversation_count == 1
-        assert agent.first_conversation_date.date() == conversation.date
-        assert agent.last_conversation_date.date() == conversation.date
+        assert agent.first_conversation_date == conversation.date
+        assert agent.last_conversation_date == conversation.date
 
     def test_agent_conversation_stats_multiple_conversations(self, agent, conversation,
                                                              another_conversation_same_organization):
@@ -185,8 +186,8 @@ class TestConversationStatsAbstractModel:
         expected_first_date = min(conversation.date, another_conversation_same_organization.date)
         expected_last_date = max(conversation.date, another_conversation_same_organization.date)
         assert agent.conversation_count == 2
-        assert agent.first_conversation_date.date() == expected_first_date
-        assert agent.last_conversation_date.date() == expected_last_date
+        assert agent.first_conversation_date == expected_first_date
+        assert agent.last_conversation_date == expected_last_date
 
     def test_agent_conversation_stats_after_delete(self, agent, conversation):
         """
@@ -205,8 +206,8 @@ class TestConversationStatsAbstractModel:
         customer.update_conversation_stats()
         customer.refresh_from_db()
         assert customer.conversation_count == 1
-        assert customer.first_conversation_date.date() == conversation.date
-        assert customer.last_conversation_date.date() == conversation.date
+        assert customer.first_conversation_date == conversation.date
+        assert customer.last_conversation_date == conversation.date
 
     def test_customer_conversation_stats_multiple_conversations(self, customer, conversation,
                                                                 another_conversation_same_organization):
@@ -220,8 +221,8 @@ class TestConversationStatsAbstractModel:
         expected_first_date = min(conversation.date, another_conversation_same_organization.date)
         expected_last_date = max(conversation.date, another_conversation_same_organization.date)
         assert customer.conversation_count == 2
-        assert customer.first_conversation_date.date() == expected_first_date
-        assert customer.last_conversation_date.date() == expected_last_date
+        assert customer.first_conversation_date == expected_first_date
+        assert customer.last_conversation_date == expected_last_date
 
     def test_customer_conversation_stats_after_delete(self, customer, conversation):
         """
@@ -644,7 +645,7 @@ class TestConversation:
         with pytest.raises(ValueError):
             Conversation.objects.create(
                 path="Invalid Call",
-                date=timezone.now(),
+                date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC),
                 duration=60,
                 transcript="Invalid transcript",
                 sentiment=0.5,

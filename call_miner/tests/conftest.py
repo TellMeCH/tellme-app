@@ -1,8 +1,9 @@
+import pytz
 import pytest
 from unittest.mock import patch, Mock
 import uuid
 from rest_framework.test import APIClient
-from datetime import timedelta, date
+from datetime import timedelta, datetime
 from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic, User, Employee
 
 
@@ -151,7 +152,7 @@ def conversation(agent, customer, topic):
     """Create and return a conversation between the given agent and customer."""
     conv = Conversation.objects.create(
         path='path/to/conversation',
-        date=date(2024, 1, 1),
+        date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC),
         duration=123.45,
         title='Test Conversation',
         summary='Test summary',
@@ -179,7 +180,7 @@ def another_organization_conversation(another_organization_agent, another_organi
     """Create and return another conversation between the given agent and customer."""
     conv = Conversation.objects.create(
         path='path/to/another_conversation',
-        date=date(2024, 1, 1) + timedelta(days=1),
+        date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=1),
         duration=123.45,
         title='Another Conversation',
         summary='Another summary',

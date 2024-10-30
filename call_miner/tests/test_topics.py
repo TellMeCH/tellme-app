@@ -617,7 +617,7 @@ class TestTopicSummary:
             summary_data = response.data['summary_data']
             assert summary_data['summary'] == 'Mocked summary text'
             assert summary_data['summary_call_count'] == 1
-            assert summary_data['summary_date'].date() == conversation.date
+            assert summary_data['summary_date'].date() == conversation.date.date()
 
 
 @pytest.mark.django_db

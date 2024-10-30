@@ -348,7 +348,7 @@ class TestCustomerActions:
         results = response.data['conversation_trend']['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
-        assert results[0]['date'].date() == conversation.date
+        assert results[0]['date'] == conversation.date
 
     def test_customer_conversation_topic_trend_action_returns_expected_content(self, client, agent_user, customer,
                                                                                conversation):
@@ -363,7 +363,7 @@ class TestCustomerActions:
         results = response.data['conversation_topic_trend']['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
-        assert results[0]['date'].date() == conversation.date
+        assert results[0]['date'] == conversation.date
         assert results[0]['topic'] == str(conversation.topics.all()[0])
 
     def test_customer_duration_trend_action_returns_expected_content(self, client, agent_user, customer, conversation):

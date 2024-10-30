@@ -1,7 +1,6 @@
 from django.urls import reverse
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
-from django.core.exceptions import ValidationError
 from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Analyst, Customer, User
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 

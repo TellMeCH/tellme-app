@@ -143,7 +143,7 @@ REST_FRAMEWORK = {
 AUTH_USER_MODEL = 'call_miner.User'
 
 # Logging
-TELLME_ENV = os.getenv('TELLME_ENV', 'development')
+TELLME_ENV = os.getenv('TELLME_ENV', 'dev')
 
 sentry_sdk.init(
     dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",

@@ -117,7 +117,7 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
     cursor_ordering = ['name']
 
     def get_serializer_class(self):
-        if self.action in ['retrieve']:
+        if self.action in ['retrieve', 'list', 'modify', 'create', 'update']:
             return OrganizationDetailSerializer
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
