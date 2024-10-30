@@ -1,6 +1,7 @@
 from django.urls import reverse
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
+from django.core.exceptions import ValidationError
 from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Analyst, Customer, User
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 
@@ -473,36 +474,45 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({
                         "organization": "Superusers must provide an organization when creating an Employee."
                     })
-            return data
+                else:
+                    organization = data.get('organization')
+            else:
+                organization = self.instance.organization
+        else:
+            if not hasattr(current_user, 'employee'):
+                raise serializers.ValidationError("Current user is not associated with an Employee profile.")
 
-        # For non-superusers, check more things
-        if not hasattr(current_user, 'employee'):
-            raise serializers.ValidationError("Current user is not associated with an Employee profile.")
+            # Non-superusers should not specify an organization
+            if 'organization' in data:
+                if data['organization'] is not None:
+                    raise serializers.ValidationError({
+                        "organization": f"Org Admins should not provide an organization when modifying an Employee."
+                    })
+            # Enforce the organization from the current user's employee profile
+            user_organization = current_user.employee.organization
+            data['organization'] = user_organization
+            organization = user_organization
 
-        user_organization = current_user.employee.organization
-
-        # Non-superusers should not specify an organization
-        if 'organization' in data:
-            if data['organization'] is not None:
-                raise serializers.ValidationError({
-                    "organization": f"Org Admins should not provide an organization when modifying an Employee."
-                })
-
-        # Enforce the user's organization
-        data['organization'] = user_organization
+        # Check if creating a new employee would exceed the organization's max_user_count
+        current_employee_count = Employee.objects.filter(organization=organization).count()
+        if self.instance is None:
+            if current_employee_count >= organization.max_user_count:
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["Cannot add more users to this organization; max user count reached."]}
+                )
 
         # If manager is specified, check that they are in the same organization
         manager = data.get('manager')
-        if manager and manager.organization != user_organization:
+        if manager and manager.organization != organization:
             raise serializers.ValidationError({
                 'manager': 'Manager must belong to the same organization as the current user.'
             })
 
+        # Check that no manager was mistakenly assigned to an analyst
         if manager and data.get('role') == 'ANALYST':
             raise serializers.ValidationError({
                 'role': "Analysts can't have managers."
             })
-
         return data
 
     def create(self, validated_data):

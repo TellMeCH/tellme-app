@@ -7,7 +7,8 @@ ERROR_MESSAGES = {
     'org_admins_organization': "Org Admins should not provide an organization when modifying an Employee.",
     'manager_same_organization': 'Manager must belong to the same organization as the current user.',
     'analysts_managers': "Analysts can't have managers.",
-    'superusers_organization': "Superusers must provide an organization when creating an Employee."
+    'superusers_organization': "Superusers must provide an organization when creating an Employee.",
+    'max_user_count_reached': "Cannot add more users to this organization; max user count reached."
 }
 
 
@@ -342,6 +343,80 @@ class TestEmployeeCreate:
         }
         response = client.post(url, data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_superuser_cannot_create_employee_beyond_max_user_count(self, client, superuser, organization):
+        """Test that even a superuser cannot create more employees than the organization's max_user_count."""
+        client.force_authenticate(user=superuser)
+        url = reverse('employee-list')
+        employees_to_create = organization.max_user_count - Employee.objects.filter(organization=organization).count()
+
+        # Create employees up to the max count
+        for i in range(employees_to_create):
+            url = reverse('employee-list')
+            data = {
+                'user': {
+                    'username': f'superuser_employee_{i}',
+                    'password': 'password',
+                    'email': f'superuser_employee_{i}@example.com'
+                },
+                'role': 'ANALYST',
+                'manager': None,
+                'is_organization_admin': False,
+                'organization': organization.id
+            }
+            response = client.post(url, data, format='json')
+            assert response.status_code == status.HTTP_201_CREATED
+
+        # Attempt to create one more employee beyond the max count
+        data = {
+            'user': {
+                'username': 'excess_superuser_employee',
+                'password': 'password',
+                'email': 'excess_superuser_employee@example.com'
+            },
+            'role': 'ANALYST',
+            'manager': None,
+            'is_organization_admin': False,
+            'organization': organization.id
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['max_user_count_reached'] in str(response.data['non_field_errors'])
+
+    def test_organization_admin_cannot_create_employee_beyond_max_user_count(self, client, organization_admin_user,
+                                                                             organization):
+        """Test that an organization admin cannot create more employees than the organization's max_user_count."""
+        client.force_authenticate(user=organization_admin_user)
+        url = reverse('employee-list')
+        employees_to_create = organization.max_user_count - Employee.objects.filter(organization=organization).count()
+
+        # Create employees up to the max count
+        for i in range(employees_to_create):
+            data = {
+                'user': {
+                    'username': f'employee_{i}',
+                    'password': 'password',
+                    'email': f'employee_{i}@example.com'
+                },
+                'role': 'AGENT',
+                'is_organization_admin': False
+            }
+            response = client.post(url, data, format='json')
+            assert response.status_code == status.HTTP_201_CREATED
+
+        # Attempt to create one more employee beyond the max count
+        data = {
+            'user': {
+                'username': 'excess_employee',
+                'password': 'password',
+                'email': 'excess_employee@example.com'
+            },
+            'role': 'AGENT',
+            'is_organization_admin': False
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['max_user_count_reached'] in str(response.data['non_field_errors'])
 
 
 @pytest.mark.django_db

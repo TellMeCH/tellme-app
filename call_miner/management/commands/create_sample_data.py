@@ -15,7 +15,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             self.stdout.write('Creating Sample Organizations')
-            org = Organization(name='ACME Org')
+            org = Organization(name='ACME Org', max_user_count=20)
             org.save()
 
             other_org = Organization(name='Competitors Inc.')
