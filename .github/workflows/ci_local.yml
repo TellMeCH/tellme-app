@@ -55,6 +55,10 @@ jobs:
             sleep 1
           done
 
+      - name: Define Fake Environment Variables
+        run: |
+          echo "OPENAI_API_KEY='blabla'" >> $GITHUB_ENV
+
       - name: Make Migrations
         run: |
           poetry run python manage.py makemigrations
@@ -66,3 +70,5 @@ jobs:
       - name: Run Tests
         run: |
           poetry run pytest -v
+        env:
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}

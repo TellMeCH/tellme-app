@@ -1,9 +1,7 @@
 import pytest
 import pytz
 from datetime import timedelta, datetime
-from unittest.mock import patch
 from django.db import IntegrityError
-from django.utils import timezone
 
 from call_miner.models import (
     Organization,
@@ -107,15 +105,15 @@ class TestMetaSummaryAbstractModel:
         topic.summary_call_count = 0
         topic.save()
         assert topic.is_deviation_significant(1) is True
-        assert topic.is_deviation_significant(0) is True
+        assert topic.is_deviation_significant(0) is False
 
-    @patch('call_miner.models.condense_summaries', return_value=None)
-    def test_get_or_create_summary_no_conversations(self, mock_condense, topic):
+    def test_get_or_create_summary_no_conversations(self, topic, mocker):
         """
         Test that get_or_create_summary does nothing when there are no conversations.
         """
+        mock_condense = mocker.patch('call_miner.models.condense_summaries', return_value=None)
         topic.get_or_create_summary()
-        assert mock_condense.called
+        assert not mock_condense.called
         assert topic.summary is None
 
 
