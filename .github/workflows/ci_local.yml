@@ -29,6 +29,9 @@ jobs:
       DATABASE_PASSWORD: postgres
       DATABASE_HOST: localhost
       DATABASE_PORT: 5432
+      OPENAI_API_KEY: 'bla bla'
+      DEBUG: 1
+      SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY_DEV }}
 
     steps:
       - name: Checkout code
@@ -55,10 +58,6 @@ jobs:
             sleep 1
           done
 
-      - name: Define Fake Environment Variables
-        run: |
-          echo "OPENAI_API_KEY='blabla'" >> $GITHUB_ENV
-
       - name: Make Migrations
         run: |
           poetry run python manage.py makemigrations
@@ -70,5 +69,3 @@ jobs:
       - name: Run Tests
         run: |
           poetry run pytest -v
-        env:
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
