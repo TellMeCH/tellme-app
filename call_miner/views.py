@@ -1,5 +1,7 @@
 from rest_framework import viewsets, decorators, response, status
 from .models import Conversation, Organization, Topic, Employee, Agent, Customer
+from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
+from django.db.models import F
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
@@ -81,7 +83,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     cursor_ordering = ['-date']
 
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action in ['list', 'search']:
             return ConversationListSerializer
         elif self.action in ['retrieve', 'transcript']:
             return ConversationDetailSerializer
@@ -104,6 +106,39 @@ class ConversationViewSet(viewsets.ModelViewSet):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         return response.Response({'transcript': serializer.get_processed_transcript(obj)})
+
+    @decorators.action(detail=False, methods=['get'], url_path='search')
+    def search(self, request):
+        query = request.query_params.get('query', None)
+        if not query:
+            return response.Response({"detail": "No search query provided."}, status=400)
+
+        search_vector = (
+                SearchVector('transcript', weight='A') +
+                SearchVector('summary', weight='A') +
+                SearchVector(F('customer__name'), weight='B') +
+                SearchVector(F('topics__name'), weight='B')
+        )
+        search_query = SearchQuery(query, search_type='websearch')
+
+        # Get the base queryset, rank by search query, and filter based on the search rank
+        queryset = self.get_queryset().select_related('customer', 'agent').prefetch_related('topics')
+        queryset = (
+            queryset.annotate(
+                rank=SearchRank(search_vector, search_query)
+            )
+            .filter(rank__gte=0.1)
+            .order_by('-rank')
+            .distinct()
+        )
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        return response.Response(serializer.data)
 
     def get_serializer_context(self):
         # Ensure the request context is passed to the serializer
