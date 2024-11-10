@@ -508,3 +508,110 @@ class TestConversationDelete:
         """
         response = client.delete(reverse('conversation-detail', args=[conversation.id]))
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestConversationSearch:
+    """Tests for the conversation search functionality"""
+    @staticmethod
+    def response_from_search_url(client, search_query: str):
+        """
+         Helper method to fetch all paginated results given a search query
+
+         :param client: The APIClient instance.
+         :param search_query: Search query to construct the first URL from.
+         :return: A list containing all results from all pages.
+         """
+        all_results = []
+        next_url = reverse('conversation-search') + f'?query={search_query}'
+        while next_url:
+            response = client.get(next_url)
+            assert response.status_code == status.HTTP_200_OK
+            data = response.data
+            results = data.get('results', [])
+            all_results.extend(results)
+            next_url = data.get('next')
+        return all_results
+
+    def test_search_by_customer_name(self, client, analyst_user, conversation):
+        """
+        Test that conversations can be searched and retrieved based on a customer name.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = conversation.customer.name
+        results = self.response_from_search_url(client, search_query)
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+
+        assert len(results) >= 1
+        assert str(conversation.id) in conversation_ids
+
+    def test_search_by_transcript_content(self, client, analyst_user, conversation):
+        """
+        Test that conversations can be searched and retrieved based on content in the transcript.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "strange noise"
+        results = self.response_from_search_url(client, search_query)
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+
+        assert len(results) >= 1
+        assert str(conversation.id) in conversation_ids
+
+    def test_search_by_summary_content(self, client, analyst_user, conversation):
+        """
+        Test that conversations can be searched and retrieved based on content in the summary.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = conversation.summary
+        results = self.response_from_search_url(client, search_query)
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+
+        assert len(results) >= 1
+        assert str(conversation.id) in conversation_ids
+
+    def test_search_by_topic_name(self, client, analyst_user, conversation, topic):
+        """
+        Test that conversations can be searched and retrieved based on the topics.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = topic.name
+        results = self.response_from_search_url(client, search_query)
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+
+        assert len(results) >= 1
+        assert str(conversation.id) in conversation_ids
+
+    def test_search_no_duplicates_in_results(self, client, analyst_user, conversation):
+        """
+        Test that conversations resulting from a query do not contain duplicates.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "agent"
+        results = self.response_from_search_url(client, search_query)
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+
+        assert len(results) >= 1
+        assert str(conversation.id) in conversation_ids
+        assert len(conversation_ids) == len(set(conversation_ids))
+
+    def test_websearch_query_behavior(self, client, analyst_user, conversation):
+        """
+        Test that 'websearch' query types can be used and behave as expected.
+        """
+        client.force_authenticate(user=analyst_user)
+
+        # Test inclusion with OR operator
+        search_query = '"strange noise" OR "driving me crazy" -spam'
+        results = self.response_from_search_url(client, search_query)
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+
+        assert len(results) >= 1
+        assert str(conversation.id) in conversation_ids
+
+        # Test exclusion with NOT operator
+        search_query = '"strange noise" -"driving me crazy"'
+        results = self.response_from_search_url(client, search_query)
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+
+        assert len(results) >= 1
+        assert str(conversation.id) in conversation_ids
