@@ -93,6 +93,7 @@ viewsets = {
             'conversation_topic_trend': {'method': 'GET', 'url': '/customers/{id}/conversation_topic_trend/'},
             'duration_trend': {'method': 'GET', 'url': '/customers/{id}/duration_trend/'},
             'sentiment_trend': {'method': 'GET', 'url': '/customers/{id}/sentiment_trend/'},
+            'search': {'method': 'GET', 'url': '/customers/search/?query=Olivia'}
         }
     },
     'employees': {
