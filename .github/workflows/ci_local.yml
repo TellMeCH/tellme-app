@@ -29,6 +29,9 @@ jobs:
       DATABASE_PASSWORD: postgres
       DATABASE_HOST: localhost
       DATABASE_PORT: 5432
+      OPENAI_API_KEY: 'bla bla'
+      DEBUG: 1
+      SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY_DEV }}
 
     steps:
       - name: Checkout code
@@ -58,8 +61,6 @@ jobs:
       - name: Make Migrations
         run: |
           poetry run python manage.py makemigrations
-        env:
-          OPENAI_API_KEY: 'blabla'
 
       - name: Run Migrations
         run: |
@@ -68,6 +69,3 @@ jobs:
       - name: Run Tests
         run: |
           poetry run pytest -v
-        env:
-          DEBUG: 1
-          SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY_DEV }}
