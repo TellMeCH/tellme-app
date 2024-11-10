@@ -58,6 +58,8 @@ jobs:
       - name: Make Migrations
         run: |
           poetry run python manage.py makemigrations
+        env:
+          OPENAI_API_KEY: 'blabla'
 
       - name: Run Migrations
         run: |
@@ -69,4 +71,3 @@ jobs:
         env:
           DEBUG: 1
           SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY_DEV }}
-          OPENAI_API_KEY: 'blabla'
