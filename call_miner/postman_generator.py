@@ -12,7 +12,7 @@ user_types = [
 
 # Initialize the variables list with the base_url
 variables = [
-    {'key': 'base_url', 'value': 'http://127.0.0.1:8000/api/v1'},
+    {'key': 'base_url', 'value': 'http://0.0.0.0:8000/api/v1'},
     {'key': 'id', 'value': '1'}  # Placeholder value for 'id' variable
 ]
 
@@ -32,6 +32,7 @@ viewsets = {
             'partial_update': {'method': 'PATCH', 'url': '/conversations/{id}/'},
             'destroy': {'method': 'DELETE', 'url': '/conversations/{id}/'},
             'transcript': {'method': 'GET', 'url': '/conversations/{id}/transcript/'},
+            'search': {'method': 'GET', 'url': '/conversations/search/?query=Olivia'}
         }
     },
     'organizations': {
