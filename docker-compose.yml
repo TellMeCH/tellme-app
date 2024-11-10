@@ -28,7 +28,7 @@ services:
           echo 'Waiting for Firebase Emulator...';
           sleep 1;
         done;
-        curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/tellme-app-439508/accounts;
+        curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/tellme-app-dev/accounts;
         python manage.py makemigrations &&
         python manage.py migrate &&
         python manage.py create_sample_data &&
