@@ -66,3 +66,6 @@ jobs:
       - name: Run Tests
         run: |
           poetry run pytest -v
+        env:
+          DEBUG: 1
+          SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY_DEV }}
