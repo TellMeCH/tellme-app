@@ -392,7 +392,7 @@ class TestCustomerActions:
         assert len(results) == 1
         assert results[0]['avg_value'] == conversation.sentiment
 
-    def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer):
+    def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer, conversation):
         """
         Test that the 'summary-data' action for a customer retrieves the expected summary data.
         """

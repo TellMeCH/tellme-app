@@ -48,7 +48,7 @@ class MetaSummaryAbstractModel(models.Model):
         """
         # Calculate the percentage deviation
         if self.summary_call_count == 0:  # Prevent division by zero
-            return True
+            return actual_count > 0
         deviation = abs((actual_count - self.summary_call_count) / self.summary_call_count) * 100
         return deviation > self.DEVIATION_THRESHOLD
 

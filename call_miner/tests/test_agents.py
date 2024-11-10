@@ -692,7 +692,7 @@ class TestAgentSummary:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_agent_summary_data_returns_expected_content(self, client, agent):
+    def test_agent_summary_data_returns_expected_content(self, client, agent, conversation):
         """
         Test that the 'summary-data' action for an agent retrieves the expected summary data.
         """
