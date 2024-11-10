@@ -405,3 +405,36 @@ class TestCustomerActions:
             assert 'summary_data' in response.data
             summary_data = response.data['summary_data']
             assert summary_data['summary'] == 'Mocked summary text'
+
+    def test_customer_search_by_name(self, client, agent_user, customer):
+        """
+        Test that the search action on a customer name behaves as expected
+        """
+        client.force_authenticate(user=agent_user)
+        search_query = customer.name
+        url = reverse('customer-search') + f'?query={search_query}'
+        all_results = []
+        while url:
+            response = client.get(url)
+            assert response.status_code == status.HTTP_200_OK
+            data = response.data
+            results = data.get('results', [])
+            all_results.extend(results)
+            url = data.get('next')
+
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in all_results]
+
+        assert len(all_results) == 1
+        assert str(customer.id) in customer_ids
+
+    def test_customer_search_no_results(self, client, analyst_user):
+        """
+        Test the expected response when a query produces no results
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "agrearhadfgsdfgfdsgdfg"
+        url = reverse('customer-search') + f'?query={search_query}'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data['detail'] == 'Your query produced no results.'
+
