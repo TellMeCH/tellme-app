@@ -615,3 +615,14 @@ class TestConversationSearch:
 
         assert len(results) >= 1
         assert str(conversation.id) in conversation_ids
+
+    def test_search_no_results(self, client, analyst_user):
+        """
+        Test the expected response when a query produces no results
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "agrearhadfgsdfgfdsgdfg"
+        url = reverse('conversation-search') + f'?query={search_query}'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data['detail'] == 'Your query produced no results.'
