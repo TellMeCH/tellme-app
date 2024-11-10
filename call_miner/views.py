@@ -76,11 +76,61 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
         return {'request': self.request}
 
 
-class ConversationViewSet(viewsets.ModelViewSet):
+class SearchViewSet(viewsets.ReadOnlyModelViewSet):
+    search_vector = None
+    relationships_to_select = []
+    relationships_to_prefetch = []
+
+    @decorators.action(detail=False, methods=['get'], url_path='search')
+    def search(self, request):
+        query = request.query_params.get('query', None)
+        if not query:
+            return response.Response({"detail": "No search query provided."}, status=400)
+
+        search_query = SearchQuery(query, search_type='websearch')
+
+        # Get the base queryset, rank by search query, and filter based on the search rank
+        queryset = (
+            self.get_queryset()
+            .select_related(*self.relationships_to_select)
+            .prefetch_related(*self.relationships_to_prefetch)
+        )
+        queryset = (
+            queryset
+            .annotate(rank=SearchRank(self.search_vector, search_query))
+            .filter(rank__gte=0.1)
+            .order_by('-rank')
+            .distinct()
+        )
+
+        if not queryset.exists():
+            return response.Response(
+                {'detail': 'Your query produced no results.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        else:
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True, context={'request': request})
+                return self.get_paginated_response(serializer.data)
+
+            serializer = self.get_serializer(queryset, many=True, context={'request': request})
+            return response.Response(serializer.data)
+
+
+class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-date']
+    relationships_to_select = ['customer', 'agent']
+    relationships_to_prefetch = ['topics']
+    search_vector = (
+        SearchVector('transcript', weight='A') +
+        SearchVector('summary', weight='A') +
+        SearchVector(F('customer__name'), weight='B') +
+        SearchVector(F('topics__name'), weight='B')
+    )
 
     def get_serializer_class(self):
         if self.action in ['list', 'search']:
@@ -107,41 +157,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(obj)
         return response.Response({'transcript': serializer.get_processed_transcript(obj)})
 
-    @decorators.action(detail=False, methods=['get'], url_path='search')
-    def search(self, request):
-        query = request.query_params.get('query', None)
-        if not query:
-            return response.Response({"detail": "No search query provided."}, status=400)
-
-        search_vector = (
-                SearchVector('transcript', weight='A') +
-                SearchVector('summary', weight='A') +
-                SearchVector(F('customer__name'), weight='B') +
-                SearchVector(F('topics__name'), weight='B')
-        )
-        search_query = SearchQuery(query, search_type='websearch')
-
-        # Get the base queryset, rank by search query, and filter based on the search rank
-        queryset = self.get_queryset().select_related('customer', 'agent').prefetch_related('topics')
-        queryset = (
-            queryset.annotate(
-                rank=SearchRank(search_vector, search_query)
-            )
-            .filter(rank__gte=0.1)
-            .order_by('-rank')
-            .distinct()
-        )
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True, context={'request': request})
-        return response.Response(serializer.data)
-
     def get_serializer_context(self):
-        # Ensure the request context is passed to the serializer
         return {'request': self.request}
 
 
@@ -248,14 +264,16 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         return response.Response({'managed_agents': serializer.get_agent_data(obj)})
 
 
-class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
+class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet, SearchViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-conversation_count', 'name']
+    relationships_to_prefetch = ['conversations']
+    search_vector = SearchVector('name', weight='A')
 
     def get_serializer_class(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'search']:
             return CustomerListSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
