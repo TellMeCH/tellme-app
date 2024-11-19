@@ -485,8 +485,8 @@ class TestTopicTrendActions:
         url = reverse('topic-conversations', args=[topic.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversations' in response.data
-        results = response.data['conversations']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['title'] == conversation.title
 
@@ -509,8 +509,8 @@ class TestTopicTrendActions:
         url = reverse('topic-conversation-trend', args=[topic.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversation_trend' in response.data
-        results = response.data['conversation_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
 
@@ -523,8 +523,8 @@ class TestTopicTrendActions:
         url = reverse('topic-duration-trend', args=[topic.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'duration_trend' in response.data
-        results = response.data['duration_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['avg_value'] == conversation.duration
 
@@ -537,8 +537,8 @@ class TestTopicTrendActions:
         url = reverse('topic-sentiment-trend', args=[topic.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'sentiment_trend' in response.data
-        results = response.data['sentiment_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['avg_value'] == conversation.sentiment
 
@@ -613,11 +613,10 @@ class TestTopicSummary:
             url = reverse('topic-summary-data', args=[topic.id])
             response = client.get(url)
             assert response.status_code == status.HTTP_200_OK
-            assert 'summary_data' in response.data
-            summary_data = response.data['summary_data']
-            assert summary_data['summary'] == 'Mocked summary text'
-            assert summary_data['summary_call_count'] == 1
-            assert summary_data['summary_date'].date() == conversation.date.date()
+            assert 'summary' in response.data
+            assert response.data['summary'] == 'Mocked summary text'
+            assert response.data['summary_call_count'] == 1
+            assert response.data['summary_date'].date() == conversation.date.date()
 
 
 @pytest.mark.django_db

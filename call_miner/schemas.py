@@ -535,3 +535,59 @@ MANAGED_AGENTS_RESPONSE_SCHEMA = OpenApiResponse(
         }
     }
 )
+
+ERROR_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'error': {'type': 'string', 'description': 'Detailed error message.'},
+        },
+        'example': {'error': 'Invalid value provided for parameter X.'}
+    },
+    description='Error response when the request cannot be processed.'
+)
+
+FORBIDDEN_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'detail': {'type': 'string', 'description': 'Error message indicating access is forbidden.'},
+        },
+        'example': {'detail': 'You do not have permission to perform this action.'}
+    },
+    description='Error response when the user is not authorized to access the resource.'
+)
+
+NOT_FOUND_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'detail': {'type': 'string', 'description': 'Error message indicating resource not found.'},
+        },
+        'example': {'detail': 'Resource not found.'}
+    },
+    description='Error response when the requested resource does not exist.'
+)
+
+VALIDATION_ERROR_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'field_name': {
+                'type': 'array',
+                'items': {'type': 'string'},
+                'description': 'List of validation error messages for the field.'
+            },
+            'non_field_errors': {
+                'type': 'array',
+                'items': {'type': 'string'},
+                'description': 'List of general validation error messages.'
+            }
+        },
+        'example': {
+            'field_name': ['This field is required.'],
+            'non_field_errors': ['Invalid data provided.']
+        }
+    },
+    description='Error response when input validation fails.'
+)

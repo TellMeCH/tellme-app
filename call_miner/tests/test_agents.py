@@ -535,8 +535,8 @@ class TestAgentTrendActions:
         url = reverse('agent-conversations', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversations' in response.data
-        results = response.data['conversations']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['title'] == conversation.title
 
@@ -548,8 +548,8 @@ class TestAgentTrendActions:
         url = reverse('agent-conversation-trend', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversation_trend' in response.data
-        results = response.data['conversation_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
         assert results[0]['date'] == conversation.date
@@ -562,8 +562,8 @@ class TestAgentTrendActions:
         url = reverse('agent-conversation-topic-trend', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversation_topic_trend' in response.data
-        results = response.data['conversation_topic_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
         assert results[0]['date'] == conversation.date
@@ -577,8 +577,8 @@ class TestAgentTrendActions:
         url = reverse('agent-duration-trend', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'duration_trend' in response.data
-        results = response.data['duration_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['avg_value'] == conversation.duration
 
@@ -590,8 +590,8 @@ class TestAgentTrendActions:
         url = reverse('agent-sentiment-trend', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'sentiment_trend' in response.data
-        results = response.data['sentiment_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['avg_value'] == conversation.sentiment
 
@@ -702,9 +702,8 @@ class TestAgentSummary:
             url = reverse('agent-summary-data', args=[agent.id])
             response = client.get(url)
             assert response.status_code == status.HTTP_200_OK
-            assert 'summary_data' in response.data
-            summary_data = response.data['summary_data']
-            assert summary_data['summary'] == 'Mocked summary text'
+            assert 'summary' in response.data
+            assert response.data['summary'] == 'Mocked summary text'
 
 
 @pytest.mark.django_db
@@ -720,7 +719,7 @@ class TestAgentManagedAgents:
         url = reverse('agent-managed-agents', args=[agent_manager.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        managed_agents = response.data['managed_agents']['results']
+        managed_agents = response.data['results']
         assert len(managed_agents) == 1
         assert managed_agents[0]['name'] == agent_managed_by_manager.user.username
 
@@ -733,7 +732,7 @@ class TestAgentManagedAgents:
         url = reverse('agent-managed-agents', args=[agent_manager.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        managed_agents = response.data['managed_agents']['results']
+        managed_agents = response.data['results']
         assert len(managed_agents) == 1
         assert managed_agents[0]['name'] == agent_managed_by_manager.user.username
 
@@ -766,7 +765,7 @@ class TestAgentManagedAgents:
         url = reverse('agent-managed-agents', args=[agent_manager.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        managed_agents = response.data['managed_agents']['results']
+        managed_agents = response.data['results']
         assert len(managed_agents) == 1
         assert managed_agents[0]['name'] == agent_managed_by_manager.user.username
 
@@ -787,7 +786,7 @@ class TestAgentManagedAgents:
         url = reverse('agent-managed-agents', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        managed_agents = response.data['managed_agents']['results']
+        managed_agents = response.data['results']
         assert len(managed_agents) == 0
 
     def test_agent_in_other_organization_cannot_access_other_organization_agent_summary_data(self, client,
