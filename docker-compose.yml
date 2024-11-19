@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:13
+    image: postgres:17
     environment:
       POSTGRES_DB: ${DATABASE_NAME}
       POSTGRES_USER: ${DATABASE_USER}
@@ -42,7 +42,7 @@ services:
       - db
       - firebase
     env_file:
-      - ./.env
+      - .env
     networks:
       - app-network
 
