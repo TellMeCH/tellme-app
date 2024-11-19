@@ -18,7 +18,7 @@ from call_miner.schemas import (
     CONVERSATION_TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA,
     DURATION_TREND_RESPONSE_SCHEMA, SENTIMENT_TREND_RESPONSE_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
     SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA, LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA,
-    MANAGED_AGENTS_RESPONSE_SCHEMA
+    MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA, NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
 )
 
 
@@ -29,14 +29,19 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(
         description=MetaSummarySerializer.get_summary_data.__doc__,
         parameters=[ID_PARAMETER_SCHEMA],
-        responses=SUMMARY_DATA_RESPONSE_SCHEMA
+        responses={
+            200: SUMMARY_DATA_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def summary_data(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         try:
-            return response.Response({'summary_data': serializer.get_summary_data(obj)})
+            return response.Response(serializer.get_summary_data(obj))
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -48,70 +53,95 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(
         description=ConversationTrendsSerializer.get_conversations.__doc__,
         parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses=CONVERSATIONS_RESPONSE_SCHEMA,
+        responses={
+            200: CONVERSATIONS_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def conversations(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         try:
-            return response.Response({'conversations': serializer.get_conversations(obj)})
+            return response.Response(serializer.get_conversations(obj))
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         description=ConversationTrendsSerializer.get_conversation_trend.__doc__,
         parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses=CONVERSATION_TREND_RESPONSE_SCHEMA
+        responses={
+            200: CONVERSATION_TREND_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def conversation_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         try:
-            return response.Response({'conversation_trend': serializer.get_conversation_trend(obj)})
+            return response.Response(serializer.get_conversation_trend(obj))
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         description=ConversationTrendsSerializer.get_conversation_topic_trend.__doc__,
         parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses=CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA
+        responses={
+            200: CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def conversation_topic_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         try:
-            return response.Response({'conversation_topic_trend': serializer.get_conversation_topic_trend(obj)})
+            return response.Response(serializer.get_conversation_topic_trend(obj))
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         description=ConversationTrendsSerializer.get_duration_trend.__doc__,
         parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses=DURATION_TREND_RESPONSE_SCHEMA
+        responses={
+            200: DURATION_TREND_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def duration_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         try:
-            return response.Response({'duration_trend': serializer.get_duration_trend(obj)})
+            return response.Response(serializer.get_duration_trend(obj))
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         description=ConversationTrendsSerializer.get_sentiment_trend.__doc__,
         parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses=SENTIMENT_TREND_RESPONSE_SCHEMA
+        responses={
+            200: SENTIMENT_TREND_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def sentiment_trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         try:
-            return response.Response({'sentiment_trend': serializer.get_sentiment_trend(obj)})
+            return response.Response(serializer.get_sentiment_trend(obj))
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -130,7 +160,12 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
     @extend_schema(
         description='Search over all object instances given a query.',
         parameters=[SEARCH_QUERY_PARAMETER_SCHEMA],
-        responses=SEARCH_RESPONSE_SCHEMA
+        responses={
+            200: SEARCH_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=False, methods=['get'], url_path='search')
     def search(self, request):
@@ -219,13 +254,18 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     @extend_schema(
         description=ConversationDetailSerializer.get_processed_transcript.__doc__,
         parameters=[ID_PARAMETER_SCHEMA],
-        responses=TRANSCRIPT_RESPONSE_SCHEMA
+        responses={
+            200: TRANSCRIPT_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def transcript(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'transcript': serializer.get_processed_transcript(obj)})
+        return response.Response(serializer.get_processed_transcript(obj))
 
     def get_serializer_context(self):
         return {'request': self.request}
@@ -349,13 +389,18 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     @extend_schema(
         description="List agents under management of the current agent",
         parameters=[ID_PARAMETER_SCHEMA],
-        responses=MANAGED_AGENTS_RESPONSE_SCHEMA
+        responses={
+            200: MANAGED_AGENTS_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
     )
     @decorators.action(detail=True, methods=['get'])
     def managed_agents(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response({'managed_agents': serializer.get_agent_data(obj)})
+        return response.Response(serializer.get_agent_data(obj))
 
 
 class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet, SearchViewSet):
