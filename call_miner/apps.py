@@ -21,3 +21,6 @@ class CallMinerConfig(AppConfig):
         Topic.register_signals(Conversation, related_field='topics')
         Agent.register_signals(Conversation, related_field='agent')
         Customer.register_signals(Conversation, related_field='customer')
+
+        # Import Extensions for drf-spectacular
+        import call_miner.authentication_extensions

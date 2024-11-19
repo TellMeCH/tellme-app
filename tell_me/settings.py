@@ -146,6 +146,19 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Empowering call center agents and executives with valuable insights from their customer interactions.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'SECURITY': [
+        {'BearerAuth': []},
+    ],
+    'SECURITY_SCHEMES': {
+        'BearerAuth': {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'Firebase',
+        },
+    },
+    'EXTENSIONS': [
+        'call_miner.authentication_extensions',
+    ],
 }
 
 # User model for authentication
