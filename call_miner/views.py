@@ -1,7 +1,8 @@
 from rest_framework import viewsets, decorators, response, status
-from .models import Conversation, Organization, Topic, Employee, Agent, Customer
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import F
+from drf_spectacular.utils import extend_schema
+from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
@@ -12,9 +13,24 @@ from call_miner.permissions import (ConversationPermission, OrganizationPermissi
                                     CustomerPermission, EmployeePermission)
 from call_miner.utils.paginators import CustomListViewPaginator
 from call_miner.authentication import FirebaseAuthentication
+from call_miner.schemas import (
+    ID_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, CONVERSATIONS_RESPONSE_SCHEMA,
+    CONVERSATION_TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA,
+    DURATION_TREND_RESPONSE_SCHEMA, SENTIMENT_TREND_RESPONSE_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
+    SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA, LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA,
+    MANAGED_AGENTS_RESPONSE_SCHEMA
+)
 
 
 class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    A ViewSet to outline the actions of the MetaSummarySerializer.
+    """
+    @extend_schema(
+        description=MetaSummarySerializer.get_summary_data.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA],
+        responses=SUMMARY_DATA_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=True, methods=['get'])
     def summary_data(self, request, pk=None):
         obj = self.get_object()
@@ -26,6 +42,14 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    A ViewSet to outline the actions of the ConversationTrendsSerializer.
+    """
+    @extend_schema(
+        description=ConversationTrendsSerializer.get_conversations.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
+        responses=CONVERSATIONS_RESPONSE_SCHEMA,
+    )
     @decorators.action(detail=True, methods=['get'])
     def conversations(self, request, pk=None):
         obj = self.get_object()
@@ -35,6 +59,11 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        description=ConversationTrendsSerializer.get_conversation_trend.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
+        responses=CONVERSATION_TREND_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=True, methods=['get'])
     def conversation_trend(self, request, pk=None):
         obj = self.get_object()
@@ -44,6 +73,11 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        description=ConversationTrendsSerializer.get_conversation_topic_trend.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
+        responses=CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=True, methods=['get'])
     def conversation_topic_trend(self, request, pk=None):
         obj = self.get_object()
@@ -53,6 +87,11 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        description=ConversationTrendsSerializer.get_duration_trend.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
+        responses=DURATION_TREND_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=True, methods=['get'])
     def duration_trend(self, request, pk=None):
         obj = self.get_object()
@@ -62,6 +101,11 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @extend_schema(
+        description=ConversationTrendsSerializer.get_sentiment_trend.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
+        responses=SENTIMENT_TREND_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=True, methods=['get'])
     def sentiment_trend(self, request, pk=None):
         obj = self.get_object()
@@ -72,29 +116,42 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_serializer_context(self):
-        # Ensure the request context is passed to the serializer
         return {'request': self.request}
 
 
 class SearchViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Abstract ViewSet containing a series of generic search actions that are re-used by multiple ViewSets
+    """
     search_vector = None
     relationships_to_select = []
     relationships_to_prefetch = []
 
+    @extend_schema(
+        description='Search over all object instances given a query.',
+        parameters=[SEARCH_QUERY_PARAMETER_SCHEMA],
+        responses=SEARCH_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=False, methods=['get'], url_path='search')
     def search(self, request):
+        """
+        Provides search results for a given query. Assumes that a search_vector has been previously defined at the level
+        of the ViewSet inheriting this abstract ViewSet.
+        """
         query = request.query_params.get('query', None)
         if not query:
             return response.Response({"detail": "No search query provided."}, status=400)
 
         search_query = SearchQuery(query, search_type='websearch')
 
-        # Get the base queryset, rank by search query, and filter based on the search rank
+        # Get the base queryset, and apply the query
         queryset = (
             self.get_queryset()
             .select_related(*self.relationships_to_select)
             .prefetch_related(*self.relationships_to_prefetch)
         )
+
+        # Rank the search results by relevance, filter based on a relevance threshold, and sort based on the rank.
         queryset = (
             queryset
             .annotate(rank=SearchRank(self.search_vector, search_query))
@@ -103,6 +160,7 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
             .distinct()
         )
 
+        # Return the results. If empty, raise a 404. Otherwise paginate if necessary.
         if not queryset.exists():
             return response.Response(
                 {'detail': 'Your query produced no results.'},
@@ -119,6 +177,13 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
+    """
+    A ViewSet for the Conversation model. Inherits from the SearchViewSet to allow users to search for transcripts
+    containing certain keywords.
+    A summary of the permissions:
+    - Modification is only allowed to superusers
+    - Viewing is allowed to employees of the same organization as the conversation (and superusers)
+    """
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
@@ -151,6 +216,11 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
             return Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
         return Conversation.objects.none()
 
+    @extend_schema(
+        description=ConversationDetailSerializer.get_processed_transcript.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA],
+        responses=TRANSCRIPT_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=True, methods=['get'])
     def transcript(self, request, pk=None):
         obj = self.get_object()
@@ -162,13 +232,19 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
 
 
 class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
+    """
+    A ViewSet for the Organization model. Inherits from the TrendsActionsViewSet to obtain relevant conversation trends.
+    A summary of the permissions:
+    - Modification is only possible for superusers
+    - Analysts can retrieve their own organization (and superusers can view anything)
+    """
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [OrganizationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['name']
 
     def get_serializer_class(self):
-        if self.action in ['retrieve', 'list', 'modify', 'create', 'update']:
+        if self.action in ['retrieve', 'list', 'modify', 'create', 'update', 'destroy', 'partial_update']:
             return OrganizationDetailSerializer
         elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
                              'sentiment_trend']:
@@ -184,6 +260,13 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
 
 
 class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
+    """
+    A ViewSet for the Topic model. Inherits from TrendsActionsViewSet to obtain conversation trends, as well as from the
+    SummaryActionsViewSet, to obtain meta-summaries of all the associated conversation summaries.
+    A summary of the permissions:
+    - Modification is allowed to superusers and analysts of the same organization
+    - Viewing is allowed to analysts of the same organization (and superusers)
+    """
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
@@ -213,6 +296,10 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
                 return Topic.objects.filter(organization=self.request.user.employee.organization)
         return Topic.objects.none()
 
+    @extend_schema(
+        description="List active topics of an organization",
+        responses=LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=False, methods=['get'], url_path='list_active')
     def list_active(self, request):
         """
@@ -221,14 +308,19 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         return self.list(request)
 
     def conversation_topic_trend(self, request, *args, **kwargs):
-        # This action will not appear in the API schema
+        # Remove from the API schema
         pass
 
 
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     """
-    This ViewSet allows to view details from all or a single Agent in an organization. Please note that it's read-only,
-    since Employee-level modifications should be done with the Employee ViewSet.
+    A ViewSet for the Agent model. Inherits from TrendsActionsViewSet to obtain conversation trends, as well as from the
+    SummaryActionsViewSet, to obtain meta-summaries of all the associated conversation summaries. This ViewSet is
+    read-only since Employee-level modifications should be done with the Employee ViewSet.
+    A summary of the permissions:
+    - Modification is only allowed to superusers, although this is not the ViewSet for it
+    - Listing is possible to Employees of the same organization. Retrieving a single Agent is only possible to the agent
+        itself, to its manager, or to an organization admin of the same organization (and superusers).
     """
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [AgentPermission]
@@ -248,15 +340,17 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         raise ValueError(f'Action {self.action} not permitted.')
 
     def get_queryset(self):
-        """
-        Return agents that belong to the user's organization
-        """
         if self.request.user.is_superuser:
             return Agent.objects.all()
         if self.request.user.employee.organization:
             return Agent.objects.filter(organization=self.request.user.employee.organization)
         return Agent.objects.none()
 
+    @extend_schema(
+        description="List agents under management of the current agent",
+        parameters=[ID_PARAMETER_SCHEMA],
+        responses=MANAGED_AGENTS_RESPONSE_SCHEMA
+    )
     @decorators.action(detail=True, methods=['get'])
     def managed_agents(self, request, pk=None):
         obj = self.get_object()
@@ -265,6 +359,16 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
 
 
 class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet, SearchViewSet):
+    """
+    A ViewSet for the Customer model. This ViewSet inherits from:
+    - TrendsActionsViewSet: to obtain conversation trends of a single Customer
+    - SummaryActionsViewSet: to obtain meta-summaries of a customer's conversation summaries
+    - SearchViewSet: to retrieve a customer based on a search query
+
+    The ViewSet permissions can be summarized as follows:
+    - Modification is only allowed to superusers
+    - Viewing is allowed to any employee of the same organization (and superusers)
+    """
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
@@ -296,6 +400,13 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
+    """
+    A ViewSet for the Employee model. This is the ViewSet to be used to alter Agent and Analyst data.
+    A summary of the permissions:
+    - Modification is allowed to superusers and organization admins of the same organization
+    - Listing is only available to organization admins (and superusers), and retrieving a single employee is possible
+        for organization admins of the same organization and the employee itself (and superusers).
+    """
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [EmployeePermission]
     serializer_class = EmployeeModifySerializer
