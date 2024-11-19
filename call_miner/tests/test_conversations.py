@@ -145,9 +145,8 @@ class TestConversationTranscript:
         url = reverse('conversation-transcript', args=[conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'transcript' in response.data
-        assert 'results' in response.data['transcript']
-        assert len(response.data['transcript']['results']) > 0
+        assert 'results' in response.data
+        assert len(response.data['results']) > 0
 
     def test_analyst_cannot_view_other_organization_conversation_transcript(self, client, analyst_user,
                                                                             another_organization_conversation):
@@ -167,9 +166,8 @@ class TestConversationTranscript:
         url = reverse('conversation-transcript', args=[conversation.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'transcript' in response.data
-        assert 'results' in response.data['transcript']
-        assert len(response.data['transcript']['results']) > 0
+        assert 'results' in response.data
+        assert len(response.data['results']) > 0
 
     def test_agent_cannot_view_other_organization_conversation_transcript(self, client, agent_user,
                                                                           another_organization_conversation):
@@ -197,12 +195,11 @@ class TestConversationTranscript:
             assert response.status_code == status.HTTP_200_OK
 
             # Extract processed transcript from response
-            transcript_data = response.data.get('transcript', {})
-            assert 'results' in transcript_data
-            messages = transcript_data['results']
+            assert 'results' in response.data
+            messages = response.data['results']
             all_messages.extend(messages)
 
-            next_url = transcript_data.get('next')
+            next_url = response.data.get('next')
 
         # Expected messages after processing
         expected_messages = []
@@ -249,17 +246,16 @@ class TestConversationTranscript:
         assert response.status_code == status.HTTP_200_OK
 
         # Check that pagination is applied
-        transcript_data = response.data.get('transcript', {})
-        assert 'next' in transcript_data
-        assert 'previous' in transcript_data
-        assert len(transcript_data['results']) == settings.REST_FRAMEWORK['PAGE_SIZE']
+        assert 'next' in response.data
+        assert 'previous' in response.data
+        assert len(response.data['results']) == settings.REST_FRAMEWORK['PAGE_SIZE']
 
         # Fetch next page if available
-        next_url = transcript_data['next']
+        next_url = response.data['next']
         if next_url:
             response_next = client.get(next_url)
             assert response_next.status_code == status.HTTP_200_OK
-            transcript_data_next = response_next.data.get('transcript', {})
+            transcript_data_next = response_next.data
             assert len(transcript_data_next['results']) > 0
 
     def test_unauthenticated_user_cannot_view_conversation_transcript(self, client, conversation):

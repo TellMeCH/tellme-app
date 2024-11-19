@@ -330,8 +330,8 @@ class TestCustomerActions:
         url = reverse('customer-conversations', args=[customer.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversations' in response.data
-        results = response.data['conversations']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['title'] == conversation.title
 
@@ -344,8 +344,8 @@ class TestCustomerActions:
         url = reverse('customer-conversation-trend', args=[customer.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversation_trend' in response.data
-        results = response.data['conversation_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
         assert results[0]['date'] == conversation.date
@@ -359,8 +359,8 @@ class TestCustomerActions:
         url = reverse('customer-conversation-topic-trend', args=[customer.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'conversation_topic_trend' in response.data
-        results = response.data['conversation_topic_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
         assert results[0]['date'] == conversation.date
@@ -374,8 +374,8 @@ class TestCustomerActions:
         url = reverse('customer-duration-trend', args=[customer.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'duration_trend' in response.data
-        results = response.data['duration_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['avg_value'] == conversation.duration
 
@@ -387,8 +387,8 @@ class TestCustomerActions:
         url = reverse('customer-sentiment-trend', args=[customer.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert 'sentiment_trend' in response.data
-        results = response.data['sentiment_trend']['results']
+        assert 'results' in response.data
+        results = response.data['results']
         assert len(results) == 1
         assert results[0]['avg_value'] == conversation.sentiment
 
@@ -402,9 +402,8 @@ class TestCustomerActions:
             url = reverse('customer-summary-data', args=[customer.id])
             response = client.get(url)
             assert response.status_code == status.HTTP_200_OK
-            assert 'summary_data' in response.data
-            summary_data = response.data['summary_data']
-            assert summary_data['summary'] == 'Mocked summary text'
+            assert 'summary' in response.data
+            assert response.data['summary'] == 'Mocked summary text'
 
     def test_customer_search_by_name(self, client, agent_user, customer):
         """

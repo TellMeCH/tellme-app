@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'call_miner',
 ]
 
@@ -136,6 +137,28 @@ REST_FRAMEWORK = {
         'call_miner.authentication.FirebaseAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Setting for the API Documentation
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'TellMe Backend API',
+    'DESCRIPTION': 'Empowering call center agents and executives with valuable insights from their customer interactions.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SECURITY': [
+        {'BearerAuth': []},
+    ],
+    'SECURITY_SCHEMES': {
+        'BearerAuth': {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'Firebase',
+        },
+    },
+    'EXTENSIONS': [
+        'call_miner.authentication_extensions',
+    ],
 }
 
 # User model for authentication

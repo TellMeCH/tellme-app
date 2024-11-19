@@ -266,7 +266,7 @@ class TestOrganizationActions:
         url = reverse('organization-conversations', args=[organization.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data['conversations']['results']) == 1
+        assert len(response.data['results']) == 1
 
     def test_analyst_cannot_access_other_organization_conversations_action(self, client, analyst_user,
                                                                            another_organization):
@@ -383,8 +383,8 @@ class TestOrganizationActions:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert 'conversations' in data
-        conversations = data['conversations']['results']
+        assert 'results' in data
+        conversations = data['results']
         assert len(conversations) == 1
         assert conversations[0]['title'] == conversation.title
         assert conversations[0]['date'].replace('Z', '') == conversation.date.strftime('%Y-%m-%dT%H:%M:%S')
@@ -411,9 +411,9 @@ class TestOrganizationActions:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        conversations = data['conversations']['results']
+        conversations = data['results']
         assert len(conversations) == 15
-        assert 'next' in data['conversations']
+        assert 'next' in data
 
     def test_conversation_trend_action_returns_correct_data(self, client, analyst_user, organization,
                                                             agent,
@@ -439,8 +439,8 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert 'conversation_trend' in data
-        results = data['conversation_trend']['results']
+        assert 'results' in data
+        results = data['results']
         assert len(results) == 5  # One entry per day
         for entry in results:
             assert 'date' in entry
@@ -478,8 +478,8 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert 'conversation_topic_trend' in data
-        results = data['conversation_topic_trend']['results']
+        assert 'results' in data
+        results = data['results']
         assert len(results) == 5  # One entry per day per topic
         for entry in results:
             assert 'date' in entry
@@ -511,8 +511,8 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert 'duration_trend' in data
-        results = data['duration_trend']['results']
+        assert 'results' in data
+        results = data['results']
         assert len(results) == 5
         for entry in results:
             assert 'date' in entry
@@ -542,8 +542,8 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert 'sentiment_trend' in data
-        results = data['sentiment_trend']['results']
+        assert 'results' in data
+        results = data['results']
         assert len(results) == 5
         for entry in results:
             assert 'date' in entry
@@ -580,7 +580,7 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'weekly'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        results = data['conversation_trend']['results']
+        results = data['results']
         assert len(results) == 3  # Three weeks
         for entry in results:
             assert 'date' in entry
@@ -609,7 +609,7 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        results = data['conversation_trend']['results']
+        results = data['results']
         assert len(results) == 3
         for entry in results:
             assert 'date' in entry
@@ -638,7 +638,7 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'weekly'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        results = data['duration_trend']['results']
+        results = data['results']
         assert len(results) == 3
         for entry in results:
             assert 'date' in entry
@@ -667,7 +667,7 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        results = data['duration_trend']['results']
+        results = data['results']
         assert len(results) == 3  # Three months
         for entry in results:
             assert 'date' in entry
@@ -696,7 +696,7 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'weekly'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        results = data['sentiment_trend']['results']
+        results = data['results']
         assert len(results) == 3
         for entry in results:
             assert 'date' in entry
@@ -725,7 +725,7 @@ class TestOrganizationActions:
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        results = data['sentiment_trend']['results']
+        results = data['results']
         assert len(results) == 3  # Three months
         for entry in results:
             assert 'date' in entry
@@ -738,8 +738,8 @@ class TestOrganizationActions:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert 'conversations' in data
-        assert data['conversations']['results'] == []
+        assert 'results' in data
+        assert data['results'] == []
 
     def test_trends_actions_no_data(self, client, analyst_user, organization):
         """Test that the conversation trend actions can return an empty result when no conversations are present."""
@@ -749,5 +749,5 @@ class TestOrganizationActions:
             response = client.get(url, {'trend_period': 'daily'})
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
-            assert action.replace('-', '_') in data
-            assert data[action.replace('-', '_')]['results'] == []
+            assert 'results' in data
+            assert data['results'] == []
