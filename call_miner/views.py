@@ -52,7 +52,7 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
     """
     @extend_schema(
         description=ConversationTrendsSerializer.get_conversations.__doc__,
-        parameters=[ID_PARAMETER_SCHEMA],
+        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
         responses={
             200: CONVERSATIONS_RESPONSE_SCHEMA,
             400: ERROR_RESPONSE_SCHEMA,
