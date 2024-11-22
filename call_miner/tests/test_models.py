@@ -646,7 +646,7 @@ class TestConversation:
                 date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC),
                 duration=60,
                 transcript="Invalid transcript",
-                sentiment=0.5,
+                sentiment=1.5,
                 summary="Valid Summary",
                 title="Invalid Title",
                 customer=other_customer,

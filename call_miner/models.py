@@ -408,7 +408,8 @@ class Conversation(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Save applying checks to the given associated objects
+        Save applying checks to the given associated objects. These checks are placed here because they are relevant to
+        the data model's integrity
         """
         # Ensure that agent and customer have the same associated organization
         if self.customer.organization != self.agent.organization:
