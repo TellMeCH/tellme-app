@@ -122,6 +122,11 @@ class ConversationTrendMixin:
         'weekly': models.functions.TruncWeek('date'),
         'monthly': models.functions.TruncMonth('date'),
     }
+    field_aggregations = {
+        'count': models.Count('id'),
+        'sentiment': models.Avg('sentiment'),
+        'duration': models.Avg('duration')
+    }
 
     @property
     def conversations_scope(self):
@@ -141,60 +146,57 @@ class ConversationTrendMixin:
             # Assume the object has a direct relationship with conversations
             return self.conversations.all()
 
-    def get_conversation_trend(self, period: str):
+    def get_trend(self, period: str, per_topic: bool = False, field: str = None):
         """
-        Returns the evolution of the number of calls with time.
-        """
-        if period not in self.period_truncations:
-            raise ValueError('Specify a period that is one of: "daily", "weekly", "monthly".')
+        Obtain the evolution of a field over a time period. If specified, will return the evolution at a topic level.
 
-        conversations_per_day = (
+        Args:
+            period (str): The time period granularity to use for the trend. Must be one of "daily", "weekly", "monthly"
+            per_topic (bool): Indicates whether to group by the time period AND the topic, or just by the time period
+            field (str): Specifies what field to examine. If none is specified, the call count, average sentiment and
+                average duration will be used.
+
+        Returns:
+            QuerySet: Trend of the specified fields
+        """
+        # Validate user input
+        if period not in self.period_truncations:
+            raise ValueError(f'Specify a period that is one of: "{'", "'.join(self.period_truncations.keys())}".')
+        if field:
+            if field not in self.field_aggregations:
+                raise ValueError(f'Specify a field that is one of: "{'", "'.join(self.field_aggregations.keys())}".')
+            else:
+                aggregations = {field: self.field_aggregations[field]}
+        else:
+            aggregations = self.field_aggregations.copy()
+
+        # Determine what columns to group by
+        if per_topic:
+            group_by_cols = ['topics__name', 'topics__id', 'period']
+            renamed_cols = {
+                'date': models.F('period'),
+                'topic_name': models.F('topics__name'),
+                'topic_id': models.F('topics__id')
+            }
+        else:
+            group_by_cols = ['period']
+            renamed_cols = {'date': models.F('period')}
+
+        # Rename columns holding aggregation results
+        old_col_names = aggregations.copy().keys()
+        for col in old_col_names:
+            if col != 'count':
+                aggregations[f'avg_{col}'] = aggregations.pop(col)
+
+        trend = (
             self.conversations_scope
             .annotate(period=self.period_truncations[period])
-            .values('period')
-            .annotate(count=models.Count('id'))
-            .values('count', date=models.F('period'))
+            .values(*group_by_cols)
+            .annotate(**aggregations)
+            .values(*aggregations.keys(), **renamed_cols)
             .order_by()
         )
-        return conversations_per_day
-
-    def get_conversation_trend_per_topic(self, period: str):
-        """
-        Returns the number of conversations per topic per period of time.
-        """
-        if period not in self.period_truncations:
-            raise ValueError('Specify a period that is one of: "daily", "weekly", "monthly".')
-
-        conversations_per_topic_per_day = (
-            self.conversations_scope
-            .annotate(period=self.period_truncations[period])
-            .values('topics__name', 'period')
-            .annotate(count=models.Count('id'))
-            .values('count', date=models.F('period'), topic=models.F('topics__name'))
-            .order_by()
-        )
-        return conversations_per_topic_per_day
-
-    def get_avg_for_periods(self, field: str, period: str):
-        """
-        Generic function to calculate the average of a given field (duration or sentiment)
-        for daily, weekly, and monthly periods.
-        """
-        if field not in ['duration', 'sentiment']:
-            raise ValueError('Currently only "duration" and "sentiment" are accepted as fields.')
-
-        if period not in self.period_truncations:
-            raise ValueError('Specify a period that is one of: "daily", "weekly", "monthly".')
-
-        avg_per_period = (
-            self.conversations_scope
-            .annotate(period=self.period_truncations[period])
-            .values('period')
-            .annotate(avg_value=models.Avg(field))
-            .order_by('period')
-            .values('avg_value', date=models.F('period'))
-        )
-        return avg_per_period
+        return trend
 
 
 class Organization(models.Model, ConversationTrendMixin):

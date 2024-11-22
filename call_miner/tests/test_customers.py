@@ -4,8 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from call_miner.models import Customer
 
-TREND_ACTIONS = ['conversations', 'conversation-trend', 'conversation-topic-trend', 'duration-trend',
-                 'sentiment-trend', 'summary-data']
+TREND_ACTIONS = ['conversations', 'trend', 'summary-data']
 
 
 @pytest.mark.django_db
@@ -338,11 +337,11 @@ class TestCustomerActions:
     def test_customer_conversation_trend_action_returns_expected_content(self, client, agent_user, customer,
                                                                          conversation):
         """
-        Test that the 'conversation_trend' action for an agent retrieves the expected conversation data.
+        Test that the 'trend' action for an agent retrieves the expected conversation data.
         """
         client.force_authenticate(user=agent_user)
-        url = reverse('customer-conversation-trend', args=[customer.id])
-        response = client.get(url)
+        url = reverse('customer-trend', args=[customer.id])
+        response = client.get(url, {'trend_period': 'daily', 'field': 'count'})
         assert response.status_code == status.HTTP_200_OK
         assert 'results' in response.data
         results = response.data['results']
@@ -353,44 +352,61 @@ class TestCustomerActions:
     def test_customer_conversation_topic_trend_action_returns_expected_content(self, client, agent_user, customer,
                                                                                conversation):
         """
-        Test that the 'conversation_topic_trend' action for a customer retrieves the expected conversation data.
+        Test that the 'trend' action for a customer retrieves the expected conversation data per topic.
         """
         client.force_authenticate(user=agent_user)
-        url = reverse('customer-conversation-topic-trend', args=[customer.id])
-        response = client.get(url)
+        url = reverse('customer-trend', args=[customer.id])
+        response = client.get(url, {'trend_period': 'daily', 'field': 'count', 'per_topic': 'true'})
         assert response.status_code == status.HTTP_200_OK
         assert 'results' in response.data
         results = response.data['results']
         assert len(results) == 1
         assert results[0]['count'] == 1
         assert results[0]['date'] == conversation.date
-        assert results[0]['topic'] == str(conversation.topics.all()[0])
+        assert results[0]['topic_name'] == str(conversation.topics.all()[0])
+        assert 'topic_id' in results[0]
 
     def test_customer_duration_trend_action_returns_expected_content(self, client, agent_user, customer, conversation):
         """
-        Test that the 'duration-trend' action for a customer retrieves the expected duration trend data.
+        Test that the 'trend' action for a customer retrieves the expected duration trend data.
         """
         client.force_authenticate(user=agent_user)
-        url = reverse('customer-duration-trend', args=[customer.id])
-        response = client.get(url)
+        url = reverse('customer-trend', args=[customer.id])
+        response = client.get(url, {'trend_period': 'daily', 'field': 'duration'})
         assert response.status_code == status.HTTP_200_OK
         assert 'results' in response.data
         results = response.data['results']
         assert len(results) == 1
-        assert results[0]['avg_value'] == conversation.duration
+        assert results[0]['avg_duration'] == conversation.duration
 
     def test_customer_sentiment_trend_action_returns_expected_content(self, client, agent_user, customer, conversation):
         """
-        Test that the 'sentiment-trend' action for a customer retrieves the expected sentiment trend data.
+        Test that the 'trend' action for a customer retrieves the expected sentiment trend data.
         """
         client.force_authenticate(user=agent_user)
-        url = reverse('customer-sentiment-trend', args=[customer.id])
-        response = client.get(url)
+        url = reverse('customer-trend', args=[customer.id])
+        response = client.get(url, {'trend_period': 'daily', 'field': 'sentiment'})
         assert response.status_code == status.HTTP_200_OK
         assert 'results' in response.data
         results = response.data['results']
         assert len(results) == 1
-        assert results[0]['avg_value'] == conversation.sentiment
+        assert results[0]['avg_sentiment'] == conversation.sentiment
+
+    def test_customer_sentiment_per_topic_trend_action_returns_expected_content(self, client, agent_user, customer,
+                                                                                conversation):
+        """
+        Test that the 'trend' action for a customer retrieves the expected sentiment trend data.
+        """
+        client.force_authenticate(user=agent_user)
+        url = reverse('customer-trend', args=[customer.id])
+        response = client.get(url, {'trend_period': 'daily', 'field': 'sentiment', 'per_topic': 'true'})
+        assert response.status_code == status.HTTP_200_OK
+        assert 'results' in response.data
+        results = response.data['results']
+        assert len(results) == 1
+        assert results[0]['avg_sentiment'] == conversation.sentiment
+        assert results[0]['topic_name'] == str(conversation.topics.all()[0])
+        assert 'topic_id' in results[0]
 
     def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer, conversation):
         """
