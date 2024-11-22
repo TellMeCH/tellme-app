@@ -284,7 +284,7 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 0.6,
+            'sentiment': 3.6,
             'topics': [],
             'agent': agent.id,
             'customer': customer.id,
@@ -308,7 +308,7 @@ class TestConversationCreate:
             'transcript': 'Admin transcript',
             'summary': 'Admin summary',
             'title': 'Admin Conversation',
-            'sentiment': 0.7,
+            'sentiment': 2.7,
             'topics': [],
             'agent': agent.id,
             'customer': customer.id,
@@ -330,7 +330,7 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 0.6,
+            'sentiment': 4.6,
             'topics': [],
             'agent': agent.id,
             'customer': customer.id,
@@ -352,7 +352,7 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 0.6,
+            'sentiment': 1.6,
             'topics': [],
             'agent': agent.id,
             'customer': customer.id,
@@ -376,7 +376,7 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 0.6,
+            'sentiment': 2.6,
             'topics': [],
             'agent': agent.id,
             'customer': customer.id,
@@ -397,7 +397,7 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 0.6,
+            'sentiment': 3.6,
             'topics': [],
             'agent': agent.id,
             'customer': customer.id,
@@ -406,6 +406,47 @@ class TestConversationCreate:
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_sentiment_score_validation(self, client, superuser, agent, customer):
+        """
+        Test that an invalid sentiment score raises a validation error when creating a Conversation
+        """
+        client.force_authenticate(user=superuser)
+        data = {
+            'path': 'path/to/new_conversation',
+            'date': datetime.now().isoformat(),
+            'duration': 100.0,
+            'transcript': 'New transcript',
+            'summary': 'New summary',
+            'title': 'New Conversation',
+            'sentiment': 87,
+            'topics': [],
+            'agent': agent.id,
+            'customer': customer.id,
+            'input_tokens': 120,
+            'output_tokens': 60
+        }
+        response = client.post(reverse('conversation-list'), data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'sentiment' in response.data
+
+        data = {
+            'path': 'path/to/new_conversation',
+            'date': datetime.now().isoformat(),
+            'duration': 100.0,
+            'transcript': 'New transcript',
+            'summary': 'New summary',
+            'title': 'New Conversation',
+            'sentiment': -3,
+            'topics': [],
+            'agent': agent.id,
+            'customer': customer.id,
+            'input_tokens': 120,
+            'output_tokens': 60
+        }
+        response = client.post(reverse('conversation-list'), data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'sentiment' in response.data
 
 
 @pytest.mark.django_db
@@ -458,6 +499,21 @@ class TestConversationUpdate:
         data = {'title': 'Updated Title'}
         response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_sentiment_score_validation(self, client, superuser, conversation):
+        """
+        Test that an invalid sentiment score raises a validation error when creating a Conversation
+        """
+        client.force_authenticate(user=superuser)
+        data = {'sentiment': 87}
+        response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'sentiment' in response.data
+
+        data = {'sentiment': -3}
+        response = client.patch(reverse('conversation-detail', args=[conversation.id]), data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'sentiment' in response.data
 
 
 @pytest.mark.django_db

@@ -158,7 +158,7 @@ class ConversationTrendsSerializer(serializers.Serializer):
     def get_sentiment_trend(self, obj):
         """
         Paginated trend of average conversation sentiment score. For the specified trend_period, shows the average
-        conversation sentiment score, in a scale from -1 to 1.
+        conversation sentiment score, in a scale from 0 to 5.
         """
         request = self.context.get('request')
         trend_period = request.query_params.get('trend_period', 'daily')
@@ -222,6 +222,19 @@ class ConversationModifySerializer(serializers.ModelSerializer):
         model = Conversation
         fields = ['path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
                   'agent', 'customer', 'input_tokens', 'output_tokens']
+
+    def validate(self, data):
+        """
+        Validates the data provided for the creation or modification of a Conversation. In particular, check that the
+        provided sentiment score is between 0 and 5
+        """
+        sentiment = data.get('sentiment')
+        if sentiment:
+            if not (0 <= sentiment <= 5):
+                raise serializers.ValidationError(
+                    detail={'sentiment': f'Sentiment score must be between 0 and 5. Provided value was {sentiment}'}
+                )
+        return data
 
 
 class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
