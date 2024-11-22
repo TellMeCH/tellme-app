@@ -94,85 +94,33 @@ class ConversationTrendsSerializer(serializers.Serializer):
             'previous': paginator.get_previous_link()
         }
 
-    def get_conversation_trend(self, obj):
+    def get_trend(self, obj):
         """
-        Paginated trend of conversation counts. Shows the total number of conversation for the specified trend_period.
+        Paginated trend regarding an object's conversations. Expects the request to include at most three parameters:
+            period (str): The time period granularity to use for the trend. Must be one of "daily", "weekly", "monthly"
+            per_topic (bool): Indicates whether to group by the time period AND the topic, or just by the time period
+            field (str): Specifies what field to examine. If none is specified, the call count, average sentiment and
+                average duration will be used.
         """
         request = self.context.get('request')
-        trend_period = request.query_params.get('trend_period', 'daily')
+        trend_period = request.query_params.get('trend_period', 'monthly')
+        per_topic = request.query_params.get('per_topic', 'false').lower() == 'true'
+        field = request.query_params.get('field')
 
-        conversation_trend = obj.get_conversation_trend(trend_period)
+        if per_topic and (not field or field == 'count'):
+            order_by = ['-date', '-count']
+        else:
+            order_by = ['-date']
+
+        trend = obj.get_trend(trend_period, per_topic, field)
         paginated_qs, paginator = paginate_queryset(
-            conversation_trend,
+            trend,
             self.context['request'],
-            ['-date']
+            order_by
         )
         return {
             'results': paginated_qs,
-            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
-            'previous': paginator.get_previous_link()
-        }
-
-    def get_conversation_topic_trend(self, obj):
-        """
-        Paginated trend of conversation counts per topic. Shows the total number of conversations per topic for the
-        specified trend_period.
-        """
-        request = self.context.get('request')
-        trend_period = request.query_params.get('trend_period', 'daily')
-
-        topic_trend = obj.get_conversation_trend_per_topic(trend_period)
-        paginated_qs, paginator = paginate_queryset(
-            topic_trend,
-            self.context['request'],
-            ['-date']
-        )
-        return {
-            'results': paginated_qs,
-            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
-            'previous': paginator.get_previous_link()
-        }
-
-    def get_duration_trend(self, obj):
-        """
-        Paginated trend of average conversation duration. For the specified trend_period, shows the average conversation
-        length in seconds.
-        """
-        request = self.context.get('request')
-        trend_period = request.query_params.get('trend_period', 'daily')
-
-        # Fetch the appropriate trend based on the period
-        duration_trend = obj.get_avg_for_periods('duration', trend_period)
-        print(len(duration_trend))
-        paginated_qs, paginator = paginate_queryset(
-            duration_trend,
-            self.context['request'],
-            ['-date']
-        )
-        return {
-            'results': paginated_qs,
-            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
-            'previous': paginator.get_previous_link()
-        }
-
-    def get_sentiment_trend(self, obj):
-        """
-        Paginated trend of average conversation sentiment score. For the specified trend_period, shows the average
-        conversation sentiment score, in a scale from 0 to 5.
-        """
-        request = self.context.get('request')
-        trend_period = request.query_params.get('trend_period', 'daily')
-
-        # Fetch the appropriate trend based on the period
-        sentiment_trend = obj.get_avg_for_periods('sentiment', trend_period)
-        paginated_qs, paginator = paginate_queryset(
-            sentiment_trend,
-            self.context['request'],
-            ['-date']
-        )
-        return {
-            'results': paginated_qs,
-            'next': paginator.get_next_link(),  # Separate 'next' link for conversations
+            'next': paginator.get_next_link(),
             'previous': paginator.get_previous_link()
         }
 

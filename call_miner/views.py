@@ -15,10 +15,10 @@ from call_miner.utils.paginators import CustomListViewPaginator
 from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, CONVERSATIONS_RESPONSE_SCHEMA,
-    CONVERSATION_TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA,
-    DURATION_TREND_RESPONSE_SCHEMA, SENTIMENT_TREND_RESPONSE_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
-    SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA, LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA,
-    MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA, NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
+    TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA,
+    SEARCH_QUERY_PARAMETER_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
+    LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
+    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
 )
 
 
@@ -70,78 +70,21 @@ class TrendsActionsViewSet(viewsets.ReadOnlyModelViewSet):
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
-        description=ConversationTrendsSerializer.get_conversation_trend.__doc__,
-        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
+        description=ConversationTrendsSerializer.get_trend.__doc__,
+        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA],
         responses={
-            200: CONVERSATION_TREND_RESPONSE_SCHEMA,
+            200: TREND_RESPONSE_SCHEMA,
             400: ERROR_RESPONSE_SCHEMA,
             403: FORBIDDEN_RESPONSE_SCHEMA,
             404: NOT_FOUND_RESPONSE_SCHEMA
         }
     )
     @decorators.action(detail=True, methods=['get'])
-    def conversation_trend(self, request, pk=None):
+    def trend(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         try:
-            return response.Response(serializer.get_conversation_trend(obj))
-        except ValueError as e:
-            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    @extend_schema(
-        description=ConversationTrendsSerializer.get_conversation_topic_trend.__doc__,
-        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses={
-            200: CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA,
-            400: ERROR_RESPONSE_SCHEMA,
-            403: FORBIDDEN_RESPONSE_SCHEMA,
-            404: NOT_FOUND_RESPONSE_SCHEMA
-        }
-    )
-    @decorators.action(detail=True, methods=['get'])
-    def conversation_topic_trend(self, request, pk=None):
-        obj = self.get_object()
-        serializer = self.get_serializer(obj)
-        try:
-            return response.Response(serializer.get_conversation_topic_trend(obj))
-        except ValueError as e:
-            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    @extend_schema(
-        description=ConversationTrendsSerializer.get_duration_trend.__doc__,
-        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses={
-            200: DURATION_TREND_RESPONSE_SCHEMA,
-            400: ERROR_RESPONSE_SCHEMA,
-            403: FORBIDDEN_RESPONSE_SCHEMA,
-            404: NOT_FOUND_RESPONSE_SCHEMA
-        }
-    )
-    @decorators.action(detail=True, methods=['get'])
-    def duration_trend(self, request, pk=None):
-        obj = self.get_object()
-        serializer = self.get_serializer(obj)
-        try:
-            return response.Response(serializer.get_duration_trend(obj))
-        except ValueError as e:
-            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    @extend_schema(
-        description=ConversationTrendsSerializer.get_sentiment_trend.__doc__,
-        parameters=[ID_PARAMETER_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA],
-        responses={
-            200: SENTIMENT_TREND_RESPONSE_SCHEMA,
-            400: ERROR_RESPONSE_SCHEMA,
-            403: FORBIDDEN_RESPONSE_SCHEMA,
-            404: NOT_FOUND_RESPONSE_SCHEMA
-        }
-    )
-    @decorators.action(detail=True, methods=['get'])
-    def sentiment_trend(self, request, pk=None):
-        obj = self.get_object()
-        serializer = self.get_serializer(obj)
-        try:
-            return response.Response(serializer.get_sentiment_trend(obj))
+            return response.Response(serializer.get_trend(obj))
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -286,8 +229,7 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
     def get_serializer_class(self):
         if self.action in ['retrieve', 'list', 'modify', 'create', 'update', 'destroy', 'partial_update']:
             return OrganizationDetailSerializer
-        elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
-                             'sentiment_trend']:
+        elif self.action in ['conversations', 'trend']:
             return ConversationTrendsSerializer
         raise ValueError(f'Action {self.action} not permitted.')
 
@@ -317,7 +259,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
             return TopicListSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
-        elif self.action in ['conversations', 'conversation_trend', 'duration_trend', 'sentiment_trend']:
+        elif self.action in ['conversations', 'trend']:
             return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return TopicModifySerializer
@@ -347,10 +289,6 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         """
         return self.list(request)
 
-    def conversation_topic_trend(self, request, *args, **kwargs):
-        # Remove from the API schema
-        pass
-
 
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     """
@@ -374,8 +312,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
             return AgentDetailSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
-        elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
-                             'sentiment_trend']:
+        elif self.action in ['conversations', 'trend']:
             return ConversationTrendsSerializer
         raise ValueError(f'Action {self.action} not permitted.')
 
@@ -426,8 +363,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
             return CustomerListSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
-        elif self.action in ['conversations', 'conversation_trend', 'conversation_topic_trend', 'duration_trend',
-                             'sentiment_trend']:
+        elif self.action in ['conversations', 'trend']:
             return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return CustomerModifySerializer

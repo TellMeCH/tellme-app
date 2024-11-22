@@ -4,7 +4,7 @@ from django.urls import reverse, exceptions
 from rest_framework import status
 from call_miner.models import Topic
 
-TREND_ACTIONS = ['conversations', 'conversation-trend', 'duration-trend', 'sentiment-trend']
+TREND_ACTIONS = ['conversations', 'trend']
 
 
 @pytest.mark.django_db
@@ -490,24 +490,14 @@ class TestTopicTrendActions:
         assert len(results) == 1
         assert results[0]['title'] == conversation.title
 
-    def test_topic_conversation_topic_trend_action_is_disabled(self, client, analyst_user, topic,
-                                                               conversation):
-        """
-        Test that the 'conversation-topic-trend' action for a topic is disabled and not available via URL.
-        """
-        client.force_authenticate(user=analyst_user)
-        with pytest.raises(exceptions.NoReverseMatch):
-            url = reverse('topic-conversation-topic-trend', args=[topic.id])
-            _ = client.get(url)
-
     def test_topic_conversation_trend_action_returns_expected_content(self, client, analyst_user, topic,
                                                                       conversation):
         """
-        Test that the 'conversation-trend' action for a topic retrieves the expected conversation trend data.
+        Test that the 'trend' action retrieves the expected conversation trend data.
         """
         client.force_authenticate(user=analyst_user)
-        url = reverse('topic-conversation-trend', args=[topic.id])
-        response = client.get(url)
+        url = reverse('topic-trend', args=[topic.id])
+        response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
         assert 'results' in response.data
         results = response.data['results']
@@ -517,30 +507,30 @@ class TestTopicTrendActions:
     def test_topic_duration_trend_action_returns_expected_content(self, client, analyst_user, topic,
                                                                   conversation):
         """
-        Test that the 'duration-trend' action for a topic retrieves the expected duration trend data.
+        Test that the 'trend' action for a topic retrieves the expected duration trend data.
         """
         client.force_authenticate(user=analyst_user)
-        url = reverse('topic-duration-trend', args=[topic.id])
+        url = reverse('topic-trend', args=[topic.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert 'results' in response.data
         results = response.data['results']
         assert len(results) == 1
-        assert results[0]['avg_value'] == conversation.duration
+        assert results[0]['avg_duration'] == conversation.duration
 
     def test_topic_sentiment_trend_action_returns_expected_content(self, client, analyst_user, topic,
                                                                    conversation):
         """
-        Test that the 'sentiment-trend' action for a topic retrieves the expected sentiment trend data.
+        Test that the 'trend' action for a topic retrieves the expected sentiment trend data.
         """
         client.force_authenticate(user=analyst_user)
-        url = reverse('topic-sentiment-trend', args=[topic.id])
-        response = client.get(url)
+        url = reverse('topic-trend', args=[topic.id])
+        response = client.get(url, {'field': 'sentiment'})
         assert response.status_code == status.HTTP_200_OK
         assert 'results' in response.data
         results = response.data['results']
         assert len(results) == 1
-        assert results[0]['avg_value'] == conversation.sentiment
+        assert results[0]['avg_sentiment'] == conversation.sentiment
 
 
 @pytest.mark.django_db
