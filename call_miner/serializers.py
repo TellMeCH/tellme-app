@@ -105,7 +105,7 @@ class ConversationTrendsSerializer(serializers.Serializer):
         paginated_qs, paginator = paginate_queryset(
             conversation_trend,
             self.context['request'],
-            ['date']
+            ['-date']
         )
         return {
             'results': paginated_qs,
@@ -125,7 +125,7 @@ class ConversationTrendsSerializer(serializers.Serializer):
         paginated_qs, paginator = paginate_queryset(
             topic_trend,
             self.context['request'],
-            ['date']
+            ['-date']
         )
         return {
             'results': paginated_qs,
@@ -147,7 +147,7 @@ class ConversationTrendsSerializer(serializers.Serializer):
         paginated_qs, paginator = paginate_queryset(
             duration_trend,
             self.context['request'],
-            ['date']
+            ['-date']
         )
         return {
             'results': paginated_qs,
@@ -168,7 +168,7 @@ class ConversationTrendsSerializer(serializers.Serializer):
         paginated_qs, paginator = paginate_queryset(
             sentiment_trend,
             self.context['request'],
-            ['date']
+            ['-date']
         )
         return {
             'results': paginated_qs,
