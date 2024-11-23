@@ -81,6 +81,51 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
     }
 )
 
+ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'patternProperties': {
+            r'^\d+$': {  # Numeric keys
+                'type': 'object',
+                'properties': {
+                    'summary': {
+                        'type': 'string',
+                        'description': 'Summary of all conversation summaries of the object.'
+                    },
+                    'summary_date': {
+                        'type': 'string',
+                        'format': 'date-time',
+                        'description': 'Date of this summarization.'
+                    },
+                    'summary_call_count': {
+                        'type': 'integer',
+                        'description': 'Number of calls included in the summary.'
+                    },
+                },
+                'required': ['summary', 'summary_date', 'summary_call_count'],
+                'example': {
+                    'summary': 'The recurring issues in these conversations indicate systemic challenges bla bla.',
+                    'summary_date': '2024-12-27T00:00:00Z',
+                    'summary_call_count': 32
+                }
+            }
+        },
+        'additionalProperties': False,
+        'example': {
+            "1": {
+                "summary": "The recurring issues in these conversations indicate systemic challenges bla bla.",
+                "summary_date": "2024-12-27T00:00:00Z",
+                "summary_call_count": 32
+            },
+            "2": {
+                "summary": "The recurring issues appear to involve a high volume of customer inquiries, bla bla.",
+                "summary_date": "2024-12-21T00:00:00Z",
+                "summary_call_count": 36
+            }
+        }
+    }
+)
+
 CONVERSATIONS_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',

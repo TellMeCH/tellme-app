@@ -26,6 +26,16 @@ def mock_firebase_auth():
         yield
 
 
+@pytest.fixture(autouse=True)
+def mock_condense_summaries():
+    """
+    Mocking the call to OpenAI API for re-summarization. Making it autouse to avoid any unexpected costs.
+    """
+    with patch('call_miner.models.condense_summaries') as mock:
+        mock.return_value = 'Mocked summary text'
+        yield mock
+
+
 @pytest.fixture
 def client():
     """Return an instance of the DRF APIClient for testing."""
