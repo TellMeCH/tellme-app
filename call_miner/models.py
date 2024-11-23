@@ -23,11 +23,17 @@ class MetaSummaryAbstractModel(models.Model):
     class Meta:
         abstract = True
 
-    def get_or_create_summary(self):
+    def get_or_create_summary(self, trace_data: dict = None):
         """
         Extract all the object's related conversations, as well as their summaries. If enough new summaries have
         been produced, condense them into a new meta-summary for the object.
+        Args:
+            trace_data (dict): A dictionary containing data to store in the corresponding Langfuse trace
+
         """
+        if trace_data is None:
+            trace_data = {}
+
         relevant_summaries = [conv.summary for conv in self.conversations.order_by('-date')]
         latest_date = self.conversations.aggregate(latest_date=models.Max('date'))['latest_date']
         actual_call_count = len(relevant_summaries)
@@ -35,7 +41,7 @@ class MetaSummaryAbstractModel(models.Model):
         # Compare the count with the Summary object's count field
         if self.is_deviation_significant(actual_call_count):
             # Call the external function with the list of summaries
-            new_summary_text = condense_summaries(relevant_summaries)
+            new_summary_text = condense_summaries(relevant_summaries, trace_data)
             self.summary = new_summary_text
             self.summary_call_count = actual_call_count
             self.summary_date = latest_date

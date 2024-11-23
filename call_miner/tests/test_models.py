@@ -72,7 +72,7 @@ class TestMetaSummaryAbstractModel:
         """
         mock_condense = mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
         topic.get_or_create_summary()
-        mock_condense.assert_called_once_with([conversation.summary])
+        mock_condense.assert_called_once_with([conversation.summary], {})
         assert topic.summary == "Mocked Summary"
         assert topic.summary_call_count == 1
         assert topic.summary_date == conversation.date

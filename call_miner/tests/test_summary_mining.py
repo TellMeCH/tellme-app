@@ -62,23 +62,23 @@ def test_condense_summaries_success(mock_openai):
     # Create a mock message object
     mock_message = MagicMock()
     mock_message.refusal = False  # Simulate that the model did not refuse
-    mock_message.parsed = SummarizerResponse(summary='Mocked meta-summary')
+    mock_message.content = '{"summary": "Mocked meta-summary"}'
 
     # Set the choices to return the mock message
     mock_completion.choices = [MagicMock(message=mock_message)]
 
     # Mock the parse method to return the mock completion
-    mock_client_instance.beta.chat.completions.parse.return_value = mock_completion
+    mock_client_instance.chat.completions.create.return_value = mock_completion
 
     summaries = [
         'Customer called about issue A.',
         'Customer reported problem B.',
         'Customer inquired about service C.',
     ]
-    response = condense_summaries(summaries)
+    response = condense_summaries(summaries, {})
 
     assert response == 'Mocked meta-summary'
-    mock_client_instance.beta.chat.completions.parse.assert_called_once()
+    mock_client_instance.chat.completions.create.assert_called_once()
 
 
 @patch('call_miner.utils.summary_mining.openai.OpenAI')
@@ -90,11 +90,11 @@ def test_condense_summaries_api_exception(mock_openai):
     with the appropriate error message.
     """
     mock_client_instance = mock_openai.return_value
-    mock_client_instance.beta.chat.completions.parse.side_effect = Exception('API error')
+    mock_client_instance.chat.completions.create.side_effect = Exception('API error')
 
     summaries = ['Customer called about issue A.']
     with pytest.raises(Exception) as exc_info:
-        condense_summaries(summaries)
+        condense_summaries(summaries, {})
     assert 'API error' in str(exc_info.value)
 
 
@@ -117,18 +117,18 @@ def test_condense_summaries_token_cutoff(mock_openai):
     # Create a mock message object
     mock_message = MagicMock()
     mock_message.refusal = False
-    mock_message.parsed = SummarizerResponse(summary='Mocked meta-summary')
+    mock_message.content = '{"summary": "Mocked meta-summary"}'
 
     # Set the choices to return the mock message
     mock_completion.choices = [MagicMock(message=mock_message)]
 
     # Mock the parse method to return the mock completion
-    mock_client_instance.beta.chat.completions.parse.return_value = mock_completion
+    mock_client_instance.chat.completions.create.return_value = mock_completion
 
     summaries = ['a' * 100000] * 13
-    response = condense_summaries(summaries)
+    response = condense_summaries(summaries,{})
     assert response == 'Mocked meta-summary'
-    mock_client_instance.beta.chat.completions.parse.assert_called_once()
+    mock_client_instance.chat.completions.create.assert_called_once()
 
 
 def test_condense_summaries_no_summaries():
@@ -138,5 +138,5 @@ def test_condense_summaries_no_summaries():
     Verifies that the function returns the appropriate message for no summaries.
     """
     summaries = []
-    response = condense_summaries(summaries)
+    response = condense_summaries(summaries,{})
     assert response == "No conversations to summarize. Check back later once new calls have been recorded."
