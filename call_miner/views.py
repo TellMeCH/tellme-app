@@ -14,8 +14,8 @@ from call_miner.permissions import (ConversationPermission, OrganizationPermissi
 from call_miner.utils.paginators import CustomListViewPaginator
 from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
-    ID_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, CONVERSATIONS_RESPONSE_SCHEMA,
-    TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA,
+    ID_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA,
+    CONVERSATIONS_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA,
     SEARCH_QUERY_PARAMETER_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
     NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
@@ -247,7 +247,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     SummaryActionsViewSet, to obtain meta-summaries of all the associated conversation summaries.
     A summary of the permissions:
     - Modification is allowed to superusers and analysts of the same organization
-    - Viewing is allowed to analysts of the same organization (and superusers)
+    - Viewing is allowed to employees of the same organization (and superusers)
     """
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [TopicPermission]
@@ -257,7 +257,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     def get_serializer_class(self):
         if self.action in ['list', 'list_active', 'retrieve']:
             return TopicListSerializer
-        elif self.action in ['summary_data']:
+        elif self.action in ['summary_data', 'all_summaries']:
             return MetaSummarySerializer
         elif self.action in ['conversations', 'trend']:
             return ConversationTrendsSerializer
@@ -272,7 +272,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         if self.request.user.is_superuser:
             return Topic.objects.all()
         if self.request.user.employee.organization:
-            if self.action == 'list_active':
+            if self.action in ['list_active', 'all_summaries']:
                 return Topic.objects.filter(organization=self.request.user.employee.organization, is_active=True)
             else:
                 return Topic.objects.filter(organization=self.request.user.employee.organization)
@@ -288,6 +288,32 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         Custom action to list only active topics
         """
         return self.list(request)
+
+    @extend_schema(
+        responses={
+            200: ALL_SUMMARIES_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=False, methods=['get'], url_path='all_summaries')
+    def all_summaries(self, request):
+        """
+        This method takes get_summary_data a step further, obtaining the summary data of all topics in the queryset.
+        The response is now a dictionary, where the key corresponds to the topic ID.
+        """
+        queryset = self.get_queryset()
+        try:
+            summaries = {}
+            for obj in queryset:
+                serializer = self.get_serializer(obj)
+                summary_data = serializer.get_summary_data(obj)
+                summary_data['name'] = obj.name
+                summaries[obj.id] = summary_data
+            return response.Response(summaries)
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):

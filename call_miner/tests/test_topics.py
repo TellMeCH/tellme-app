@@ -105,14 +105,15 @@ class TestTopicRetrieve:
         assert response.status_code == status.HTTP_200_OK
         assert response.data['name'] == topic.name
 
-    def test_agent_in_same_organization_cannot_retrieve_topic(self, client, agent_user, topic):
+    def test_agent_in_same_organization_can_retrieve_topic(self, client, agent_user, topic):
         """
-        Test that an agent cannot retrieve a topic in their own organization.
+        Test that an agent can retrieve a topic in their own organization.
         """
         client.force_authenticate(user=agent_user)
         url = reverse('topic-detail', args=[topic.id])
         response = client.get(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['name'] == topic.name
 
     def test_analyst_in_other_organization_cannot_retrieve_topic(self, client, another_organization_analyst_user,
                                                                  topic):
@@ -439,14 +440,14 @@ class TestTopicTrendActions:
             url = reverse(f'topic-{action}', args=[topic.id])
             self._test_trend_action(client, url, status.HTTP_200_OK)
 
-    def test_agent_in_same_organization_cannot_access_trend_actions(self, client, agent_user, topic):
+    def test_agent_in_same_organization_can_access_trend_actions(self, client, agent_user, topic):
         """
-        Test that an agent cannot access trend actions in their own organization.
+        Test that an agent can access trend actions in their own organization.
         """
         client.force_authenticate(user=agent_user)
         for action in TREND_ACTIONS:
             url = reverse(f'topic-{action}', args=[topic.id])
-            self._test_trend_action(client, url, status.HTTP_403_FORBIDDEN)
+            self._test_trend_action(client, url, status.HTTP_200_OK)
 
     def test_analyst_in_other_organization_cannot_access_trend_actions(self, client, another_organization_analyst_user,
                                                                        topic):
@@ -539,30 +540,45 @@ class TestTopicSummary:
 
     def test_superuser_can_access_summary_data(self, client, superuser, topic):
         """
-        Test that a superuser can access the summary data of a topic.
+        Test that a superuser can access the summary data of each and all topics.
         """
         client.force_authenticate(user=superuser)
+
         url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+        url = reverse('topic-all-summaries')
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
     def test_organization_analyst_can_access_summary_data(self, client, analyst_user, topic):
         """
-        Test that an analyst can access the summary data of a topic in their own organization.
+        Test that an analyst can access the summary data of each and all topics in their own organization.
         """
         client.force_authenticate(user=analyst_user)
+
         url = reverse('topic-summary-data', args=[topic.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
-    def test_agent_in_same_organization_cannot_access_summary_data(self, client, agent_user, topic):
+        url = reverse('topic-all-summaries')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_agent_in_same_organization_can_access_summary_data(self, client, agent_user, topic):
         """
-        Test that an agent cannot access the summary data of a topic in their own organization.
+        Test that an agent can access the summary data of each and all topics in their own organization.
         """
         client.force_authenticate(user=agent_user)
+
         url = reverse('topic-summary-data', args=[topic.id])
         response = client.get(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
+
+        url = reverse('topic-all-summaries')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
 
     def test_analyst_in_other_organization_cannot_access_summary_data(self, client, another_organization_analyst_user,
                                                                       topic):
@@ -592,21 +608,39 @@ class TestTopicSummary:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+        url = reverse('topic-all-summaries')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
     def test_topic_summary_data_returns_expected_content(self, client, analyst_user, topic, conversation):
         """
         Test that the 'summary-data' action for a topic retrieves the expected summary data and mocks the summary
         generation.
         """
-        with patch('call_miner.models.condense_summaries') as mock_condense_summaries:
-            mock_condense_summaries.return_value = 'Mocked summary text'
-            client.force_authenticate(user=analyst_user)
-            url = reverse('topic-summary-data', args=[topic.id])
-            response = client.get(url)
-            assert response.status_code == status.HTTP_200_OK
-            assert 'summary' in response.data
-            assert response.data['summary'] == 'Mocked summary text'
-            assert response.data['summary_call_count'] == 1
-            assert response.data['summary_date'].date() == conversation.date.date()
+
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'summary' in response.data
+        assert response.data['summary'] == 'Mocked summary text'
+        assert response.data['summary_call_count'] == 1
+        assert response.data['summary_date'].date() == conversation.date.date()
+
+    def test_all_summaries_returns_expected_content(self, client, analyst_user, topic, conversation):
+        """
+        Test that the 'all-summaries' action for all topic retrieves the expected summary data and mocks the summary
+        generation.
+        """
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-all-summaries')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert topic.id in response.data
+        assert response.data[topic.id]['summary'] == 'Mocked summary text'
+        assert response.data[topic.id]['summary_call_count'] == 1
+        assert response.data[topic.id]['summary_date'].date() == conversation.date.date()
+        assert response.data[topic.id]['name'] == topic.name
 
 
 @pytest.mark.django_db

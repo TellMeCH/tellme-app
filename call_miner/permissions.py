@@ -78,7 +78,7 @@ class TopicPermission(permissions.BasePermission):
         if request.user.is_superuser:
             return True
         if hasattr(request.user, 'employee'):
-            return request.user.employee.organization == obj.organization and hasattr(request.user.employee, 'analyst')
+            return request.user.employee.organization == obj.organization
         return False
 
 
