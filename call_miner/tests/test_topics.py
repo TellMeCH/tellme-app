@@ -6,6 +6,10 @@ from call_miner.models import Topic
 
 TREND_ACTIONS = ['conversations', 'trend']
 
+ERROR_MESSAGES = {
+    'max_topic_count_reached': "Cannot add more topics to this organization; max topic count reached."
+}
+
 
 @pytest.mark.django_db
 class TestTopicList:
@@ -261,6 +265,62 @@ class TestTopicCreate:
         }
         response = client.post(reverse('topic-list'), data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_superuser_cannot_create_topic_beyond_max_user_count(self, client, superuser, organization):
+        """Test that even a superuser cannot create more topics than the organization's max_topic_count."""
+        client.force_authenticate(user=superuser)
+        url = reverse('topic-list')
+        topics_to_create = organization.max_topic_count - Topic.objects.filter(organization=organization).count()
+
+        # Create topics up to the max count
+        for i in range(topics_to_create):
+            url = reverse('topic-list')
+            data = {
+                'name': f'Allowed Topic #{i}',
+                'description': 'Should be created',
+                'is_active': True,
+                'organization': organization.id,
+            }
+            response = client.post(url, data, format='json')
+            assert response.status_code == status.HTTP_201_CREATED
+
+        # Attempt to create one more topic beyond the max count
+        data = {
+            'name': 'Excessive Topic',
+            'description': 'Should not be created',
+            'is_active': True,
+            'organization': organization.id,
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['max_topic_count_reached'] in str(response.data['non_field_errors'])
+
+    def test_analyst_cannot_create_topic_beyond_max_user_count(self, client, analyst_user, organization):
+        """Test that even a analyst cannot create more topics than the organization's max_topic_count."""
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-list')
+        topics_to_create = organization.max_topic_count - Topic.objects.filter(organization=organization).count()
+
+        # Create topics up to the max count
+        for i in range(topics_to_create):
+            url = reverse('topic-list')
+            data = {
+                'name': f'Allowed Topic #{i}',
+                'description': 'Should be created',
+                'is_active': True
+            }
+            response = client.post(url, data, format='json')
+            assert response.status_code == status.HTTP_201_CREATED
+
+        # Attempt to create one more topic beyond the max count
+        data = {
+            'name': 'Excessive Topic',
+            'description': 'Should not be created',
+            'is_active': True
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['max_topic_count_reached'] in str(response.data['non_field_errors'])
 
 
 @pytest.mark.django_db
