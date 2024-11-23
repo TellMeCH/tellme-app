@@ -212,6 +212,7 @@ class Organization(models.Model, ConversationTrendMixin):
 
     name = models.CharField(max_length=100, unique=True, null=False)
     max_user_count = models.IntegerField(default=10)
+    max_topic_count = models.IntegerField(default=20)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 

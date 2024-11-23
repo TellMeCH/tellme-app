@@ -317,24 +317,27 @@ class TopicModifySerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({
                         "organization": "Superusers must provide an organization when creating a Topic."
                     })
-            return data
+        else:  # For non-superusers, enforce the organization
+            if not hasattr(current_user, 'employee'):
+                raise serializers.ValidationError("Current user is not associated with an Employee profile.")
 
-        # For non-superusers, enforce the organization
-        if not hasattr(current_user, 'employee'):
-            raise serializers.ValidationError("Current user is not associated with an Employee profile.")
+            # Non-superusers should not specify an organization
+            if 'organization' in data:
+                if data['organization'] is not None:
+                    raise serializers.ValidationError({
+                        "organization": f"Analysts should not provide an organization when modifying a Topic."
+                    })
 
-        user_organization = current_user.employee.organization
+            # Enforce the user's organization
+            data['organization'] = current_user.employee.organization
 
-        # Non-superusers should not specify an organization
-        if 'organization' in data:
-            if data['organization'] is not None:
-                raise serializers.ValidationError({
-                    "organization": f"Org Admins should not provide an organization when modifying a Topic."
-                })
-
-        # Enforce the user's organization
-        data['organization'] = user_organization
-
+        # Check if creating a new topic would exceed the organization's max_topic_count
+        if self.instance is None:
+            current_topic_count = Topic.objects.filter(organization=data['organization']).count()
+            if current_topic_count >= data['organization'].max_topic_count:
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["Cannot add more topics to this organization; max topic count reached."]}
+                )
         return data
 
 
