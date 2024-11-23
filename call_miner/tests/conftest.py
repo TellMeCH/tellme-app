@@ -26,6 +26,16 @@ def mock_firebase_auth():
         yield
 
 
+@pytest.fixture(autouse=True)
+def mock_condense_summaries():
+    """
+    Mocking the call to OpenAI API for re-summarization. Making it autouse to avoid any unexpected costs.
+    """
+    with patch('call_miner.models.condense_summaries') as mock:
+        mock.return_value = 'Mocked summary text'
+        yield mock
+
+
 @pytest.fixture
 def client():
     """Return an instance of the DRF APIClient for testing."""
@@ -164,7 +174,7 @@ def conversation(agent, customer, topic):
         <agent>: That doesn't sound right. Let me look into that for you.
         <customer>: Thank you, it's driving me crazy!
         """ * 4,
-        sentiment=0.5,
+        sentiment=4.5,
         agent=agent,
         customer=customer,
         input_tokens=100,
@@ -185,7 +195,7 @@ def another_organization_conversation(another_organization_agent, another_organi
         title='Another Conversation',
         summary='Another summary',
         transcript='Another test transcript',
-        sentiment=0.5,
+        sentiment=3.5,
         agent=another_organization_agent,
         customer=another_organization_customer,
         input_tokens=100,

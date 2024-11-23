@@ -44,10 +44,7 @@ viewsets = {
             'partial_update': {'method': 'PATCH', 'url': '/organizations/{id}/'},
             'destroy': {'method': 'DELETE', 'url': '/organizations/{id}/'},
             'conversations': {'method': 'GET', 'url': '/organizations/{id}/conversations/'},
-            'conversation_trend': {'method': 'GET', 'url': '/organizations/{id}/conversation_trend/'},
-            'conversation_topic_trend': {'method': 'GET', 'url': '/organizations/{id}/conversation_topic_trend/'},
-            'duration_trend': {'method': 'GET', 'url': '/organizations/{id}/duration_trend/'},
-            'sentiment_trend': {'method': 'GET', 'url': '/organizations/{id}/sentiment_trend/'},
+            'trend': {'method': 'GET', 'url': '/organizations/{id}/trend/'},
         }
     },
     'topics': {
@@ -61,9 +58,7 @@ viewsets = {
             'list_active': {'method': 'GET', 'url': '/topics/list_active/'},
             'summary_data': {'method': 'GET', 'url': '/topics/{id}/summary_data/'},
             'conversations': {'method': 'GET', 'url': '/topics/{id}/conversations/'},
-            'conversation_trend': {'method': 'GET', 'url': '/topics/{id}/conversation_trend/'},
-            'duration_trend': {'method': 'GET', 'url': '/topics/{id}/duration_trend/'},
-            'sentiment_trend': {'method': 'GET', 'url': '/topics/{id}/sentiment_trend/'},
+            'trend': {'method': 'GET', 'url': '/topics/{id}/trend/'},
         }
     },
     'agents': {
@@ -72,11 +67,7 @@ viewsets = {
             'retrieve': {'method': 'GET', 'url': '/agents/{id}/'},
             'summary_data': {'method': 'GET', 'url': '/agents/{id}/summary_data/'},
             'conversations': {'method': 'GET', 'url': '/agents/{id}/conversations/'},
-            'conversation_trend': {'method': 'GET', 'url': '/agents/{id}/conversation_trend/'},
-            'conversation_topic_trend': {'method': 'GET', 'url': '/agents/{id}/conversation_topic_trend/'},
-            'duration_trend': {'method': 'GET', 'url': '/agents/{id}/duration_trend/'},
-            'sentiment_trend': {'method': 'GET', 'url': '/agents/{id}/sentiment_trend/'},
-            'managed_agents': {'method': 'GET', 'url': '/agents/{id}/managed_agents/'},
+            'trend': {'method': 'GET', 'url': '/agents/{id}/trend/'},
         }
     },
     'customers': {
@@ -89,11 +80,7 @@ viewsets = {
             'destroy': {'method': 'DELETE', 'url': '/customers/{id}/'},
             'summary_data': {'method': 'GET', 'url': '/customers/{id}/summary_data/'},
             'conversations': {'method': 'GET', 'url': '/customers/{id}/conversations/'},
-            'conversation_trend': {'method': 'GET', 'url': '/customers/{id}/conversation_trend/'},
-            'conversation_topic_trend': {'method': 'GET', 'url': '/customers/{id}/conversation_topic_trend/'},
-            'duration_trend': {'method': 'GET', 'url': '/customers/{id}/duration_trend/'},
-            'sentiment_trend': {'method': 'GET', 'url': '/customers/{id}/sentiment_trend/'},
-            'search': {'method': 'GET', 'url': '/customers/search/?query=Olivia'}
+            'trend': {'method': 'GET', 'url': '/customers/{id}/trend/'},
         }
     },
     'employees': {
@@ -204,5 +191,5 @@ for viewset_name, viewset_data in viewsets.items():
     collection['item'].append(folder)
 
 # Write the collection to a JSON file
-with open('tellme_postman.json', 'w') as f:
+with open('../tellme_postman.json', 'w') as f:
     json.dump(collection, f, indent=2)

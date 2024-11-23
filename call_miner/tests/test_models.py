@@ -267,165 +267,168 @@ class TestConversationTrendMixin:
         Tests the required input format for get_conversation_trend.
         """
         with pytest.raises(ValueError):
-            topic.get_conversation_trend('invalid_period')
+            topic.get_trend('invalid_period')
 
     def test_get_conversation_trend_empty(self, topic):
         """
-        Test that get_conversation_trend returns an empty list when there are no conversations.
+        Test that get_trend returns an empty list when there are no conversations.
         """
-        trend = list(topic.get_conversation_trend('daily'))
+        trend = list(topic.get_trend('daily'))
         assert len(trend) == 0
 
     def test_get_conversation_trend_single_conversation(self, topic, conversation):
         """
-        Test that get_conversation_trend returns the correct trend for a single conversation.
+        Test that get_trend returns the correct trend for a single conversation.
         """
-        trend = list(topic.get_conversation_trend('daily'))
+        trend = list(topic.get_trend('daily'))
         assert len(trend) == 1
         assert trend[0]['count'] == 1
 
     def test_get_conversation_trend_multiple_conversations(self, topic, conversation,
                                                            another_conversation_same_organization):
         """
-        Test that get_conversation_trend returns the correct trend for multiple conversations on different dates.
+        Test that get_trend returns the correct trend for multiple conversations on different dates.
         """
         another_conversation_same_organization.topics.add(topic)
-        trend = list(topic.get_conversation_trend('daily'))
+        trend = list(topic.get_trend('daily'))
         assert len(trend) == 2
 
     def test_get_conversation_trend_per_topic_invalid_period(self, topic):
         """
-        Tests the required input format for get_conversation_trend_per_topic.
+        Tests the required input format for get_trend.
         """
         with pytest.raises(ValueError):
-            topic.get_conversation_trend_per_topic('invalid_period')
+            topic.get_trend('invalid_period', per_topic=True)
 
     def test_get_conversation_trend_per_topic_empty(self, customer):
         """
-        Test that get_conversation_trend_per_topic returns an empty list when there are no conversations.
+        Test that get_trend per topic returns an empty list when there are no conversations.
         """
-        trend = list(customer.get_conversation_trend_per_topic('daily'))
+        trend = list(customer.get_trend('daily', per_topic=True))
         assert len(trend) == 0
 
     def test_get_conversation_trend_per_topic_single_conversation(self, customer, conversation, topic):
         """
-        Test that get_conversation_trend_per_topic returns the correct trend for a single conversation.
+        Test that get_trend per topic returns the correct trend for a single conversation.
         """
-        trend = list(customer.get_conversation_trend_per_topic('daily'))
+        trend = list(customer.get_trend('daily', per_topic=True))
         assert len(trend) == 1
         assert trend[0]['count'] == 1
-        assert trend[0]['topic'] == topic.name
+        assert trend[0]['topic_name'] == topic.name
 
     def test_get_conversation_trend_per_topic_multiple_conversations(self, customer, conversation,
                                                                      another_conversation_same_organization,
                                                                      another_topic_same_organization):
         """
-        Test that get_conversation_trend_per_topic returns the correct trend for multiple conversations with different
+        Test that get_trend per topic returns the correct trend for multiple conversations with different
         topics.
         """
         another_conversation_same_organization.topics.add(another_topic_same_organization)
-        trend = list(customer.get_conversation_trend_per_topic('daily'))
+        trend = list(customer.get_trend('daily', per_topic=True))
         assert len(trend) == 2
 
     def test_get_avg_for_periods_invalid_field(self, topic):
         """
-        Tests the required input format for get_avg_for_periods.
+        Tests the required input format for get_trend with an invalid field.
         """
         with pytest.raises(ValueError):
-            topic.get_avg_for_periods('invalid_field', 'daily')
+            topic.get_trend(field='invalid_field', period='daily')
 
     def test_get_avg_for_periods_invalid_period(self, topic):
+        """
+        Tests the required input format for get_trend with an invalid period.
+        """
         with pytest.raises(ValueError):
-            topic.get_avg_for_periods('duration', 'invalid_period')
+            topic.get_trend(field='duration', period='invalid_period')
 
     def test_get_avg_duration_empty(self, topic):
         """
-        Test that get_avg_duration returns empty results when there are no conversations.
+        Test that get_trend for duration returns empty results when there are no conversations.
         """
-        avg_duration = list(topic.get_avg_for_periods('duration', 'daily'))
+        avg_duration = list(topic.get_trend(field='duration', period='daily'))
         assert len(avg_duration) == 0
 
     def test_get_avg_duration_single_conversation(self, topic, conversation):
         """
-        Test that get_avg_duration returns the correct average duration for a single conversation.
+        Test that get_trend for duration returns the correct average duration for a single conversation.
         """
-        avg_duration = list(topic.get_avg_for_periods('duration', 'daily'))
+        avg_duration = list(topic.get_trend(field='duration', period='daily'))
         assert len(avg_duration) == 1
-        assert avg_duration[0]['avg_value'] == conversation.duration
+        assert avg_duration[0]['avg_duration'] == conversation.duration
 
     def test_get_daily_avg_duration_multiple_conversations(self, topic, conversation,
                                                            another_conversation_same_organization):
         """
-        Test that get_avg_duration returns the correct average daily duration for multiple conversations over different
-        days.
+        Test that get_trend for duration returns the correct average daily duration for multiple conversations over
+        different days.
         """
         another_conversation_same_organization.topics.add(topic)
-        avg_duration = list(topic.get_avg_for_periods('duration', 'daily'))
+        avg_duration = list(topic.get_trend(field='duration', period='daily'))
         assert len(avg_duration) == 2
 
     def test_get_weekly_avg_duration_multiple_conversations(self, topic, conversation,
                                                             another_conversation_same_organization):
         """
-        Test that get_avg_duration returns the correct average weekly duration for multiple conversations over different
-        days.
+        Test that get_trend for duration returns the correct average weekly duration for multiple conversations over
+        different days.
         """
         another_conversation_same_organization.topics.add(topic)
-        avg_duration = list(topic.get_avg_for_periods('duration', 'weekly'))
+        avg_duration = list(topic.get_trend(field='duration', period='weekly'))
         assert len(avg_duration) == 1
 
     def test_get_monthly_avg_duration_multiple_conversations(self, topic, conversation,
                                                              another_conversation_same_organization):
         """
-        Test that get_avg_duration returns the correct average monthly duration for multiple conversations over
+        Test that get_trend for duration returns the correct average monthly duration for multiple conversations over
         different days.
         """
         another_conversation_same_organization.topics.add(topic)
-        avg_duration = list(topic.get_avg_for_periods('duration', 'monthly'))
+        avg_duration = list(topic.get_trend(field='duration', period='monthly'))
         assert len(avg_duration) == 1
 
     def test_get_avg_sentiment_empty(self, topic):
         """
-        Test that get_avg_sentiment returns empty results when there are no conversations.
+        Test that get_trend for sentiment returns empty results when there are no conversations.
         """
-        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'daily'))
+        avg_sentiment = list(topic.get_trend(field='sentiment', period='daily'))
         assert len(avg_sentiment) == 0
 
     def test_get_avg_sentiment_single_conversation(self, topic, conversation):
         """
-        Test that get_avg_sentiment returns the correct average sentiment for a single conversation.
+        Test that get_trend for sentiment returns the correct average sentiment for a single conversation.
         """
-        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'monthly'))
+        avg_sentiment = list(topic.get_trend(field='sentiment', period='daily'))
         assert len(avg_sentiment) == 1
-        assert avg_sentiment[0]['avg_value'] == conversation.sentiment
+        assert avg_sentiment[0]['avg_sentiment'] == conversation.sentiment
 
     def test_get_daily_avg_sentiment_multiple_conversations(self, topic, conversation,
                                                             another_conversation_same_organization):
         """
-        Test that get_avg_sentiment returns the correct daily average sentiment for multiple conversations over
+        Test that get_trend for sentiment returns the correct daily average sentiment for multiple conversations over
         different days.
         """
         another_conversation_same_organization.topics.add(topic)
-        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'daily'))
+        avg_sentiment = list(topic.get_trend(field='sentiment', period='daily'))
         assert len(avg_sentiment) == 2
 
     def test_get_weekly_avg_sentiment_multiple_conversations(self, topic, conversation,
                                                              another_conversation_same_organization):
         """
-        Test that get_avg_sentiment returns the correct weekly average sentiment for multiple conversations over
+        Test that get_trend for sentiment returns the correct weekly average sentiment for multiple conversations over
         different days.
         """
         another_conversation_same_organization.topics.add(topic)
-        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'weekly'))
+        avg_sentiment = list(topic.get_trend(field='sentiment', period='weekly'))
         assert len(avg_sentiment) == 1
 
     def test_get_monthly_avg_sentiment_multiple_conversations(self, topic, conversation,
                                                               another_conversation_same_organization):
         """
-        Test that get_avg_sentiment returns the correct monthly average sentiment for multiple conversations over
+        Test that get_trend for sentiment returns the correct monthly average sentiment for multiple conversations over
         different days.
         """
         another_conversation_same_organization.topics.add(topic)
-        avg_sentiment = list(topic.get_avg_for_periods('sentiment', 'monthly'))
+        avg_sentiment = list(topic.get_trend(field='sentiment', period='monthly'))
         assert len(avg_sentiment) == 1
 
 
@@ -461,9 +464,7 @@ class TestOrganization:
         """
         Test that Organizations have the functionalities inherited from ConversationTrendMixin.
         """
-        assert hasattr(organization, 'get_conversation_trend')
-        assert hasattr(organization, 'get_conversation_trend_per_topic')
-        assert hasattr(organization, 'get_avg_for_periods')
+        assert hasattr(organization, 'get_trend')
 
 
 @pytest.mark.django_db
@@ -501,9 +502,7 @@ class TestTopic:
         """
         Test that Topics have the functionalities inherited from ConversationTrendMixin.
         """
-        assert hasattr(topic, 'get_conversation_trend')
-        assert hasattr(topic, 'get_conversation_trend_per_topic')
-        assert hasattr(topic, 'get_avg_for_periods')
+        assert hasattr(topic, 'get_trend')
 
 
 @pytest.mark.django_db
@@ -565,9 +564,7 @@ class TestAgent:
         """
         Test that Agents have the functionalities inherited from ConversationTrendMixin.
         """
-        assert hasattr(agent, 'get_conversation_trend')
-        assert hasattr(agent, 'get_conversation_trend_per_topic')
-        assert hasattr(agent, 'get_avg_for_periods')
+        assert hasattr(agent, 'get_trend')
 
 
 @pytest.mark.django_db
@@ -609,9 +606,7 @@ class TestCustomer:
         """
         Test that Customers have the functionalities inherited from ConversationTrendMixin.
         """
-        assert hasattr(customer, 'get_conversation_trend')
-        assert hasattr(customer, 'get_conversation_trend_per_topic')
-        assert hasattr(customer, 'get_avg_for_periods')
+        assert hasattr(customer, 'get_trend')
 
 
 @pytest.mark.django_db
@@ -646,7 +641,7 @@ class TestConversation:
                 date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC),
                 duration=60,
                 transcript="Invalid transcript",
-                sentiment=0.5,
+                sentiment=1.5,
                 summary="Valid Summary",
                 title="Invalid Title",
                 customer=other_customer,

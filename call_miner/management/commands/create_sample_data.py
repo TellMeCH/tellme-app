@@ -171,7 +171,7 @@ class Command(BaseCommand):
                 customer = random.choice(customers)
                 naive_date = base_date + timedelta(days=random.randint(0, 364))  # Naive datetime
                 date = timezone.make_aware(naive_date)  # Convert to aware datetime
-                sentiment = random.uniform(-1, 1)  # Sentiment between -1 and 1
+                sentiment = random.uniform(0, 5)  # Sentiment between 0 and 5
                 duration = random.randint(30, 1800)  # Random duration in seconds
 
                 conversation = Conversation(

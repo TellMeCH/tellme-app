@@ -15,7 +15,16 @@ TREND_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
     location=OpenApiParameter.QUERY,
     description='Trend period (e.g., daily, weekly, monthly).',
     required=False,
-    default='daily',
+    default='monthly',
+)
+
+PER_TOPIC_PARAMETER_SCHEMA = OpenApiParameter(
+    name='per_topic',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='Whether to aggregate the trend also per topic level (e.g true or false)',
+    required=False,
+    default='false',
 )
 
 SEARCH_QUERY_PARAMETER_SCHEMA = OpenApiParameter(
@@ -72,6 +81,51 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
     }
 )
 
+ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'patternProperties': {
+            r'^\d+$': {  # Numeric keys
+                'type': 'object',
+                'properties': {
+                    'summary': {
+                        'type': 'string',
+                        'description': 'Summary of all conversation summaries of the object.'
+                    },
+                    'summary_date': {
+                        'type': 'string',
+                        'format': 'date-time',
+                        'description': 'Date of this summarization.'
+                    },
+                    'summary_call_count': {
+                        'type': 'integer',
+                        'description': 'Number of calls included in the summary.'
+                    },
+                },
+                'required': ['summary', 'summary_date', 'summary_call_count'],
+                'example': {
+                    'summary': 'The recurring issues in these conversations indicate systemic challenges bla bla.',
+                    'summary_date': '2024-12-27T00:00:00Z',
+                    'summary_call_count': 32
+                }
+            }
+        },
+        'additionalProperties': False,
+        'example': {
+            "1": {
+                "summary": "The recurring issues in these conversations indicate systemic challenges bla bla.",
+                "summary_date": "2024-12-27T00:00:00Z",
+                "summary_call_count": 32
+            },
+            "2": {
+                "summary": "The recurring issues appear to involve a high volume of customer inquiries, bla bla.",
+                "summary_date": "2024-12-21T00:00:00Z",
+                "summary_call_count": 36
+            }
+        }
+    }
+)
+
 CONVERSATIONS_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',
@@ -106,7 +160,7 @@ CONVERSATIONS_RESPONSE_SCHEMA = OpenApiResponse(
     }
 )
 
-CONVERSATION_TREND_RESPONSE_SCHEMA = OpenApiResponse(
+TREND_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',
         'properties': {
@@ -115,8 +169,15 @@ CONVERSATION_TREND_RESPONSE_SCHEMA = OpenApiResponse(
                 'items': {
                     'type': 'object',
                     'properties': {
-                        'count': {'type': 'integer', 'description': 'Number of conversations.'},
-                        'date': {'type': 'string', 'format': 'date', 'description': 'Date for the trend period.'}
+                        'count': {'type': 'integer', 'description': 'Number of conversations.', 'nullable': True},
+                        'date': {'type': 'string', 'format': 'date', 'description': 'Date for the trend period.'},
+                        'topic_name': {'type': 'string', 'description': 'Name of the topic.', 'nullable': True},
+                        'topic_id': {'type': 'integer', 'description': 'ID of the topic.', 'nullable': True},
+                        'avg_duration': {'type': 'number', 'format': 'float',
+                                         'description': 'Average duration in seconds.', 'nullable': True},
+                        'avg_sentiment': {'type': 'number', 'format': 'float',
+                                         'description': 'Average sentiment.', 'nullable': True}
+
                     }
                 }
             },
@@ -127,101 +188,9 @@ CONVERSATION_TREND_RESPONSE_SCHEMA = OpenApiResponse(
         'example': {
             'results': [
                 {'count': 5, 'date': '2023-10-01'},
-                {'count': 8, 'date': '2023-10-02'}
+                {'count': 8, 'date': '2023-11-01'}
             ],
-            'next': 'https://example.com/conversation_trend/?page=2',
-            'previous': None
-        }
-    }
-)
-
-CONVERSATION_TOPIC_TREND_RESPONSE_SCHEMA = OpenApiResponse(
-    response={
-        'type': 'object',
-        'properties': {
-            'results': {
-                'type': 'array',
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'count': {'type': 'integer', 'description': 'Number of conversations.'},
-                        'date': {'type': 'string', 'format': 'date', 'description': 'Date for the trend period.'},
-                        'topic': {'type': 'string', 'description': 'Name of the topic.'}
-                    }
-                }
-            },
-            'next': {'type': 'string', 'format': 'uri', 'nullable': True, 'description': 'URL to the next page.'},
-            'previous': {'type': 'string', 'format': 'uri', 'nullable': True,
-                         'description': 'URL to the previous page.'},
-        },
-        'example': {
-            'results': [
-                {'count': 3, 'date': '2023-10-01', 'topic': 'Customer Support'},
-                {'count': 2, 'date': '2023-10-01', 'topic': 'Billing Issues'}
-            ],
-            'next': 'https://example.com/conversation_topic_trend/?page=2',
-            'previous': None
-        }
-    }
-)
-
-DURATION_TREND_RESPONSE_SCHEMA = OpenApiResponse(
-    response={
-        'type': 'object',
-        'properties': {
-            'results': {
-                'type': 'array',
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'avg_value': {'type': 'number', 'format': 'float',
-                                      'description': 'Average duration in seconds.'},
-                        'date': {'type': 'string', 'format': 'date',
-                                 'description': 'Date for the trend period.'}
-                    }
-                }
-            },
-            'next': {'type': 'string', 'format': 'uri', 'nullable': True,
-                     'description': 'URL to the next page.'},
-            'previous': {'type': 'string', 'format': 'uri', 'nullable': True,
-                         'description': 'URL to the previous page.'},
-        },
-        'example': {
-            'results': [
-                {'avg_value': 180.5, 'date': '2023-10-01'},
-                {'avg_value': 240.0, 'date': '2023-10-02'}
-            ],
-            'next': 'https://example.com/duration_trend/?page=2',
-            'previous': None
-        }
-    }
-)
-
-SENTIMENT_TREND_RESPONSE_SCHEMA = OpenApiResponse(
-    response={
-        'type': 'object',
-        'properties': {
-            'results': {
-                'type': 'array',
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'avg_value': {'type': 'number', 'format': 'float',
-                                      'description': 'Average sentiment score (-1 to 1).'},
-                        'date': {'type': 'string', 'format': 'date', 'description': 'Date for the trend period.'}
-                    }
-                }
-            },
-            'next': {'type': 'string', 'format': 'uri', 'nullable': True, 'description': 'URL to the next page.'},
-            'previous': {'type': 'string', 'format': 'uri', 'nullable': True,
-                         'description': 'URL to the previous page.'},
-        },
-        'example': {
-            'results': [
-                {'avg_value': 0.75, 'date': '2023-10-01'},
-                {'avg_value': 0.8, 'date': '2023-10-02'}
-            ],
-            'next': 'https://example.com/sentiment_trend/?page=2',
+            'next': 'https://example.com/trend/?page=2',
             'previous': None
         }
     }
