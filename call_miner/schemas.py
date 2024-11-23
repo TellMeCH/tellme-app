@@ -101,12 +101,17 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
                         'type': 'integer',
                         'description': 'Number of calls included in the summary.'
                     },
+                    'name': {
+                        'type': 'string',
+                        'description': 'Name of the object'
+                    },
                 },
-                'required': ['summary', 'summary_date', 'summary_call_count'],
+                'required': ['summary', 'summary_date', 'summary_call_count', 'name'],
                 'example': {
                     'summary': 'The recurring issues in these conversations indicate systemic challenges bla bla.',
                     'summary_date': '2024-12-27T00:00:00Z',
-                    'summary_call_count': 32
+                    'summary_call_count': 32,
+                    'name': 'Systemic Challenges'
                 }
             }
         },
@@ -115,12 +120,14 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
             "1": {
                 "summary": "The recurring issues in these conversations indicate systemic challenges bla bla.",
                 "summary_date": "2024-12-27T00:00:00Z",
-                "summary_call_count": 32
+                "summary_call_count": 32,
+                "name": "Systemic Challenges"
             },
             "2": {
                 "summary": "The recurring issues appear to involve a high volume of customer inquiries, bla bla.",
                 "summary_date": "2024-12-21T00:00:00Z",
-                "summary_call_count": 36
+                "summary_call_count": 36,
+                "name": "Call Center Workload"
             }
         }
     }

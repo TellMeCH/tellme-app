@@ -1,6 +1,8 @@
 import time
+import json
 import logging
-import openai
+from langfuse.openai import openai
+from openai.lib._parsing._completions import type_to_response_format_param
 import tiktoken
 from django.conf import settings
 from pydantic import BaseModel
@@ -45,12 +47,13 @@ def count_tokens(text: str, model_name: str) -> int:
     return len(tokens)
 
 
-def condense_summaries(summaries: list[str]):
+def condense_summaries(summaries: list[str], trace_data: dict):
     """
     Condenses a list of conversation summaries into a meta-summary that highlights recurring issues.
 
     Args:
         summaries (list[str]): A list of summaries from conversations between customer care agents and customers.
+        trace_data (dict): A dictionary containing data to store in the corresponding Langfuse trace
 
     Returns:
         tuple: A tuple containing the meta-summary response, the number of input tokens, the number of output tokens,
@@ -80,13 +83,14 @@ def condense_summaries(summaries: list[str]):
             # Call the API to obtain the meta-summary
             before = time.time()
             logger.info("Making API call to OpenAI.")
-            completion = client.beta.chat.completions.parse(
+            completion = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
                     {"role": "system", "content": SUMMARIZER_PROMPT},
                     {"role": "user", "content": selected_text}
                 ],
-                response_format=SummarizerResponse
+                response_format=type_to_response_format_param(SummarizerResponse),
+                **trace_data
             )
             after = time.time()
             logger.info(f"API call duration: {after - before} seconds")
@@ -101,8 +105,7 @@ def condense_summaries(summaries: list[str]):
                 logger.info("API call successful.")
                 logger.info(f"Input tokens used: {input_tokens}")
                 logger.info(f"Output tokens generated: {output_tokens}")
-                result = response.parsed
-                return result.summary
+                return json.loads(response.content)['summary']
 
         except Exception as e:
             logger.error(f"An error occurred during the API call to OpenAI. {e}", exc_info=True)

@@ -2,6 +2,7 @@ from rest_framework import viewsets, decorators, response, status
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import F
 from drf_spectacular.utils import extend_schema
+from django.conf import settings
 from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
@@ -26,6 +27,26 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     """
     A ViewSet to outline the actions of the MetaSummarySerializer.
     """
+
+    @staticmethod
+    def define_trace_data(request, obj, name: str):
+        """
+        This method defines trace data to be used by Langfuse when recording an LLM trace
+        """
+        if hasattr(request.user, 'employee'):
+            role = request.user.employee.role.lower()
+            organization = request.user.employee.organization
+        else:
+            organization = None
+            if request.user.is_superuser:
+                role = 'superuser'
+            else:
+                role = 'unknown'
+        return {
+            'name': name, 'user_id': request.user.id, 'tags': [settings.TELLME_ENV],
+            'metadata': {'organization': organization, 'role': role, 'object': str(type(obj)), 'id': obj.id}
+        }
+
     @extend_schema(
         description=MetaSummarySerializer.get_summary_data.__doc__,
         parameters=[ID_PARAMETER_SCHEMA],
@@ -39,7 +60,8 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     @decorators.action(detail=True, methods=['get'])
     def summary_data(self, request, pk=None):
         obj = self.get_object()
-        serializer = self.get_serializer(obj)
+        trace_data = self.define_trace_data(request, obj, 'get_summary_data')
+        serializer = self.get_serializer(obj, context={'trace_data': trace_data})
         try:
             return response.Response(serializer.get_summary_data(obj))
         except ValueError as e:
@@ -307,7 +329,8 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         try:
             summaries = {}
             for obj in queryset:
-                serializer = self.get_serializer(obj)
+                trace_data = self.define_trace_data(request, obj, 'get_all_summaries')
+                serializer = self.get_serializer(obj, context={'trace_data': trace_data})
                 summary_data = serializer.get_summary_data(obj)
                 summary_data['name'] = obj.name
                 summaries[obj.id] = summary_data

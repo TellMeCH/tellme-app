@@ -133,13 +133,13 @@ class MetaSummarySerializer(serializers.Serializer):
     class Meta:
         abstract = True
 
-    @staticmethod
-    def get_summary_data(obj):
+    def get_summary_data(self, obj):
         """
         Summary of all conversation summaries of the object. Includes also the date of this summarization and the
         number of calls that was taken into account for this summary.
         """
-        obj.get_or_create_summary()
+        trace_data = self.context.get('trace_data', {})
+        obj.get_or_create_summary(trace_data)
         return {
             'summary': obj.summary,
             'summary_date': obj.summary_date,

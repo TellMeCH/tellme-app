@@ -57,6 +57,7 @@ viewsets = {
             'destroy': {'method': 'DELETE', 'url': '/topics/{id}/'},
             'list_active': {'method': 'GET', 'url': '/topics/list_active/'},
             'summary_data': {'method': 'GET', 'url': '/topics/{id}/summary_data/'},
+            'all_summaries': {'method': 'GET', 'url': '/topics/all_summaries/'},
             'conversations': {'method': 'GET', 'url': '/topics/{id}/conversations/'},
             'trend': {'method': 'GET', 'url': '/topics/{id}/trend/'},
         }
