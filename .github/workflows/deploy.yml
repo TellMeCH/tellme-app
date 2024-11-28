@@ -81,7 +81,7 @@ jobs:
           image: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |
             GOOGLE_CLOUD_PROJECT=${{ env.GCP_PROJECT_ID }}
-            GCP_REGION=${{ secrets.GCP_PROJECT_REGION }}
+            REGION=${{ secrets.GCP_PROJECT_REGION }}
             TELLME_ENV=${{ env.TELLME_ENV }}
             DEBUG=${{ env.DEBUG }}
             SETTINGS_NAME=${{ env.SETTINGS_NAME }}
