@@ -8,27 +8,58 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: 'read'
-      id-token: 'write'
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          export PATH="$HOME/.local/bin:$PATH"
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v3
         with:
           python-version: '3.12'
 
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          export PATH="$HOME/.local/bin:$PATH"
+
       - name: Install Dependencies
         run: |
-          poetry install
+          poetry install --with dev --sync
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          until pg_isready -h localhost -p 5432; do
+            echo "Waiting for PostgreSQL..."
+            sleep 1
+          done
+
+      - name: Create temporal .env file
+        run: |
+          echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID_DEV }}" >> .env
+          echo "TELLME_ENV=dev" >> .env
+          echo "DATABASE_NAME=test_db" >> .env
+          echo "DATABASE_USERNAME=postgres" >> .env
+          echo "DATABASE_PASSWORD=postgres" >> .env
+          echo "DATABASE_HOST=localhost" >> .env
+          echo "DATABASE_PORT=5432" >> .env
+          echo "OPENAI_API_KEY=bla bla" >> .env
+          echo "DEBUG=1" >> .env
+          echo "SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY_DEV }}" >> .env
 
       - name: Make Migrations
         run: |
@@ -41,3 +72,7 @@ jobs:
       - name: Run Tests
         run: |
           poetry run pytest -v
+
+      - name: Clean up .env file
+        run: |
+          rm -f .env

@@ -1,0 +1,54 @@
+# Make sure to use "docker compose down -v" and "docker-compose up --build"
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    ports:
+      - "${DATABASE_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  firebase:
+    build:
+      context: ./firebase-emulator
+    ports:
+      - "9099:9099"
+    networks:
+      - app-network
+
+  django:
+    build: .
+    command: >
+      bash -c "
+        until curl -s http://firebase:9099/; do
+          echo 'Waiting for Firebase Emulator...';
+          sleep 1;
+        done;
+        curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/tellme-app-dev/accounts;
+        python manage.py makemigrations &&
+        python manage.py migrate &&
+        python manage.py create_sample_data &&
+        python manage.py runserver 0.0.0.0:8000
+      "
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - firebase
+    env_file:
+      - .env
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:

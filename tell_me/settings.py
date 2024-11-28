@@ -9,24 +9,56 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
-
+import io
+import os
+import environ
+from urllib.parse import urlparse
 from pathlib import Path
+import sentry_sdk
+from google.cloud import secretmanager
+from sentry_sdk.integrations.django import DjangoIntegration
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+env = environ.Env(DEBUG=(bool, False))
+env_file = os.path.join(BASE_DIR, ".env")
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
+if os.path.isfile(env_file):  # Local environment: .env is expected
+    env.read_env(env_file)
+    if env('TELLME_ENV') != 'dev':
+        raise Exception('Only local execution (TELLME_ENV=dev) should run with an environment file.')
+elif env("GOOGLE_CLOUD_PROJECT", default=None):  # Cloud environment: project variable is expected
+    if env('TELLME_ENV') == 'dev':
+        raise Exception('Local execution (TELLME_ENV=dev) should run with an environment file.')
+
+    # Load environments from SETTINGS_NAME
+    project_id = env("GOOGLE_CLOUD_PROJECT")
+    client = secretmanager.SecretManagerServiceClient()
+    settings_name = env("SETTINGS_NAME", default="django_settings")
+    name = f"projects/{project_id}/secrets/{settings_name}/versions/latest"
+    payload = client.access_secret_version(name=name).payload.data.decode("UTF-8")
+    env.read_env(io.StringIO(payload))
+else:
+    raise Exception("No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-=q$bbw)*+dhcn6cssgvma)jd3ae*p26=8yl3vg9rzq1a_hr630'
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG")
+TELLME_ENV = env('TELLME_ENV', default='dev')
 
-ALLOWED_HOSTS = []
+CLOUDRUN_SERVICE_URLS = env("CLOUDRUN_SERVICE_URLS", default=None)
+if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
+    CSRF_TRUSTED_ORIGINS = env("CLOUDRUN_SERVICE_URLS").split(",")
+    # Remove the scheme from URLs for ALLOWED_HOSTS
+    ALLOWED_HOSTS = [urlparse(url).netloc for url in CSRF_TRUSTED_ORIGINS]
 
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+else:
+    ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='').split(',')
 
 # Application definition
 
@@ -37,6 +69,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'drf_spectacular',
+    'storages',
     'call_miner',
 ]
 
@@ -74,12 +109,23 @@ WSGI_APPLICATION = 'tell_me.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if TELLME_ENV != 'dev':
+    os.environ['DATABASE_URL'] = (
+        f"postgres://{env('DATABASE_USERNAME')}:{env('DATABASE_PASSWORD')}@//cloudsql/{env('GOOGLE_CLOUD_PROJECT')}:" +
+        f"{env('REGION')}:{env('SQL_INSTANCE_NAME')}/{env('DATABASE_NAME')}"
+    )
+    DATABASES = {"default": env.db()}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': env('DATABASE_NAME'),
+            'USER': env('DATABASE_USERNAME'),
+            'PASSWORD': env('DATABASE_PASSWORD'),
+            'HOST': env('DATABASE_HOST', default='localhost'),
+            'PORT': env('DATABASE_PORT', default='5432'),
+        }
     }
-}
 
 
 # Password validation
@@ -116,9 +162,90 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+
+GS_BUCKET_NAME = env("GS_BUCKET_NAME", default=None)
+if GS_BUCKET_NAME and TELLME_ENV != 'dev':
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+        },
+    }
+    GS_DEFAULT_ACL = "publicRead"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
+    'PAGE_SIZE': 15,
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'call_miner.authentication.FirebaseAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Setting for the API Documentation
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'TellMe Backend API',
+    'DESCRIPTION': 'Empowering call center agents and executives with valuable insights from their customer interactions.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SECURITY': [
+        {'BearerAuth': []},
+    ],
+    'SECURITY_SCHEMES': {
+        'BearerAuth': {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'Firebase',
+        },
+    },
+    'EXTENSIONS': [
+        'call_miner.authentication_extensions',
+    ],
+}
+
+# User model for authentication
+AUTH_USER_MODEL = 'call_miner.User'
+
+# Logging
+sentry_sdk.init(
+    dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",
+    integrations=[DjangoIntegration()],
+    traces_sample_rate=1.0,
+    profiles_sample_rate=1.0,
+    environment=TELLME_ENV
+)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'sentry': {
+            'level': 'ERROR',
+            'class': 'sentry_sdk.integrations.logging.EventHandler',
+        },
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'sentry'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}
+
+OPENAI_API_KEY = env('OPENAI_API_KEY')
