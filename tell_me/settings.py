@@ -24,9 +24,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(DEBUG=(bool, False))
 env_file = os.path.join(BASE_DIR, ".env")
 
-if os.path.isfile(env_file):  # If local .env file is provided, load it
+if os.path.isfile(env_file):  # Local environment: .env is expected
     env.read_env(env_file)
-elif os.environ.get("GOOGLE_CLOUD_PROJECT", None):  # Else, load secrets from Google Secret Manager
+elif os.environ.get("GOOGLE_CLOUD_PROJECT", None):  # Cloud environment: project variable is expected
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
     client = secretmanager.SecretManagerServiceClient()
     settings_name = os.environ.get("SETTINGS_NAME", "django_settings")
