@@ -16,6 +16,9 @@ openai = "^1.53.0"
 drf-spectacular = "^0.27.2"
 langfuse = "^2.54.1"
 tiktoken = "^0.8.0"
+django-environ = "^0.11.2"
+django-storages = "^1.14.4"
+google-cloud-secret-manager = "^2.21.1"
 
 
 [tool.poetry.group.dev.dependencies]
