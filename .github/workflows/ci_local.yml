@@ -24,6 +24,8 @@ jobs:
           --health-retries 5
 
     env:
+      GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID_DEV }}
+      TELLME_ENV: dev
       DATABASE_NAME: test_db
       DATABASE_USER: postgres
       DATABASE_PASSWORD: postgres
