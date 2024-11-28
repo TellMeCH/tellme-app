@@ -122,8 +122,8 @@ else:
             'NAME': env('DATABASE_NAME'),
             'USER': env('DATABASE_USERNAME'),
             'PASSWORD': env('DATABASE_PASSWORD'),
-            'HOST': env('DATABASE_HOST', 'localhost'),
-            'PORT': env('DATABASE_PORT', '5432'),
+            'HOST': env('DATABASE_HOST', default='localhost'),
+            'PORT': env('DATABASE_PORT', default='5432'),
         }
     }
 
