@@ -26,10 +26,16 @@ env_file = os.path.join(BASE_DIR, ".env")
 
 if os.path.isfile(env_file):  # Local environment: .env is expected
     env.read_env(env_file)
-elif os.environ.get("GOOGLE_CLOUD_PROJECT", None):  # Cloud environment: project variable is expected
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    if env('TELLME_ENV') != 'dev':
+        raise Exception('Only local execution (TELLME_ENV=dev) should run with an environment file.')
+elif env("GOOGLE_CLOUD_PROJECT", default=None):  # Cloud environment: project variable is expected
+    if env('TELLME_ENV') == 'dev':
+        raise Exception('Local execution (TELLME_ENV=dev) should run with an environment file.')
+
+    # Load environments from SETTINGS_NAME
+    project_id = env("GOOGLE_CLOUD_PROJECT")
     client = secretmanager.SecretManagerServiceClient()
-    settings_name = os.environ.get("SETTINGS_NAME", "django_settings")
+    settings_name = env("SETTINGS_NAME", default="django_settings")
     name = f"projects/{project_id}/secrets/{settings_name}/versions/latest"
     payload = client.access_secret_version(name=name).payload.data.decode("UTF-8")
     env.read_env(io.StringIO(payload))
@@ -41,7 +47,7 @@ SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
-TELLME_ENV = os.getenv('TELLME_ENV', 'dev')
+TELLME_ENV = env('TELLME_ENV', default='dev')
 
 CLOUDRUN_SERVICE_URLS = env("CLOUDRUN_SERVICE_URLS", default=None)
 if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
@@ -103,17 +109,21 @@ WSGI_APPLICATION = 'tell_me.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-if env("DATABASE_URL", default=None) and TELLME_ENV != 'dev':
+if TELLME_ENV != 'dev':
+    os.environ['DATABASE_URL'] = (
+        f"postgres://{env('DATABASE_USERNAME')}:{env('DATABASE_PASSWORD')}@//cloudsql/{env('GOOGLE_CLOUD_PROJECT')}:" +
+        f"{env('REGION')}:{env('SQL_INSTANCE_NAME')}/{env('DATABASE_NAME')}"
+    )
     DATABASES = {"default": env.db()}
 else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('DATABASE_NAME'),
-            'USER': os.environ.get('DATABASE_USERNAME'),
-            'PASSWORD': os.environ.get('DATABASE_PASSWORD'),
-            'HOST': os.environ.get('DATABASE_HOST', 'localhost'),
-            'PORT': os.environ.get('DATABASE_PORT', '5432'),
+            'NAME': env('DATABASE_NAME'),
+            'USER': env('DATABASE_USERNAME'),
+            'PASSWORD': env('DATABASE_PASSWORD'),
+            'HOST': env('DATABASE_HOST', 'localhost'),
+            'PORT': env('DATABASE_PORT', '5432'),
         }
     }
 
@@ -238,4 +248,4 @@ LOGGING = {
     },
 }
 
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+OPENAI_API_KEY = env('OPENAI_API_KEY')
