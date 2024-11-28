@@ -77,6 +77,7 @@ jobs:
             --min-instances=1 
             --execution-environment=gen2
             --service-account=${{ env.SERVICE_NAME }}-account@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+            --add-cloudsql-instances=${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
           region: ${{ secrets.GCP_PROJECT_REGION }}
           image: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |
