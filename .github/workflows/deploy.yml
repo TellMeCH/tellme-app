@@ -16,6 +16,7 @@ jobs:
       DATABASE_NAME: db
       MEDIA_BUCKET: static_files
       SETTINGS_NAME: django_settings
+      GCP_REGION: ${{ secrets.GCP_REGION }}
       DEBUG: 0
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
@@ -41,7 +42,6 @@ jobs:
             echo "WORKLOAD_IDENTITY_PROVIDER=${{ secrets.WORKLOAD_IDENTITY_PROVIDER_DEV }}" >> $GITHUB_ENV
             echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_DEV }}" >> $GITHUB_ENV
           fi
-          echo "GCP_REGION=${{ secrets.GCP_REGION }}" >> $GITHUB_ENV
 
       - name: Authenticate to Google Cloud
         id: auth
