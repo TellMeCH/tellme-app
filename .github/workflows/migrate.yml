@@ -1,6 +1,48 @@
 name: Run Migrations
 
 on:
+  workflow_dispatch:
+    inputs:
+      GCP_PROJECT_ID:
+        description: 'Google Cloud Project ID'
+        required: true
+        default: ''
+      TELLME_ENV:
+        description: 'Environment (e.g., prod, staging)'
+        required: true
+        default: ''
+      WORKLOAD_IDENTITY_PROVIDER:
+        description: 'Workload Identity Provider'
+        required: true
+        default: ''
+      CICD_SERVICE_ACCOUNT:
+        description: 'CICD Service Account'
+        required: true
+        default: ''
+      SQL_INSTANCE_NAME:
+        description: 'SQL Instance Name'
+        required: true
+        default: ''
+      DATABASE_NAME:
+        description: 'Database Name'
+        required: true
+        default: ''
+      SETTINGS_NAME:
+        description: 'Settings Name'
+        required: true
+        default: ''
+      MEDIA_BUCKET:
+        description: 'Media Bucket Name'
+        required: true
+        default: ''
+      DEBUG:
+        description: 'Debug Mode'
+        required: true
+        default: '0'
+    secrets:
+      GCP_PROJECT_REGION:
+        description: 'Google Cloud Project Region'
+        required: true
   workflow_call:
     inputs:
       GCP_PROJECT_ID:
