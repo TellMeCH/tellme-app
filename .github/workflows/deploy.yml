@@ -62,7 +62,7 @@ jobs:
 
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true'
-        uses: ./.github/workflows/migrations.yaml
+        uses: ./.github/workflows/migrations.yaml@{{ github.ref_name }}
         with:
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
           TELLME_ENV: ${{ env.TELLME_ENV }}
