@@ -63,12 +63,13 @@ jobs:
       - name: Start Cloud SQL Proxy for Migration
         if: steps.detect_changes.outputs.migrations == 'true'
         run: |
-          docker run -d --publish 127.0.0.1:5432 \
-          gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest \
-          --address "0.0.0.0" \
-          --port 5432 \
-          ${{ inputs.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ inputs.SQL_INSTANCE_NAME }}
-          --name cloud_sql_proxy
+          docker run -d \
+            --publish 127.0.0.1:5432:5432 \
+            --name cloud_sql_proxy \
+            gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest \
+            --address "0.0.0.0" \
+            --port 5432 \
+            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
 
       - name: Set up Python for Migration
         if: steps.detect_changes.outputs.migrations == 'true'
@@ -94,14 +95,14 @@ jobs:
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true'
         env:
-          GOOGLE_CLOUD_PROJECT: ${{ inputs.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
           REGION: ${{ secrets.GCP_PROJECT_REGION }}
-          TELLME_ENV: ${{ inputs.TELLME_ENV }}
-          DEBUG: ${{ inputs.DEBUG }}
-          SETTINGS_NAME: ${{ inputs.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ inputs.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ inputs.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ inputs.GCP_PROJECT_ID }}_${{ inputs.MEDIA_BUCKET }}
+          TELLME_ENV: ${{ env.TELLME_ENV }}
+          DEBUG: ${{ env.DEBUG }}
+          SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ env.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
           USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py migrate
