@@ -103,6 +103,7 @@ jobs:
           SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ env.DATABASE_NAME }}
           GS_BUCKET_NAME: ${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+          USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py migrate
 
