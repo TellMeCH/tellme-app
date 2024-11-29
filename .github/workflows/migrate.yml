@@ -39,10 +39,6 @@ on:
         description: 'Debug Mode'
         required: true
         default: '0'
-    secrets:
-      GCP_PROJECT_REGION:
-        description: 'Google Cloud Project Region'
-        required: true
   workflow_call:
     inputs:
       GCP_PROJECT_ID:
@@ -72,9 +68,6 @@ on:
       DEBUG:
         required: true
         type: string
-    secrets:
-      GCP_PROJECT_REGION:
-        required: true
 
 jobs:
   run-migrations:
