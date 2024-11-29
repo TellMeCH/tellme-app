@@ -1,0 +1,92 @@
+name: Run Migrations
+
+on:
+  workflow_call:
+    inputs:
+      GCP_PROJECT_ID:
+        required: true
+        type: string
+      TELLME_ENV:
+        required: true
+        type: string
+      WORKLOAD_IDENTITY_PROVIDER:
+        required: true
+        type: string
+      CICD_SERVICE_ACCOUNT:
+        required: true
+        type: string
+      SQL_INSTANCE_NAME:
+        required: true
+        type: string
+      DATABASE_NAME:
+        required: true
+        type: string
+      SETTINGS_NAME:
+        required: true
+        type: string
+      MEDIA_BUCKET:
+        required: true
+        type: string
+      DEBUG:
+        required: true
+        type: string
+    secrets:
+      GCP_PROJECT_REGION:
+        required: true
+
+jobs:
+  run-migrations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          project_id: ${{ inputs.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ inputs.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ inputs.CICD_SERVICE_ACCOUNT }}
+
+      - name: Start Cloud SQL Proxy for Migration
+        run: |
+          docker run -d --name cloud_sql_proxy \
+          -v "${{ runner.temp }}/google_application_credentials.json:/config" \
+          -e GOOGLE_APPLICATION_CREDENTIALS=/config \
+          -p 127.0.0.1:5432 \
+          gcr.io/cloud-sql-connectors/cloud-sql-proxy \
+          -instances=${{ inputs.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ inputs.SQL_INSTANCE_NAME }}=tcp:0.0.0.0:5432
+
+      - name: Set up Python for Migration
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry for Migration
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
+
+      - name: Install Dependencies for Migration
+        run: |
+          poetry install --with dev --sync
+
+      - name: Wait for Cloud SQL Proxy for Migration
+        run: sleep 10
+
+      - name: Run Migrations
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ inputs.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_PROJECT_REGION }}
+          TELLME_ENV: ${{ inputs.TELLME_ENV }}
+          DEBUG: ${{ inputs.DEBUG }}
+          SETTINGS_NAME: ${{ inputs.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ inputs.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ inputs.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ inputs.GCP_PROJECT_ID }}_${{ inputs.MEDIA_BUCKET }}
+          USE_CLOUD_SQL_AUTH_PROXY: 1
+        run: |
+          poetry run python manage.py migrate
