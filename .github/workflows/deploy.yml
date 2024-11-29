@@ -70,7 +70,7 @@ jobs:
             --port=5432 \
             ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
             > cloud_sql_proxy.log 2>&1 &
-          sleep 5  # Wait for the proxy to initialize
+          sleep 5
 
       - name: Set up Python for Migration
         if: steps.detect_changes.outputs.migrations == 'true'
@@ -96,9 +96,9 @@ jobs:
       - name: Check Cloud SQL Proxy Is Running
         if: steps.detect_changes.outputs.migrations == 'true'
         run: |
+          cat cloud_sql_proxy.log
           if ! pgrep -f cloud-sql-proxy; then
             echo "Cloud SQL Proxy is not running."
-            cat cloud_sql_proxy.log
             exit 1
           fi
 
