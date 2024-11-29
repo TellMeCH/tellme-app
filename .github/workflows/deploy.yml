@@ -63,13 +63,12 @@ jobs:
       - name: Start Cloud SQL Proxy for Migration
         if: steps.detect_changes.outputs.migrations == 'true'
         run: |
-          docker run -d \
-            --publish 127.0.0.1:5432:5432 \
-            --name cloud_sql_proxy \
-            gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest \
-            --address "127.0.0.1" \
-            --port 5432 \
-            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          nohup ./cloud-sql-proxy \
+            --port=5432 \
+            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} &
+          sleep 5
 
       - name: Set up Python for Migration
         if: steps.detect_changes.outputs.migrations == 'true'
