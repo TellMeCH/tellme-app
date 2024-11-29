@@ -67,7 +67,6 @@ jobs:
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
           nohup ./cloud-sql-proxy \
-            --verbose \
             --port=5432 \
             ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
             > cloud_sql_proxy.log 2>&1 &
