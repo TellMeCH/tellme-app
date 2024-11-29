@@ -60,19 +60,51 @@ jobs:
             migrations:
               - 'call_miner/migrations/**'
 
+      - name: Start Cloud SQL Proxy for Migration
+        if: steps.detect_changes.outputs.migrations == 'true'
+        run: |
+          docker run -d --name cloud_sql_proxy \
+          -v "${{ runner.temp }}/google_application_credentials.json:/config" \
+          -e GOOGLE_APPLICATION_CREDENTIALS=/config \
+          -p 127.0.0.1:5432 \
+          gcr.io/cloud-sql-connectors/cloud-sql-proxy \
+          -instances=${{ inputs.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ inputs.SQL_INSTANCE_NAME }}=tcp:0.0.0.0:5432
+
+      - name: Set up Python for Migration
+        if: steps.detect_changes.outputs.migrations == 'true'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry for Migration
+        if: steps.detect_changes.outputs.migrations == 'true'
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
+
+      - name: Install Dependencies for Migration
+        if: steps.detect_changes.outputs.migrations == 'true'
+        run: |
+          poetry install --with dev --sync
+
+      - name: Wait for Cloud SQL Proxy for Migration
+        if: steps.detect_changes.outputs.migrations == 'true'
+        run: sleep 10
+
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true'
-        uses: ./.github/workflows/migrate.yml
-        with:
-          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
-          TELLME_ENV: ${{ env.TELLME_ENV }}
-          WORKLOAD_IDENTITY_PROVIDER: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
-          CICD_SERVICE_ACCOUNT: ${{ env.CICD_SERVICE_ACCOUNT }}
-          SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ env.DATABASE_NAME }}
-          SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
-          MEDIA_BUCKET: ${{ env.MEDIA_BUCKET }}
-          DEBUG: ${{ env.DEBUG }}
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ inputs.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_PROJECT_REGION }}
+          TELLME_ENV: ${{ inputs.TELLME_ENV }}
+          DEBUG: ${{ inputs.DEBUG }}
+          SETTINGS_NAME: ${{ inputs.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ inputs.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ inputs.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ inputs.GCP_PROJECT_ID }}_${{ inputs.MEDIA_BUCKET }}
+          USE_CLOUD_SQL_AUTH_PROXY: 1
+        run: |
+          poetry run python manage.py migrate
 
       - name: Login to Google Artifact Registry
         uses: docker/login-action@v3
