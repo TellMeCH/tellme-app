@@ -67,7 +67,8 @@ jobs:
           chmod +x cloud-sql-proxy
           nohup ./cloud-sql-proxy \
             --port=5432 \
-            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} &
+            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
+            --address 127.0.0.1 &
           sleep 5
 
       - name: Set up Python for Migration
