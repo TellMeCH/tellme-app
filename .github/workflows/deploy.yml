@@ -67,7 +67,7 @@ jobs:
             --publish 127.0.0.1:5432:5432 \
             --name cloud_sql_proxy \
             gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest \
-            --address "0.0.0.0" \
+            --address "127.0.0.1" \
             --port 5432 \
             ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
 
