@@ -61,7 +61,7 @@ jobs:
             migrations:
               - 'call_miner/migrations/**'
 
-      - name: Start Cloud SQL Proxy for Migration
+      - name: Migration - Start Cloud SQL Proxy
         if: steps.detect_changes.outputs.migrations == 'true'
         run: |
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
@@ -72,24 +72,24 @@ jobs:
             > cloud_sql_proxy.log 2>&1 &
           sleep 10
 
-      - name: Set up Python for Migration
+      - name: Migration - Set up Python
         if: steps.detect_changes.outputs.migrations == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
 
-      - name: Install Poetry for Migration
+      - name: Migration - Install Poetry
         if: steps.detect_changes.outputs.migrations == 'true'
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
 
-      - name: Install Dependencies for Migration
+      - name: Migration - Install Dependencies
         if: steps.detect_changes.outputs.migrations == 'true'
         run: |
           poetry install --with dev --sync
 
-      - name: Check Cloud SQL Proxy Is Running
+      - name: Migration - Check Cloud SQL Proxy Is Running
         if: steps.detect_changes.outputs.migrations == 'true'
         run: |
           cat cloud_sql_proxy.log
@@ -98,7 +98,7 @@ jobs:
             exit 1
           fi
 
-      - name: Run Migrations
+      - name: Migration - Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true'
         env:
           GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
