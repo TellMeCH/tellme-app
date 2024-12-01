@@ -16,6 +16,7 @@ jobs:
       DATABASE_NAME: db
       MEDIA_BUCKET: static_files
       SETTINGS_NAME: django_settings
+      PASSWORDS_NAME: superuser_passwords
       DEBUG: 0
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
@@ -148,6 +149,7 @@ jobs:
             TELLME_ENV=${{ env.TELLME_ENV }}
             DEBUG=${{ env.DEBUG }}
             SETTINGS_NAME=${{ env.SETTINGS_NAME }}
+            PASSWORDS_NAME=${{ env.PASSWORDS_NAME }}
             SQL_INSTANCE_NAME=${{ env.SQL_INSTANCE_NAME }}
             DATABASE_NAME=${{ env.DATABASE_NAME }}
             GS_BUCKET_NAME=${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
