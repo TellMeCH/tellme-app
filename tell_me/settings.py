@@ -32,15 +32,25 @@ elif env("GOOGLE_CLOUD_PROJECT", default=None):  # Cloud environment: project va
     if env('TELLME_ENV') == 'dev':
         raise Exception('Local execution (TELLME_ENV=dev) should run with an environment file.')
 
-    # Load environments from SETTINGS_NAME
+    # Load environments from SETTINGS_NAME and PASSWORDS_NAME
     project_id = env("GOOGLE_CLOUD_PROJECT")
     client = secretmanager.SecretManagerServiceClient()
-    settings_name = env("SETTINGS_NAME", default="django_settings")
-    name = f"projects/{project_id}/secrets/{settings_name}/versions/latest"
-    payload = client.access_secret_version(name=name).payload.data.decode("UTF-8")
-    if '#' in payload:
-        raise Exception('Watch out with special characters in your passwords! This step will mess with them')
-    env.read_env(io.StringIO(payload))
+    secrets = {
+        "settings": env("SETTINGS_NAME", default="django_settings"),
+        "passwords": env("PASSWORDS_NAME", default="superuser_passwords"),
+    }
+    combined_payload = ""
+    for key, secret_name in secrets.items():
+        secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(name=secret_path)
+        payload = response.payload.data.decode("UTF-8")
+
+        if '#' in payload:
+            raise Exception('Watch out with special characters in your passwords! This step will mess with them')
+
+        combined_payload += payload + "\n"
+
+    env.read_env(io.StringIO(combined_payload))
 else:
     raise Exception("No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.")
 
@@ -132,8 +142,10 @@ else:
 # If the flag as been set, configure to use Cloud SQL Proxy
 if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
     DATABASES["default"]["HOST"] = "127.0.0.1"
-    DATABASES["default"]["PORT"] = 5432
+    DATABASES["default"]["PORT"] = 5433
 
+PROCESSING_PWD = env('PROCESSING_PWD')
+APP_ADMIN_PWD = env('APP_ADMIN_PWD')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
