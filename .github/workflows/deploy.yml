@@ -155,5 +155,5 @@ jobs:
       - name: Update the Application to use those Service URLs
         run: |
           gcloud run services update ${{ env.SERVICE_NAME }} \
-            --region ${{ env.REGION }} \
+            --region ${{ secrets.GCP_PROJECT_REGION }} \
             --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.deploy.outputs.url }}"
