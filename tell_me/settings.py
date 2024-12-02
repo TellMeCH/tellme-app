@@ -139,6 +139,8 @@ if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
     DATABASES["default"]["PORT"] = 5433
 
 PASSWORDS_NAME = env('PASSWORDS_NAME', default=None)
+PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
+PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators

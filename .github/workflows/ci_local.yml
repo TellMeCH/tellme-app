@@ -60,6 +60,7 @@ jobs:
           echo "OPENAI_API_KEY=bla bla" >> .env
           echo "DEBUG=1" >> .env
           echo "SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY_DEV }}" >> .env
+          echo "PROCESSING_PIPELINE_KEY=bla bla" >> .env
 
       - name: Make Migrations
         run: |
