@@ -1,6 +1,7 @@
 import pytest
 from rest_framework import status
 from django.urls import reverse
+from django.conf import settings
 from call_miner.models import Employee, Agent, User
 
 ERROR_MESSAGES = {
@@ -8,7 +9,8 @@ ERROR_MESSAGES = {
     'manager_same_organization': 'Manager must belong to the same organization as the current user.',
     'analysts_managers': "Analysts can't have managers.",
     'superusers_organization': "Superusers must provide an organization when creating an Employee.",
-    'max_user_count_reached': "Cannot add more users to this organization; max user count reached."
+    'max_user_count_reached': "Cannot add more users to this organization; max user count reached.",
+    'protected_user_email': 'Provided user email is protected.'
 }
 
 
@@ -417,6 +419,41 @@ class TestEmployeeCreate:
         response = client.post(url, data, format='json')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert ERROR_MESSAGES['max_user_count_reached'] in str(response.data['non_field_errors'])
+
+    def test_superuser_cannot_create_employee_with_protected_email(self, client, superuser, organization):
+        """Test that even a superuser cannot create an employee with a protected email"""
+        client.force_authenticate(user=superuser)
+        url = reverse('employee-list')
+        data = {
+            'user': {
+                'username': f'protected_employee',
+                'password': 'password',
+                'email': settings.PROCESSING_PIPELINE_USER
+            },
+            'role': 'AGENT',
+            'organization': organization.id,
+            'is_organization_admin': False
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['protected_user_email'] in str(response.data['user']['email'])
+
+    def test_organization_admin_cannot_create_employee_with_protected_email(self, client, organization_admin_user):
+        """Test that even an organization admin cannot create an employee with a protected email"""
+        client.force_authenticate(user=organization_admin_user)
+        url = reverse('employee-list')
+        data = {
+            'user': {
+                'username': f'protected_employee',
+                'password': 'password',
+                'email': settings.PROCESSING_PIPELINE_USER
+            },
+            'role': 'AGENT',
+            'is_organization_admin': False
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['protected_user_email'] in str(response.data['user']['email'])
 
 
 @pytest.mark.django_db

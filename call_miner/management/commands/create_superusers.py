@@ -62,11 +62,10 @@ class Command(BaseCommand):
             user = User.objects.create_superuser(
                 username='processing_pipeline',
                 password=processing_pwd,
-                email=f'processing.{settings.TELLME_ENV}@tell-me.ch'
+                email=settings.PROCESSING_PIPELINE_USER
             )
-            auth.update_user(
-                user.id,
-                email_verified=True
+            self.stdout.write(
+                self.style.SUCCESS(f'Successfully created superuser account for processing pipeline: {user.id}.')
             )
         except Exception as e:
             raise CommandError(f'Failed to create Superuser Account for Processing Pipeline: {e}')

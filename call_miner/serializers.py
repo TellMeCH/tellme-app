@@ -2,6 +2,7 @@ from django.urls import reverse
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema_field
+from django.conf import settings
 from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Analyst, Customer, User
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 from call_miner.schemas import TOPIC_DATA_RESPONSE_SCHEMA
@@ -454,6 +455,13 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ('username', 'password', 'email')
         extra_kwargs = {'password': {'write_only': True}}
+
+    def validate(self, data):
+        if data.get('email') == settings.PROCESSING_PIPELINE_USER:
+            raise serializers.ValidationError({
+                "email": "Provided user email is protected."
+            })
+        return data
 
     def create(self, validated_data):
         user = User.objects.create_user(
