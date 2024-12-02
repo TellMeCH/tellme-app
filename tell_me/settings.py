@@ -32,25 +32,16 @@ elif env("GOOGLE_CLOUD_PROJECT", default=None):  # Cloud environment: project va
     if env('TELLME_ENV') == 'dev':
         raise Exception('Local execution (TELLME_ENV=dev) should run with an environment file.')
 
-    # Load environments from SETTINGS_NAME and PASSWORDS_NAME
+    # Load environments from SETTINGS_NAME
     project_id = env("GOOGLE_CLOUD_PROJECT")
     client = secretmanager.SecretManagerServiceClient()
-    secrets = {
-        "settings": env("SETTINGS_NAME", default="django_settings"),
-        "passwords": env("PASSWORDS_NAME", default="superuser_passwords"),
-    }
-    combined_payload = ""
-    for key, secret_name in secrets.items():
-        secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-        response = client.access_secret_version(name=secret_path)
-        payload = response.payload.data.decode("UTF-8")
-
-        if '#' in payload:
-            raise Exception('Watch out with special characters in your passwords! This step will mess with them')
-
-        combined_payload += payload + "\n"
-
-    env.read_env(io.StringIO(combined_payload))
+    secret_name = env("SETTINGS_NAME", default="django_settings")
+    secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+    response = client.access_secret_version(name=secret_path)
+    payload = response.payload.data.decode("UTF-8")
+    if '#' in payload:
+        raise Exception('Watch out with special characters in your passwords! This step will mess with them')
+    env.read_env(io.StringIO(payload))
 else:
     raise Exception("No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.")
 
@@ -60,6 +51,7 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 TELLME_ENV = env('TELLME_ENV', default='dev')
+GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT", default=None)
 
 CLOUDRUN_SERVICE_URLS = env("CLOUDRUN_SERVICE_URLS", default=None)
 if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
@@ -140,12 +132,13 @@ else:
     }
 
 # If the flag as been set, configure to use Cloud SQL Proxy
+# Remember to start it with:
+# ./cloud_setup/cloud-sql-proxy --port=5433 --gcloud-auth $GOOGLE_CLOUD_PROJECT:$REGION:$INSTANCE_NAME
 if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
     DATABASES["default"]["HOST"] = "127.0.0.1"
     DATABASES["default"]["PORT"] = 5433
 
-PROCESSING_PWD = env('PROCESSING_PWD')
-APP_ADMIN_PWD = env('APP_ADMIN_PWD')
+PASSWORDS_NAME = env('PASSWORDS_NAME', default=None)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
