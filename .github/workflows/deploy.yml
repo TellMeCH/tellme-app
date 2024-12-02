@@ -154,8 +154,16 @@ jobs:
             DATABASE_NAME=${{ env.DATABASE_NAME }}
             GS_BUCKET_NAME=${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
 
+      - name: Determine Cloud Run URL
+        id: extract_urls
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
+          CLOUD_RUN_URLS="https://${{ env.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
+          CLOUD_RUN_URLS="${CLOUD_RUN_URLS},${{ steps.deploy.outputs.url }}"
+          echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
+
       - name: Update the Application to use those Service URLs
         run: |
           gcloud run services update ${{ env.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.deploy.outputs.url }}"
+            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }}"
