@@ -16,6 +16,7 @@ locally with the following adjustments:
 - export PROCESSING_PWD=...
 - export USE_CLOUD_SQL_AUTH_PROXY=true
 - Make sure FIREBASE_AUTH_EMULATOR_HOST is not included in local .env
+- SWITCH TELLME_ENV!
 - Run python manage.py runserver 0.0.0.0:8080
 """
 
