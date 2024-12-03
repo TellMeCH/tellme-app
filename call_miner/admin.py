@@ -1,6 +1,10 @@
 from django.contrib import admin
-from .models import Organization, Employee, Analyst, Agent, Topic, Customer, Conversation
+from .models import Organization, Employee, Analyst, Agent, Topic, Customer, Conversation, CustomUserManager
 from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm
+
+
+class CustomUserAdmin(admin.ModelAdmin):
+    list_display = ['username', 'email', 'is_staff']
 
 
 class OrganizationAdmin(admin.ModelAdmin):
