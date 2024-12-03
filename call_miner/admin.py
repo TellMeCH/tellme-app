@@ -1,6 +1,10 @@
 from django.contrib import admin
-from .models import Organization, Employee, Analyst, Agent, Topic, Customer, Conversation
+from .models import Organization, Employee, Analyst, Agent, Topic, Customer, Conversation, User
 from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm
+
+
+class CustomUserAdmin(admin.ModelAdmin):
+    list_display = ['username', 'email', 'is_staff']
 
 
 class OrganizationAdmin(admin.ModelAdmin):
@@ -55,6 +59,7 @@ class ConversationAdmin(admin.ModelAdmin):
 
 
 # Register the models and their customized admin interfaces
+admin.site.register(User, CustomUserAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(Topic, TopicAdmin)
 admin.site.register(Employee, EmployeeAdmin)
