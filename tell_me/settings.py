@@ -138,7 +138,6 @@ if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
     DATABASES["default"]["HOST"] = "127.0.0.1"
     DATABASES["default"]["PORT"] = 5433
 
-PASSWORDS_NAME = env('PASSWORDS_NAME', default=None)
 PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
 PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
 
