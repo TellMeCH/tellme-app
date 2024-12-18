@@ -19,6 +19,7 @@ tiktoken = "^0.8.0"
 django-environ = "^0.11.2"
 django-storages = "^1.14.4"
 google-cloud-secret-manager = "^2.21.1"
+google-cloud-tasks = "^2.18.0"
 
 
 [tool.poetry.group.dev.dependencies]

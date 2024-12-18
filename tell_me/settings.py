@@ -51,7 +51,8 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 TELLME_ENV = env('TELLME_ENV', default='dev')
-GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT", default=None)
+GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT")
+REGION = env("REGION")
 
 CLOUDRUN_SERVICE_URLS = env("CLOUDRUN_SERVICE_URLS", default=None)
 if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
@@ -77,6 +78,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'storages',
     'call_miner',
+    'call_processing'
 ]
 
 MIDDLEWARE = [
@@ -138,6 +140,10 @@ if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
     DATABASES["default"]["HOST"] = "127.0.0.1"
     DATABASES["default"]["PORT"] = 5433
 
+# Processing pipeline
+CLOUD_TASKS_QUEUE_NAME = env('CLOUD_TASKS_QUEUE_NAME')
+CALL_PROCESSING_ENDPOINT = env('CALL_PROCESSING_ENDPOINT')
+TASKS_EMULATOR_ADDRESS = env('TASKS_EMULATOR_ADDRESS')
 PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
 PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
 

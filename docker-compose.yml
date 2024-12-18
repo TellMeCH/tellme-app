@@ -21,6 +21,16 @@ services:
     networks:
       - app-network
 
+  cloud_tasks_emulator:
+    image: ghcr.io/aertje/cloud-tasks-emulator:latest
+    command:
+      - --host=cloud_tasks_emulator
+      - "-queue=projects/${GOOGLE_CLOUD_PROJECT}/locations/${REGION}/queues/${CLOUD_TASKS_QUEUE_NAME}"
+    ports:
+      - "8123:8123"
+    networks:
+      - app-network
+
   django:
     build: .
     command: >
@@ -29,7 +39,11 @@ services:
           echo 'Waiting for Firebase Emulator...';
           sleep 1;
         done;
-        curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/tellme-app-dev/accounts;
+        until nc -z cloud_tasks_emulator 8123; do
+          echo 'Waiting for Cloud Tasks Emulator...'
+          sleep 1
+        done;
+        curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/${GOOGLE_CLOUD_PROJECT}/accounts;
         python manage.py makemigrations &&
         python manage.py migrate &&
         python manage.py create_sample_data &&
@@ -42,6 +56,7 @@ services:
     depends_on:
       - db
       - firebase
+      - cloud_tasks_emulator
     env_file:
       - .env
     networks:
