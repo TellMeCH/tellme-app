@@ -21,15 +21,32 @@ services:
     networks:
       - app-network
 
-  cloud_tasks_emulator:
+  tasks:
     image: ghcr.io/aertje/cloud-tasks-emulator:latest
     command:
-      - --host=cloud_tasks_emulator
+      - --host=tasks
       - "-queue=projects/${GOOGLE_CLOUD_PROJECT}/locations/${REGION}/queues/${CLOUD_TASKS_QUEUE_NAME}"
     ports:
       - "8123:8123"
     networks:
       - app-network
+
+  storage:
+    image: oittaa/gcp-storage-emulator:latest
+    command:
+      - -d=${GCS_EMULATOR_PATH}
+      - start
+      - --host=storage
+      - --default-bucket=${CALL_PROCESSING_BUCKET}
+    volumes:
+      - ${GCS_EMULATOR_PATH}:/storage
+    ports:
+      - "9023:9023"
+    environment:
+      PORT: 9023
+    networks:
+      - app-network
+
 
   django:
     build: .
@@ -39,8 +56,12 @@ services:
           echo 'Waiting for Firebase Emulator...';
           sleep 1;
         done;
-        until nc -z cloud_tasks_emulator 8123; do
+        until nc -z tasks 8123; do
           echo 'Waiting for Cloud Tasks Emulator...'
+          sleep 1
+        done;
+        until nc -z storage 9023; do
+          echo 'Waiting for Cloud Storage Emulator...'
           sleep 1
         done;
         curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/${GOOGLE_CLOUD_PROJECT}/accounts;
@@ -56,7 +77,8 @@ services:
     depends_on:
       - db
       - firebase
-      - cloud_tasks_emulator
+      - tasks
+      - storage
     env_file:
       - .env
     networks:

@@ -223,7 +223,7 @@ class Command(BaseCommand):
 
         try:
             self.stdout.write('Setting the last 2 Sample Topics as Inactive')
-            time.sleep(30)
+            time.sleep(10)
             for i in range(9, 11):
                 topic = Topic.objects.filter(name=f'Topic {i}', organization=org)[0]
                 topic.is_active = False

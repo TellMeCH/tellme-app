@@ -37,7 +37,7 @@ class QueueRecordingView(APIView):
             logger.info(f"File: {file_name}")
 
             # Upload to GCS
-            # gcs_uri = upload_to_gcs(file_obj, file_name)
+            gcs_uri = upload_to_gcs(file_obj, file_name)
 
             # Create a task to process this recording
             payload = {
@@ -80,8 +80,8 @@ class QueueRecordingView(APIView):
             _ = client.create_task(parent=parent, task=task)
             logger.info(f'Created task in {settings.CLOUD_TASKS_QUEUE_NAME}')
             return Response(
-                {"message": "File queued for processing."}, #, "gcs_uri": gcs_uri},
-                status=status.HTTP_201_CREATED)
+                {"message": "File queued for processing.", "gcs_uri": gcs_uri},
+                status=status.HTTP_202_ACCEPTED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -98,10 +98,10 @@ class ProcessRecordingView(APIView):
             return Response({"error": "file_name not provided."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Download file from GCS
-        # file_data = download_from_gcs(file_name)
+        file_data = download_from_gcs(file_name)
 
         # For now, we do nothing except log that we got it.
-        # logger.info(f"Processing file {file_name}, size {len(file_data)} bytes.")
+        logger.info(f"Processing file {file_name}, size {len(file_data)} bytes.")
 
         # Return success
         return Response({"message": "File processed (loaded from GCS)."}, status=status.HTTP_200_OK)
