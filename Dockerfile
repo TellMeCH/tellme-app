@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     curl \
     netcat-openbsd \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -sSL https://install.python-poetry.org | python3 -
@@ -26,4 +27,4 @@ COPY . /app/
 
 EXPOSE 8080
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8080"]
+CMD ["gunicorn", "tell_me.wsgi:application", "--bind", "0.0.0.0:8080", "--timeout", "600"]

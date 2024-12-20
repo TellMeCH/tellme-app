@@ -10,6 +10,7 @@ from rest_framework import status
 from django.conf import settings
 from .serializers import QueueRecordingSerializer
 from call_processing.utils.gcs_utils import upload_to_gcs, download_from_gcs
+from call_processing.utils.call_processing import CallProcessingPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +81,8 @@ class QueueRecordingView(APIView):
             _ = client.create_task(parent=parent, task=task)
             logger.info(f'Created task in {settings.CLOUD_TASKS_QUEUE_NAME}')
             return Response(
-                {"message": "File queued for processing.", "gcs_uri": gcs_uri},
-                status=status.HTTP_202_ACCEPTED)
+                {"message": "File queued for processing.", "gcs_uri": gcs_uri}, status=status.HTTP_202_ACCEPTED
+            )
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -91,9 +92,20 @@ class ProcessRecordingView(APIView):
     Carries out the processing steps on a call recording. These include:
     Only the processing pipeline account (PROCESSING_PIPELINE_USER and PROCESSING_PIPELINE_KEY) should have access
     """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.pipeline = CallProcessingPipeline()
+
     def post(self, request):
         # The Cloud Task request will contain JSON with file_name and other metadata
         file_name = request.data.get("file_name")
+        file_metadata = {
+            "file_name": file_name,
+            "organization": request.data.get("organization"),
+            "customer_id": request.data.get("customer_id"),
+            "agent_id": request.data.get("agent_id"),
+            "timestamp": request.data.get("timestamp")
+        }
         if not file_name:
             return Response({"error": "file_name not provided."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -101,7 +113,11 @@ class ProcessRecordingView(APIView):
         file_data = download_from_gcs(file_name)
 
         # For now, we do nothing except log that we got it.
-        logger.info(f"Processing file {file_name}, size {len(file_data)} bytes.")
-
-        # Return success
-        return Response({"message": "File processed (loaded from GCS)."}, status=status.HTTP_200_OK)
+        if len(file_data) > 0:
+            logger.info(f"Processing file {file_name}, size {len(file_data)} bytes.")
+            transcript, language = self.pipeline(file_data, file_metadata)
+            logger.info(f'Language: {language}')
+            logger.info(f'Transcript: {transcript[:100]}')
+            return Response({"message": "File processed (loaded from GCS)."}, status=status.HTTP_200_OK)
+        else:
+            return Response({"error": f"Specified file {file_name} is empty."}, status=status.HTTP_400_BAD_REQUEST)

@@ -147,6 +147,8 @@ TASKS_EMULATOR_ADDRESS = env('TASKS_EMULATOR_ADDRESS')
 CALL_PROCESSING_BUCKET = env('CALL_PROCESSING_BUCKET')
 PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
 PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
+DEEPGRAM_API_KEY = env('DEEPGRAM_API_KEY')
+OPENAI_API_KEY = env('OPENAI_API_KEY')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
