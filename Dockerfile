@@ -27,4 +27,4 @@ COPY . /app/
 
 EXPOSE 8080
 
-CMD ["gunicorn", "tell_me.wsgi:application", "--bind", "0.0.0.0:8080", "--timeout", "600"]
+CMD ["gunicorn", "tell_me.wsgi:application", "--bind", "0.0.0.0:8080", "--timeout", "1200"]

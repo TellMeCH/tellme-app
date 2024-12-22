@@ -68,7 +68,7 @@ services:
         python manage.py makemigrations &&
         python manage.py migrate &&
         python manage.py create_sample_data &&
-        gunicorn tell_me.wsgi:application --bind 0.0.0.0:8080 --timeout 600
+        gunicorn tell_me.wsgi:application --bind 0.0.0.0:8080 --timeout 1200
       "
     volumes:
       - .:/app
