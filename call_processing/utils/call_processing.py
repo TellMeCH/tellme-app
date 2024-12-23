@@ -82,8 +82,9 @@ class CallProcessingPipeline:
         the agreed upon next steps as a result of the call. Try to keep this summary to six sentences. Do not include 
         the names of customers or agents.
         4. Define a title that briefly captures the content of the call. Do not include names of customers or agents.
-        5. Represent the overall call sentiment in a scale ranging from 1 to 5, where 5 is extremely positive, and 1 is
-        completely hostile.
+        5. Represent probability of customer churn in a scale from 1 to 5, 1 being a customer who will certainly never
+        interact with the company again, and 5 being a customer that is completely satisfied with the product or service
+        in question. This is a proxy of the call sentiment.
         4. The output must strictly be in a JSON format with keys "agent_speaker_labels", "customer_speaker_labels", 
         "topics", "summary", "title", and "sentiment". Do not add any text before or after the json.
     """
