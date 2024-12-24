@@ -148,13 +148,19 @@ def another_organization_agent_user(another_organization):
 @pytest.fixture
 def customer(organization):
     """Create and return a customer associated with the given organization."""
-    return Customer.objects.create(name='Test Customer', organization=organization)
+    return Customer.objects.create(
+        external_id='02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd',
+        organization=organization
+    )
 
 
 @pytest.fixture
 def another_organization_customer(another_organization):
     """Create and return a customer associated with another organization."""
-    return Customer.objects.create(name='Another Customer', organization=another_organization)
+    return Customer.objects.create(
+        external_id='104da9683b41c996e98eb89311009de7ae3ec2b07c41a52200eda8b0df6dfde9',
+        organization=another_organization
+    )
 
 
 @pytest.fixture

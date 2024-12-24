@@ -435,7 +435,7 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['organization', 'name']
+        fields = ['organization', 'external_id']
 
 
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
@@ -444,7 +444,8 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
     """
     class Meta:
         model = Customer
-        fields = ['url', 'name', 'conversation_count', 'first_conversation_date', 'last_conversation_date', 'created']
+        fields = ['url', 'external_id', 'conversation_count', 'first_conversation_date', 'last_conversation_date',
+                  'created']
 
 
 class UserSerializer(serializers.ModelSerializer):

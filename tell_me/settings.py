@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import io
 import os
+import sys
+
 import environ
 from urllib.parse import urlparse
 from pathlib import Path
@@ -240,13 +242,14 @@ SPECTACULAR_SETTINGS = {
 AUTH_USER_MODEL = 'call_miner.User'
 
 # Logging
-sentry_sdk.init(
-    dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",
-    integrations=[DjangoIntegration()],
-    traces_sample_rate=1.0,
-    profiles_sample_rate=1.0,
-    environment=TELLME_ENV
-)
+if TELLME_ENV != 'dev':
+    sentry_sdk.init(
+        dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment=TELLME_ENV
+    )
 
 LOGGING = {
     'version': 1,
@@ -257,7 +260,7 @@ LOGGING = {
             'class': 'sentry_sdk.integrations.logging.EventHandler',
         },
         'console': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'class': 'logging.StreamHandler',
         },
     },

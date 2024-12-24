@@ -370,19 +370,19 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
     """
-    name = models.CharField(max_length=100, null=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
+    external_id = models.CharField(max_length=128, null=False)  # Comes from call recording software
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('name', 'organization')
+        unique_together = ('organization', 'external_id')
         verbose_name_plural = "Customers"
         indexes = [
-            models.Index(fields=['organization', 'name']),
+            models.Index(fields=['organization', 'external_id']),
         ]
 
     def __str__(self):
-        return self.name
+        return f"Customer [external_id={self.external_id} | org={self.organization_id}]"
 
 
 class Conversation(models.Model):
@@ -423,6 +423,10 @@ class Conversation(models.Model):
         # Ensure that agent and customer have the same associated organization
         if self.customer.organization != self.agent.organization:
             raise ValueError("The assigned customer and agent must be associated with the same organization.")
+
+        # Ensure that the call sentiment is within the expected bounds
+        if not (0 <= self.sentiment <= 5):
+            raise ValueError(f'Sentiment score must be between 0 and 5. Provided value was {self.sentiment}')
         super().save(*args, **kwargs)
 
     def process_transcript(self):
