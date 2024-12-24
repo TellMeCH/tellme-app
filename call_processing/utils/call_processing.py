@@ -7,36 +7,16 @@ from django.conf import settings
 import deepgram
 import httpx
 from pydub import AudioSegment
-from langfuse import openai
-from openai.lib._parsing._completions import type_to_response_format_param
-from pydantic import BaseModel
+from langfuse import openai, Langfuse
 from langfuse.decorators import observe, langfuse_context
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
 from call_miner.models import Topic
+from call_processing.utils.fallback_prompt import ENRICHMENT_PROMPT, PROMPT_CONFIG
 
 DEEPGRAM_COSTS = {  # A dictionary of transcription costs in dollars per second
     'whisper-medium': 0.00007,
     'whisper-large': 0.00008
 }
-
-
-class EnrichmentResponse(BaseModel):
-    """
-    A Pydantic model that represents the response structure from the OpenAI API.
-    Contains:
-        - agent_speaker_labels: A list of speaker label strings that identify the agent in the conversation
-        - customer_speaker_labels: A list of speaker label strings that identify the customer in the conversation
-        - topics: A list of topic strings that classify the conversation.
-        - summary: A string summarizing the key points of the conversation.
-        - title: A string that represents the content of the call
-        - sentiment: An integer that represents the overall sentiment of the call
-    """
-    agent_speaker_labels: list[str]
-    customer_speaker_labels: list[str]
-    topics: list[str]
-    summary: str
-    title: str
-    sentiment: int
 
 
 class CallProcessingPipeline:
@@ -56,8 +36,6 @@ class CallProcessingPipeline:
         API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with the Deepgram or OpenAI API
         API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with the Deepgram or OpenAI API
         API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with the Deepgram or OpenAI API
-        ENRICHMENT_MODEL_NAME (str): Model name for enrichment step
-        ENRICHMENT_PROMPT (str): System message to use during enrichment step
     """
     REQUIRED_METADATA_FIELDS: list[str] = ['file_name', 'organization_id', 'customer_id', 'agent_id', 'timestamp']
     CHUNK_SIZE: float = 5
@@ -65,37 +43,16 @@ class CallProcessingPipeline:
     API_MAX_RETRIES: int = 5
     API_BASE_DELAY: float = 1.0
     API_BACKOFF_FACTOR: int = 2
-    ENRICHMENT_MODEL_NAME = 'gpt-4o-mini-2024-07-18'
-    ENRICHMENT_PROMPT = """
-        You have the task of summarizing and classifying transcribed calls between two speakers.
-        One of the speakers in the call is an agent for a company, and the other speaker is a customer. 
-        The different speakers are indicated by 'Speaker 0' and 'Speaker 1'.
-        Follow these steps:
-
-        1. Read through the transcribed dialogue. Identify which of the speakers is the company's agent (usually 
-        'Speaker 0') and which one is the customer. For extra speaker labels (f.e. 'Speaker 2') that may be present in 
-        the transcript, assume they are either the customer or the agent. Keep track of the speaker labels that 
-        correspond to the agent and to the customer.
-        2. Classify the dialogue into the following topics: {topics_string}. Present a list containing the associated
-        topic names. If none of these topics match, simply return an empty list. Do not invent topics!
-        3. Summarize the call paying attention to: the reason for the call, the topics discussed during the call, and
-        the agreed upon next steps as a result of the call. Try to keep this summary to six sentences. Do not include 
-        the names of customers or agents.
-        4. Define a title that briefly captures the content of the call. Do not include names of customers or agents.
-        5. Represent probability of customer churn in a scale from 1 to 5, 1 being a customer who will certainly never
-        interact with the company again, and 5 being a customer that is completely satisfied with the product or service
-        in question. This is a proxy of the call sentiment.
-        4. The output must strictly be in a JSON format with keys "agent_speaker_labels", "customer_speaker_labels", 
-        "topics", "summary", "title", and "sentiment". Do not add any text before or after the json.
-    """
 
     def __init__(self) -> None:
         """
-        Initializes the pipeline by setting up the Deepgram client and transcription options.
+        Initializes the pipeline by setting up the Deepgram client and transcription options, as well as the Open AI
+        client and prompt.
 
         Raises:
             ValueError: If the DEEPGRAM_API_KEY or OPENAI_API_KEY is not set in the django settings.
         """
+        # Deepgram
         if not hasattr(settings, 'DEEPGRAM_API_KEY') or not settings.DEEPGRAM_API_KEY:
             raise ValueError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY setting value.")
         self.deepgram = deepgram.DeepgramClient(settings.DEEPGRAM_API_KEY)
@@ -106,11 +63,19 @@ class CallProcessingPipeline:
             punctuate=True,
             diarize=True,
         )
+        # OpenAI
         if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
             raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY setting value.")
         else:
             openai.api_key = settings.OPENAI_API_KEY
         self.openai = openai.OpenAI()
+
+        # Prompt with Fallback
+        self.enrichment_prompt = Langfuse().get_prompt(
+            'call_enrichment',
+            label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
+            fallback=ENRICHMENT_PROMPT
+        )
 
     @observe()
     def __call__(self, file_data: bytes, file_metadata: dict[str, str]) -> dict:
@@ -350,19 +315,24 @@ class CallProcessingPipeline:
             int: Input tokens to completion
             int: Output tokens from completion
         """
+        # Prepare Prompt and Response Format
+        system_message = self.enrichment_prompt.compile(topics_string=topic_data)
+        if self.enrichment_prompt.is_fallback:
+            config_kwargs = PROMPT_CONFIG
+        else:
+            config_kwargs = {'langfuse_prompt': self.enrichment_prompt}
+            config_kwargs.update(self.enrichment_prompt.config)
+
         langfuse_context.update_current_observation(
             name="Recording Enrichment with OpenAI",
-            model=self.ENRICHMENT_MODEL_NAME,
+            prompt=self.enrichment_prompt
         )
-        system_message = self.ENRICHMENT_PROMPT.format(topics_string=topic_data)
         completion = self.openai.chat.completions.create(
-            model=self.ENRICHMENT_MODEL_NAME,
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": f"Here is the call transcript:\n{transcript}"}
             ],
-            response_format=type_to_response_format_param(EnrichmentResponse),
-            temperature=0.2,
+            **config_kwargs
         )
 
         response = completion.choices[0].message
