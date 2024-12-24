@@ -65,10 +65,7 @@ services:
           sleep 1
         done;
         curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/${GOOGLE_CLOUD_PROJECT}/accounts;
-        python manage.py makemigrations &&
-        python manage.py migrate &&
-        python manage.py create_sample_data &&
-        gunicorn tell_me.wsgi:application --bind 0.0.0.0:8080 --timeout 1200
+        python manage.py runserver 0.0.0.0:8080
       "
     volumes:
       - .:/app

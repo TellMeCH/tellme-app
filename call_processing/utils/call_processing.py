@@ -53,13 +53,13 @@ class CallProcessingPipeline:
         REQUIRED_METADATA_FIELDS (list of str): Required fields in recording metadata
         CHUNK_SIZE (float): Duration of each audio chunk in minutes.
         TRANSCRIPTION_MODEL_NAME (str): The name of the transcription model to use.
-        API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with the Deepgram API
-        API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with the Deepgram API
-        API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with the Deepgram API
+        API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with the Deepgram or OpenAI API
+        API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with the Deepgram or OpenAI API
+        API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with the Deepgram or OpenAI API
         ENRICHMENT_MODEL_NAME (str): Model name for enrichment step
         ENRICHMENT_PROMPT (str): System message to use during enrichment step
     """
-    REQUIRED_METADATA_FIELDS: list[str] = ['file_name', 'organization', 'customer_id', 'agent_id', 'timestamp']
+    REQUIRED_METADATA_FIELDS: list[str] = ['file_name', 'organization_id', 'customer_id', 'agent_id', 'timestamp']
     CHUNK_SIZE: float = 5
     TRANSCRIPTION_MODEL_NAME: str = 'whisper-medium'
     API_MAX_RETRIES: int = 5
@@ -76,8 +76,8 @@ class CallProcessingPipeline:
         'Speaker 0') and which one is the customer. For extra speaker labels (f.e. 'Speaker 2') that may be present in 
         the transcript, assume they are either the customer or the agent. Keep track of the speaker labels that 
         correspond to the agent and to the customer.
-        2. Classify the dialogue into the following topics: {topics_string}. If none of these topics match, 
-        simply return an empty list. Do not invent topics!
+        2. Classify the dialogue into the following topics: {topics_string}. Present a list containing the associated
+        topic names. If none of these topics match, simply return an empty list. Do not invent topics!
         3. Summarize the call paying attention to: the reason for the call, the topics discussed during the call, and
         the agreed upon next steps as a result of the call. Try to keep this summary to six sentences. Do not include 
         the names of customers or agents.
@@ -94,10 +94,10 @@ class CallProcessingPipeline:
         Initializes the pipeline by setting up the Deepgram client and transcription options.
 
         Raises:
-            ValueError: If the DEEPGRAM_API_KEY is not set in the environment.
+            ValueError: If the DEEPGRAM_API_KEY or OPENAI_API_KEY is not set in the django settings.
         """
         if not hasattr(settings, 'DEEPGRAM_API_KEY') or not settings.DEEPGRAM_API_KEY:
-            raise ValueError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY environment variable.")
+            raise ValueError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY setting value.")
         self.deepgram = deepgram.DeepgramClient(settings.DEEPGRAM_API_KEY)
         self.transcription_options = deepgram.PrerecordedOptions(
             model=self.TRANSCRIPTION_MODEL_NAME,
@@ -107,13 +107,13 @@ class CallProcessingPipeline:
             diarize=True,
         )
         if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
-            raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+            raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY setting value.")
         else:
             openai.api_key = settings.OPENAI_API_KEY
         self.openai = openai.OpenAI()
 
     @observe()
-    def __call__(self, file_data: bytes, file_metadata: dict[str, str]) -> (str, str):
+    def __call__(self, file_data: bytes, file_metadata: dict[str, str]) -> dict:
         """
         Processes the given audio data through the pipeline and returns the transcript and base language.
 
@@ -124,7 +124,8 @@ class CallProcessingPipeline:
             file_metadata (dict[str, str]): Contains file metadata for Langfuse
 
         Returns:
-            Tuple[str, str]: The full transcript and the detected language of the audio.
+            dict: The full results of the call enrichment, including the transcript, language, agent and
+                customer speaker labels, the detected topics, the summary, the call title, and the call sentiment.
         """
         for field in self.REQUIRED_METADATA_FIELDS:
             if field not in file_metadata:
@@ -139,18 +140,26 @@ class CallProcessingPipeline:
         )
 
         # Transcribe the audio file
-        transcript, language = self.transcribe(file_data)
+        transcript, language, total_duration = self.transcribe(file_data)
 
         if len(transcript) == 0:
             raise ValueError('Call Processing: Produced transcript is empty.')
 
         # Extract the active topics of the organization
-        active_topics = self.obtain_active_topics(file_metadata['organization'])
+        active_topics = self.obtain_active_topics(file_metadata['organization_id'])
 
         # Obtain additional information from the transcript
-        enriched_data = self.enrich_recording(transcript, active_topics)
+        enriched_data, input_tokens, output_tokens = self.enrich_recording(transcript, active_topics)
 
-        return transcript, language
+        # Replace speaker labels
+        enriched_data = self.replace_speaker_labels(transcript, enriched_data)
+
+        enriched_data['language'] = language
+        enriched_data['input_tokens'] = input_tokens
+        enriched_data['output_tokens'] = output_tokens
+        enriched_data['duration'] = total_duration
+        enriched_data.update(file_metadata)
+        return enriched_data
 
     @staticmethod
     def define_session_id(file_metadata: dict[str, str]) -> str:
@@ -165,11 +174,11 @@ class CallProcessingPipeline:
             str: Session ID of the processing routine
         """
         current_epoch = str(int(time.time()))
-        combined_string = ''.join(file_metadata.values()) + current_epoch
+        combined_string = ''.join([str(v) for v in file_metadata.values()]) + current_epoch
         return hashlib.sha256(combined_string.encode()).hexdigest()
 
     @observe()
-    def transcribe(self, file_data: bytes) -> (str, str):
+    def transcribe(self, file_data: bytes) -> (str, str, float):
         """
         Internal method to handle the full transcription process:
         1. Cuts the audio into chunks.
@@ -180,7 +189,7 @@ class CallProcessingPipeline:
             file_data (bytes): The raw audio data to transcribe.
 
         Returns:
-            Tuple[str, str]: The full transcript and the detected base language.
+            Tuple[str, str, float]: The full transcript, the detected base language and the call duration in seconds.
 
         Raises:
             Warning: If language changes across chunks.
@@ -211,7 +220,7 @@ class CallProcessingPipeline:
         if full_transcript is None:
             full_transcript = ""
 
-        return full_transcript, base_language
+        return full_transcript, base_language, total_duration / 1000
 
     def cut_into_chunks(self, file_data: bytes) -> (list[bytes], int):
         """
@@ -327,7 +336,7 @@ class CallProcessingPipeline:
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception_type(httpx.HTTPError)
     )
-    def enrich_recording(self, transcript: str, topic_data: str):
+    def enrich_recording(self, transcript: str, topic_data: str) -> (dict, int, int):
         """
         Call OpenAI to obtain additional information from the call transcript. Uses the topic data string to complete
         the prompt's system message.
@@ -337,7 +346,9 @@ class CallProcessingPipeline:
             topic_data (str): String numerating names and descriptions of all active topics
 
         Returns:
-            dict[str, str]: Results of enrichment, defined according to EnrichmentResponse
+            dict: Results of enrichment, defined according to EnrichmentResponse
+            int: Input tokens to completion
+            int: Output tokens from completion
         """
         langfuse_context.update_current_observation(
             name="Recording Enrichment with OpenAI",
@@ -355,4 +366,21 @@ class CallProcessingPipeline:
         )
 
         response = completion.choices[0].message
-        return json.loads(response.content)
+        input_tokens = completion.usage.prompt_tokens
+        output_tokens = completion.usage.completion_tokens
+        return json.loads(response.content), input_tokens, output_tokens
+
+    @staticmethod
+    def replace_speaker_labels(transcript: str, data: dict) -> dict:
+        """
+        Apply the identified speaker roles to the diarized transcript, by replacing speaker labels
+        """
+        speaker_types = {'agent_speaker_labels': '<agent>', 'customer_speaker_labels': '<customer>'}
+        for label_type, new_label in speaker_types.items():
+            for old_label in data[label_type]:
+                if ':' in old_label:
+                    transcript = transcript.replace(old_label, new_label + ':')
+                else:
+                    transcript = transcript.replace(old_label, new_label)
+        data['transcript'] = transcript
+        return data
