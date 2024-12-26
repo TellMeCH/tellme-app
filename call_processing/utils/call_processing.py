@@ -169,10 +169,10 @@ class CallProcessingPipeline:
         )
 
         base_language = None
-        full_transcript = None
+        full_transcript = ''
         for i, chunk in enumerate(recording_chunks):
             chunk_transcript, chunk_language = self.transcribe_chunk(chunk)
-            if i == 0:
+            if i == 0 or not full_transcript:
                 base_language = chunk_language
                 full_transcript = chunk_transcript
             else:
@@ -182,8 +182,6 @@ class CallProcessingPipeline:
 
         if base_language is None:
             base_language = "unknown"
-        if full_transcript is None:
-            full_transcript = ""
 
         return full_transcript, base_language, total_duration / 1000
 
@@ -259,13 +257,13 @@ class CallProcessingPipeline:
             # Update observation with results
             langfuse_context.update_current_observation(
                 end_time=datetime.now(),
-                input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response.metadata.duration},
+                input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response['metadata']['duration']},
                 output={"transcript_preview": transcript[:100], "language": language},
                 model=f'deepgram-{self.TRANSCRIPTION_MODEL_NAME}',
                 usage={
-                    'total': response.metadata.duration,
+                    'total': response['metadata']['duration'],
                     'unit': 'SECONDS',
-                    'totalCost': DEEPGRAM_COSTS[self.TRANSCRIPTION_MODEL_NAME] * response.metadata.duration
+                    'totalCost': DEEPGRAM_COSTS[self.TRANSCRIPTION_MODEL_NAME] * response['metadata']['duration']
                 }
             )
 
