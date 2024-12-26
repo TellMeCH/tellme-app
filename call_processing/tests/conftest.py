@@ -36,7 +36,7 @@ def api_client():
 def mock_gcs_upload_download():
     """
     Mocks out the GCS upload_to_gcs and download_from_gcs functions.
-    We’ll patch them globally wherever they are imported.
+    We'll patch them globally wherever they are imported.
     """
     with (patch("call_processing.views.upload_to_gcs") as mock_upload,
           patch("call_processing.views.download_from_gcs") as mock_download):
@@ -60,6 +60,26 @@ def mock_cloud_tasks():
 
 
 @pytest.fixture
+def mock_dlp():
+    """
+    Mocks out the Google Cloud DLP API calls.
+    """
+    with patch("google.cloud.dlp_v2.DlpServiceClient") as mock_dlp_class:
+        mock_dlp_instance = MagicMock()
+        mock_dlp_class.return_value = mock_dlp_instance
+
+        # Create a mock response with a redacted value
+        mock_response = MagicMock()
+        mock_response.item.value = """
+            Speaker 0: My name is [PERSON_NAME] and this is outrageous!
+            Speaker 1: What? My phone number is [PHONE_NUMBER]
+        """
+        mock_dlp_instance.deidentify_content.return_value = mock_response
+
+        yield mock_dlp_instance
+
+
+@pytest.fixture
 def mock_deepgram():
     """
     Mocks out the Deepgram transcription calls (DeepgramClient)
@@ -78,7 +98,10 @@ def mock_deepgram():
                         "alternatives": [
                             {
                                 "paragraphs": {
-                                    "transcript": "Speaker 0: This is outrageous!\nSpeaker 1: What?"
+                                    "transcript": """
+                                        Speaker 0: My name is Sefano Giorgio and this is outrageous!
+                                        Speaker 1: What? My phone number is +34 634 333 222
+                                    """
                                 }
                             }
                         ],
@@ -168,14 +191,16 @@ def mock_langfuse():
       - Langfuse() constructor becomes a MagicMock
     This prevents any real tracing from happening in your tests.
     """
+
     def no_op_decorator(*args, **kwargs):
         def decorator(func):
             return func
+
         return decorator
 
-    with patch("langfuse.decorators.observe", new=no_op_decorator), \
-         patch("langfuse.decorators.langfuse_context", new=MagicMock()), \
-         patch("langfuse.Langfuse") as mock_lf_class:
+    with patch("call_processing.utils.call_processing.observe", new=no_op_decorator), \
+            patch("call_processing.utils.call_processing.langfuse_context", new=MagicMock()), \
+            patch("call_processing.utils.call_processing.Langfuse") as mock_lf_class:
         # The Langfuse constructor will return a MagicMock
         mock_lf_instance = MagicMock()
         mock_lf_class.return_value = mock_lf_instance

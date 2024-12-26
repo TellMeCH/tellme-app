@@ -10,6 +10,7 @@ from pydub import AudioSegment
 from langfuse import openai, Langfuse
 from langfuse.decorators import observe, langfuse_context
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
+import google.cloud.dlp
 from call_miner.models import Topic
 from call_processing.utils.fallback_prompt import ENRICHMENT_PROMPT, PROMPT_CONFIG
 
@@ -36,6 +37,7 @@ class CallProcessingPipeline:
         API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with the Deepgram or OpenAI API
         API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with the Deepgram or OpenAI API
         API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with the Deepgram or OpenAI API
+        DLP_ENTITY_TYPES (list of str): List of entities to detect as sensitive information and redact
     """
     REQUIRED_METADATA_FIELDS: list[str] = ['file_name', 'organization_id', 'customer_id', 'agent_id', 'timestamp']
     CHUNK_SIZE: float = 5
@@ -43,6 +45,7 @@ class CallProcessingPipeline:
     API_MAX_RETRIES: int = 5
     API_BASE_DELAY: float = 1.0
     API_BACKOFF_FACTOR: int = 2
+    DLP_ENTITY_TYPES: list[str] = ["EMAIL_ADDRESS", "PERSON_NAME", "PHONE_NUMBER", "CREDIT_CARD_NUMBER", "LOCATION", "IBAN_CODE", "PASSPORT"]
 
     def __init__(self) -> None:
         """
@@ -77,6 +80,20 @@ class CallProcessingPipeline:
             fallback=ENRICHMENT_PROMPT
         )
 
+        # Configuration for DLP
+        self.dlp_client = google.cloud.dlp_v2.DlpServiceClient()
+        self.dlp_config = {
+            "parent": f"projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/global",
+            "deidentify_config": {
+                "info_type_transformations": {
+                    "transformations": [
+                        {"primitive_transformation": {"replace_with_info_type_config": {}}}
+                    ]
+                }
+            },
+            "inspect_config": {"info_types": [{"name": info_type} for info_type in self.DLP_ENTITY_TYPES]}
+        }
+
     @observe()
     def __call__(self, file_data: bytes, file_metadata: dict[str, str]) -> dict:
         """
@@ -110,6 +127,9 @@ class CallProcessingPipeline:
         if len(transcript) == 0:
             raise ValueError('Call Processing: Produced transcript is empty.')
 
+        # Redact sensitive information
+        transcript = self.redact_transcript(transcript)
+
         # Extract the active topics of the organization
         active_topics = self.obtain_active_topics(file_metadata['organization_id'])
 
@@ -142,7 +162,7 @@ class CallProcessingPipeline:
         combined_string = ''.join([str(v) for v in file_metadata.values()]) + current_epoch
         return hashlib.sha256(combined_string.encode()).hexdigest()
 
-    @observe()
+    @observe(capture_output=False)
     def transcribe(self, file_data: bytes) -> (str, str, float):
         """
         Internal method to handle the full transcription process:
@@ -258,7 +278,7 @@ class CallProcessingPipeline:
             langfuse_context.update_current_observation(
                 end_time=datetime.now(),
                 input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response['metadata']['duration']},
-                output={"transcript_preview": transcript[:100], "language": language},
+                output={"transcript_chunk_size": len(transcript), "language": language},
                 model=f'deepgram-{self.TRANSCRIPTION_MODEL_NAME}',
                 usage={
                     'total': response['metadata']['duration'],
@@ -275,6 +295,43 @@ class CallProcessingPipeline:
         except httpx.HTTPStatusError as e:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
+
+    @observe(as_type="generation")
+    @retry(
+        reraise=True,
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
+        retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
+    )
+    def redact_transcript(self, transcript: str) -> str:
+        """
+        Remove sensitive information from the obtained transcript using the Google Cloud DLP API
+
+        Args:
+            transcript (str): The transcript text
+
+        Returns:
+            str: Redacted transcript
+        """
+        # Update Langfuse observation with input metadata
+        langfuse_context.update_current_observation(
+            name="Redaction with Google DLP",
+            start_time=datetime.now(),
+        )
+
+        current_request = self.dlp_config.copy()
+        current_request["item"] = {"value": transcript}
+        response = self.dlp_client.deidentify_content(request=current_request)
+        redacted_transcript = response.item.value
+
+        # Update observation with results
+        langfuse_context.update_current_observation(
+            end_time=datetime.now(),
+            input={"transcript_size": len(transcript)},
+            output={"redacted_transcript": redacted_transcript},
+            model=f'dlp-service-client'
+        )
+        return redacted_transcript
 
     @staticmethod
     def obtain_active_topics(organization: int):

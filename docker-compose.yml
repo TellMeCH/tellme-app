@@ -47,7 +47,6 @@ services:
     networks:
       - app-network
 
-
   django:
     build: .
     command: >
@@ -69,8 +68,11 @@ services:
       "
     volumes:
       - .:/app
+      - ${GOOGLE_APPLICATION_CREDENTIALS}:/tmp/gcp-credentials.json:ro
     ports:
       - "8080:8080"
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
     depends_on:
       - db
       - firebase

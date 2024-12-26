@@ -32,7 +32,7 @@ class TestProcessRecordingView:
     @patch("call_processing.views.create_conversation")
     def test_process_success(
             self, mock_create_conversation, api_client, valid_task_payload, setup_db, mock_gcs_upload_download,
-            mock_deepgram, mock_openai, mock_pydub
+            mock_deepgram, mock_openai, mock_pydub, mock_dlp
     ):
         """
         If everything is valid, the pipeline runs, the conversation is created in DB,
@@ -46,7 +46,7 @@ class TestProcessRecordingView:
 
     def test_create_conversation_in_db(
             self, api_client, setup_db, valid_task_payload, mock_gcs_upload_download, mock_deepgram, mock_openai,
-            mock_pydub
+            mock_pydub, mock_dlp
     ):
         """
         Instead of patching create_conversation, let's confirm that a Conversation object is

@@ -933,6 +933,26 @@ google-auth = ">=1.25.0,<3.0dev"
 grpc = ["grpcio (>=1.38.0,<2.0dev)", "grpcio-status (>=1.38.0,<2.0.dev0)"]
 
 [[package]]
+name = "google-cloud-dlp"
+version = "3.26.0"
+description = "Google Cloud Dlp API client library"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "google_cloud_dlp-3.26.0-py2.py3-none-any.whl", hash = "sha256:3f9e76b7a1c81af4012951435ed60c80623fc39d03e1e875a924013266b2a595"},
+    {file = "google_cloud_dlp-3.26.0.tar.gz", hash = "sha256:fa4c6393d75e88d414f95863b39dd7a60a3f51912d036803ca5afb591d686f34"},
+]
+
+[package.dependencies]
+google-api-core = {version = ">=1.34.1,<2.0.dev0 || >=2.11.dev0,<3.0.0dev", extras = ["grpc"]}
+google-auth = ">=2.14.1,<2.24.0 || >2.24.0,<2.25.0 || >2.25.0,<3.0.0dev"
+proto-plus = [
+    {version = ">=1.25.0,<2.0.0dev", markers = "python_version >= \"3.13\""},
+    {version = ">=1.22.3,<2.0.0dev", markers = "python_version < \"3.13\""},
+]
+protobuf = ">=3.20.2,<4.21.0 || >4.21.0,<4.21.1 || >4.21.1,<4.21.2 || >4.21.2,<4.21.3 || >4.21.3,<4.21.4 || >4.21.4,<4.21.5 || >4.21.5,<6.0.0dev"
+
+[[package]]
 name = "google-cloud-firestore"
 version = "2.19.0"
 description = "Google Cloud Firestore API client library"
@@ -3015,4 +3035,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">3.10,<4.0"
-content-hash = "f640eea8c15e936d3ab500830fec7c03fced381d68bd103fa21d96bba9d551c7"
+content-hash = "f634bcb01b4c589916406d6fdd939c05240e9730aabb6fdfad7e622e86e2f654"

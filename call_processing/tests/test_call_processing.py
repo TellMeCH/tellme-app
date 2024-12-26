@@ -5,7 +5,7 @@ from call_processing.utils.call_processing import CallProcessingPipeline
 @pytest.mark.django_db
 class TestCallProcessingPipeline:
     @pytest.fixture
-    def pipeline(self, mock_deepgram, mock_openai, mock_langfuse):
+    def pipeline(self, mock_deepgram, mock_openai, mock_langfuse, mock_dlp):
         return CallProcessingPipeline()
 
     def test_pipeline_missing_metadata_field(self, pipeline):
@@ -46,7 +46,7 @@ class TestCallProcessingPipeline:
         assert len(chunks) == 2
         assert total_duration == 600000
 
-    def test_transcribe_empty_audio_raises(self, pipeline, mock_deepgram, mock_pydub):
+    def test_transcribe_empty_audio_raises(self, pipeline, mock_deepgram, mock_pydub, mock_langfuse, mock_dlp):
         """
         If the pipeline ends up with no transcript text, it should raise ValueError.
         """
@@ -79,7 +79,7 @@ class TestCallProcessingPipeline:
             pipeline(b"fake audio", metadata)
         assert "Produced transcript is empty" in str(exc.value)
 
-    def test_transcribe_language_change_warns(self, pipeline, mock_deepgram, mock_pydub):
+    def test_transcribe_language_change_warns(self, pipeline, mock_deepgram, mock_pydub, mock_langfuse):
         """
         If chunk #2 has a different language, we raise a Warning.
         """
@@ -127,7 +127,7 @@ class TestCallProcessingPipeline:
             pipeline(b"fake audio", metadata)
         assert "Detected language changed suddenly" in str(exc.value)
 
-    def test_enrich_recording_structure(self, pipeline, mock_openai, mock_deepgram, mock_pydub):
+    def test_enrich_recording_structure(self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse):
         """
         If the transcript is not empty, we confirm we get back an enriched payload
         with the fields we expect (title, summary, topics, sentiment, etc.).
