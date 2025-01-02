@@ -52,15 +52,21 @@ jobs:
         run: |
           echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID_DEV }}" >> .env
           echo "TELLME_ENV=dev" >> .env
+          echo "REGION=europe-west6" >> .env
           echo "DATABASE_NAME=test_db" >> .env
           echo "DATABASE_USERNAME=postgres" >> .env
           echo "DATABASE_PASSWORD=postgres" >> .env
           echo "DATABASE_HOST=localhost" >> .env
           echo "DATABASE_PORT=5432" >> .env
-          echo "OPENAI_API_KEY=bla bla" >> .env
           echo "DEBUG=1" >> .env
           echo "SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY_DEV }}" >> .env
-          echo "PROCESSING_PIPELINE_KEY=bla bla" >> .env
+          echo "PROCESSING_PIPELINE_KEY=''" >> .env
+          echo "CLOUD_TASKS_QUEUE_NAME=''" >> .env
+          echo "CALL_PROCESSING_ENDPOINT=''" >> .env
+          echo "TASKS_EMULATOR_ADDRESS=''" >> .env
+          echo "CALL_PROCESSING_BUCKET=''" >> .env
+          echo "DEEPGRAM_API_KEY=''" >> .env
+          echo "OPENAI_API_KEY=''" >> .env
 
       - name: Make Migrations
         run: |
