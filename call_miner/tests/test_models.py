@@ -576,11 +576,11 @@ class TestCustomer:
         assert customer.external_id == "02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd"
         assert customer.organization == organization
 
-    def test_customer_str(self, customer):
+    def test_customer_str(self, customer, organization):
         """
         Test that the string representation of a Customer is its name.
         """
-        assert str(customer) == f"Customer [external_id=02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd | org=58]"
+        assert str(customer) == f"Customer [external_id={customer.external_id} | org={organization.id}]"
 
     def test_customer_unique_together(self, customer, organization):
         """
