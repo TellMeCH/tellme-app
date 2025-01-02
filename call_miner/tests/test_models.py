@@ -573,21 +573,24 @@ class TestCustomer:
         """
         Test that a Customer instance is created with the correct attributes.
         """
-        assert customer.name == "Test Customer"
+        assert customer.external_id == "02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd"
         assert customer.organization == organization
 
     def test_customer_str(self, customer):
         """
         Test that the string representation of a Customer is its name.
         """
-        assert str(customer) == "Test Customer"
+        assert str(customer) == f"Customer [external_id=02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd | org=58]"
 
     def test_customer_unique_together(self, customer, organization):
         """
         Test that creating a Customer with a duplicate name in the same organization raises an IntegrityError.
         """
         with pytest.raises(IntegrityError):
-            Customer.objects.create(name="Test Customer", organization=organization)
+            Customer.objects.create(
+                external_id="02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd",
+                organization=organization
+            )
 
     def test_customer_inherits_metasummary_model(self, customer):
         """
@@ -633,7 +636,7 @@ class TestConversation:
         Test that a Conversation cannot be created with a customer from a different organization than the agent.
         """
         other_org = Organization.objects.create(name="Other Organization")
-        other_customer = Customer.objects.create(name="Other Customer", organization=other_org)
+        other_customer = Customer.objects.create(external_id="Other Customer", organization=other_org)
 
         with pytest.raises(ValueError):
             Conversation.objects.create(
