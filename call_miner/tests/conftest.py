@@ -1,6 +1,6 @@
 import pytz
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 import uuid
 from rest_framework.test import APIClient
 from datetime import timedelta, datetime
@@ -32,7 +32,7 @@ def mock_condense_summaries():
     Mocking the call to OpenAI API for re-summarization. Making it autouse to avoid any unexpected costs.
     """
     with patch('call_miner.models.condense_summaries') as mock:
-        mock.return_value = 'Mocked summary text'
+        mock.return_value = {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'}
         yield mock
 
 
@@ -231,3 +231,22 @@ def another_organization_topic(another_organization):
         organization=another_organization,
         is_active=True
     )
+
+
+@pytest.fixture(autouse=True)
+def mock_langfuse():
+    """
+    Mocks out such that Langfuse() constructor becomes a MagicMock
+    """
+
+    with patch("call_processing.utils.call_processing.Langfuse") as mock_lf_class:
+        # The Langfuse constructor will return a MagicMock
+        mock_lf_instance = MagicMock()
+        mock_lf_class.return_value = mock_lf_instance
+
+        mock_prompt = MagicMock()
+        mock_prompt.is_fallback = False
+        mock_lf_instance.get_prompt.return_value = mock_prompt
+
+        yield mock_lf_instance
+

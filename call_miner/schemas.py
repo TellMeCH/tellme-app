@@ -59,8 +59,12 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
         'type': 'object',
         'properties': {
             'summary': {
-                'type': 'string',
-                'description': 'Summary of all conversation summaries of the object.'
+                'type': 'object',
+                'description': """
+                    Dictionary with a series of meta-summary questions and answers. Each key corresponds to a different
+                    meta-summary title, whereas each value corresponds to its meta-summary. Will be null if no the
+                    respective object has no associated conversations. 
+                """
             },
             'summary_date': {
                 'type': 'string',
@@ -74,7 +78,7 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
         },
         'required': ['summary', 'summary_date', 'summary_call_count'],
         'example': {
-            'summary': 'This agent consistently provides excellent customer service.',
+            'summary': {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'},
             'summary_date': '2023-10-15T12:34:56Z',
             'summary_call_count': 150
         }
