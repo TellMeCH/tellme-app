@@ -77,9 +77,12 @@ def create_conversation(
         raise Warning(f"Some topics were not found in org {organization_id}: {missing}")
 
     # Convert date_str to a timezone-aware DateTime
-    dt = parse_datetime(timestamp)
-    if dt is None:
+    if timestamp is None:
         raise ValueError(f"Could not parse datetime from '{timestamp}'")
+    if isinstance(timestamp, str):
+        dt = parse_datetime(timestamp)
+    else:
+        dt = timestamp
     if dt.tzinfo is None:
         dt = timezone.make_aware(dt)
 
