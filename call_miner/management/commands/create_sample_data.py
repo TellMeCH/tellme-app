@@ -1,4 +1,5 @@
 import time
+import hashlib
 from datetime import datetime, timedelta
 import random
 from django.utils import timezone
@@ -139,23 +140,10 @@ class Command(BaseCommand):
 
         try:
             self.stdout.write('Creating 50 Sample Customers for ACME Org')
-            customer_names = [
-                'John Smith', 'Jane Doe', 'Alice Brown', 'Charlie Black', 'Emma Green',
-                'Michael White', 'Olivia Blue', 'Isabella Gray', 'William Gold', 'Sophia Silver',
-                'Liam Violet', 'Lucas Yellow', 'Amelia Orange', 'Elijah Pink', 'Ethan Indigo',
-                'James Crimson', 'Henry Teal', 'Alexander Cyan', 'Benjamin Magenta', 'Jackson Olive',
-                'Sebastian Ruby', 'Matthew Jade', 'Joseph Emerald', 'David Amber', 'Owen Coral',
-                'Gabriel Navy', 'Oliver Lilac', 'Mason Burgundy', 'Samuel Sapphire', 'Logan Pearl',
-                'Levi Garnet', 'Jacob Quartz', 'Daniel Topaz', 'Jack Opal', 'Carter Onyx',
-                'Isaac Amethyst', 'Noah Diamond', 'Thomas Jasper', 'Lucas Bronze', 'Ryan Steel',
-                'Caleb Brass', 'Nathan Copper', 'Hunter Silverleaf', 'Chloe Violet', 'Scarlett Garnet',
-                'Hazel Stone', 'Grace Ruby', 'Luna Quartz', 'Penelope Pearl', 'Ellie Topaz'
-            ]
-
             customers = []
-            for name in customer_names:
+            for i in range(50):
                 customer = Customer(
-                    name=name,
+                    external_id=hashlib.sha256(f'{i + 1}{int(time.time())}'.encode()).hexdigest(),
                     organization=org
                 )
                 customer.save()
@@ -205,8 +193,8 @@ class Command(BaseCommand):
                     <customer>: Thank you, it's driving me crazy!
                     """,
                     sentiment=sentiment,
-                    title=f"Conversation {i + 1} - {agent.user.username} assists {customer.name}",
-                    summary=f"Agent {agent.user.username} assisted customer {customer.name} with an issue.",
+                    title=f"Conversation {i + 1} - {agent.user.username} assists {customer.external_id}",
+                    summary=f"Agent {agent.user.username} assisted customer {customer.external_id} with an issue.",
                     input_tokens=random.randint(50, 200),
                     output_tokens=random.randint(20, 100),
                     customer=customer,
@@ -223,7 +211,7 @@ class Command(BaseCommand):
 
         try:
             self.stdout.write('Setting the last 2 Sample Topics as Inactive')
-            time.sleep(30)
+            time.sleep(10)
             for i in range(9, 11):
                 topic = Topic.objects.filter(name=f'Topic {i}', organization=org)[0]
                 topic.is_active = False

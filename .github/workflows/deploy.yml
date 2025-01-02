@@ -17,6 +17,9 @@ jobs:
       MEDIA_BUCKET: static_files
       SETTINGS_NAME: django_settings
       PASSWORDS_NAME: superuser_passwords
+      CLOUD_TASKS_QUEUE_NAME: call-processing
+      TASKS_EMULATOR_ADDRESS: none
+      CALL_PROCESSING_BUCKET: call_recordings
       DEBUG: 0
       COLLECT_STATIC: false
       CREATE_SUPERUSERS: true
@@ -170,7 +173,7 @@ jobs:
           timeout: 30m
           flags: |
             --allow-unauthenticated
-            --min-instances=1 
+            --min-instances=0 
             --execution-environment=gen2
             --service-account=${{ env.SERVICE_NAME }}-account@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
             --add-cloudsql-instances=${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
@@ -185,6 +188,9 @@ jobs:
             SQL_INSTANCE_NAME=${{ env.SQL_INSTANCE_NAME }}
             DATABASE_NAME=${{ env.DATABASE_NAME }}
             GS_BUCKET_NAME=${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+            CLOUD_TASKS_QUEUE_NAME=${{ env.CLOUD_TASKS_QUEUE_NAME }}
+            TASKS_EMULATOR_ADDRESS=${{ env.TASKS_EMULATOR_ADDRESS }}
+            CALL_PROCESSING_BUCKET=${{ env.CALL_PROCESSING_BUCKET }}
 
       - name: Determine Cloud Run URL
         id: extract_urls

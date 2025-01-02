@@ -46,8 +46,8 @@ class AgentAdmin(EmployeeAdmin):
 
 
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['name', 'organization']
-    search_fields = ['name', 'organization__name']
+    list_display = ['external_id', 'organization']
+    search_fields = ['external_id', 'organization__name']
     list_filter = ['organization']
     readonly_fields = ['summary', 'summary_date', 'summary_call_count']
 

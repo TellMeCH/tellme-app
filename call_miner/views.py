@@ -193,7 +193,6 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     search_vector = (
         SearchVector('transcript', weight='A') +
         SearchVector('summary', weight='A') +
-        SearchVector(F('customer__name'), weight='B') +
         SearchVector(F('topics__name'), weight='B')
     )
 
@@ -389,12 +388,11 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         return response.Response(serializer.get_agent_data(obj))
 
 
-class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet, SearchViewSet):
+class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
     """
     A ViewSet for the Customer model. This ViewSet inherits from:
     - TrendsActionsViewSet: to obtain conversation trends of a single Customer
     - SummaryActionsViewSet: to obtain meta-summaries of a customer's conversation summaries
-    - SearchViewSet: to retrieve a customer based on a search query
 
     The ViewSet permissions can be summarized as follows:
     - Modification is only allowed to superusers
@@ -403,12 +401,10 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
-    cursor_ordering = ['-conversation_count', 'name']
-    relationships_to_prefetch = ['conversations']
-    search_vector = SearchVector('name', weight='A')
+    cursor_ordering = ['-last_conversation_date', 'conversation_count']
 
     def get_serializer_class(self):
-        if self.action in ['list', 'retrieve', 'search']:
+        if self.action in ['list', 'retrieve']:
             return CustomerListSerializer
         elif self.action in ['summary_data']:
             return MetaSummarySerializer
