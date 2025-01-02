@@ -6,6 +6,7 @@ from call_miner.models import Conversation
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures('mock_dlp')
 class TestProcessRecordingView:
     @pytest.fixture
     def valid_task_payload(self):
@@ -32,7 +33,7 @@ class TestProcessRecordingView:
     @patch("call_processing.views.create_conversation")
     def test_process_success(
             self, mock_create_conversation, api_client, valid_task_payload, setup_db, mock_gcs_upload_download,
-            mock_deepgram, mock_openai, mock_pydub, mock_dlp
+            mock_deepgram, mock_openai, mock_pydub
     ):
         """
         If everything is valid, the pipeline runs, the conversation is created in DB,
@@ -46,7 +47,7 @@ class TestProcessRecordingView:
 
     def test_create_conversation_in_db(
             self, api_client, setup_db, valid_task_payload, mock_gcs_upload_download, mock_deepgram, mock_openai,
-            mock_pydub, mock_dlp
+            mock_pydub
     ):
         """
         Instead of patching create_conversation, let's confirm that a Conversation object is
