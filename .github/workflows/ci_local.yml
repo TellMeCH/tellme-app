@@ -65,8 +65,8 @@ jobs:
           echo "CALL_PROCESSING_ENDPOINT=''" >> .env
           echo "TASKS_EMULATOR_ADDRESS=''" >> .env
           echo "CALL_PROCESSING_BUCKET=''" >> .env
-          echo "DEEPGRAM_API_KEY=''" >> .env
-          echo "OPENAI_API_KEY=''" >> .env
+          echo "DEEPGRAM_API_KEY=fake_key" >> .env
+          echo "OPENAI_API_KEY=fake_key" >> .env
 
       - name: Make Migrations
         run: |
