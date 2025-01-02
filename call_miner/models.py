@@ -13,7 +13,7 @@ class MetaSummaryAbstractModel(models.Model):
     """
     An abstract model that handles the creation and retrieval of summaries objects for Agent, Customer, and Topic models
     """
-    summary = models.TextField(null=True)
+    summary = models.JSONField(null=True)
     summary_date = models.DateTimeField(auto_now_add=True, null=True)
     summary_call_count = models.IntegerField(default=0)
 
@@ -41,8 +41,8 @@ class MetaSummaryAbstractModel(models.Model):
         # Compare the count with the Summary object's count field
         if self.is_deviation_significant(actual_call_count):
             # Call the external function with the list of summaries
-            new_summary_text = condense_summaries(relevant_summaries, trace_data)
-            self.summary = new_summary_text
+            new_summary = condense_summaries(relevant_summaries, trace_data)
+            self.summary = new_summary
             self.summary_call_count = actual_call_count
             self.summary_date = latest_date
             self.save()  # Save the updated MetaSummary with the new data

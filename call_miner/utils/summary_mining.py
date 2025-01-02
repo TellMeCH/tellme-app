@@ -1,34 +1,15 @@
 import time
 import json
 import logging
-from langfuse.openai import openai
-from openai.lib._parsing._completions import type_to_response_format_param
+from langfuse import openai, Langfuse
 import tiktoken
 from django.conf import settings
-from pydantic import BaseModel
+from call_miner.utils.fallback_prompt import SUMMARIZER_PROMPT, PROMPT_CONFIG
 
 
-logger = logging.getLogger(__name__)
-
-SUMMARIZER_PROMPT = """
-You are an assistant for the customer care center of a company.
-Below are summaries of conversations between customer care agents and customers.
-In two or three sentences, summarize what the recurring issues appearing in these calls are.
-These recurring issues should help the company identify ways to improve its customer experience.
-"""
-MODEL_NAME = 'gpt-4o-mini'
+logger = logging.getLogger("django")
 TOKEN_CUTOFF = 120000
-
 openai.api_key = settings.OPENAI_API_KEY
-
-
-class SummarizerResponse(BaseModel):
-    """
-    A Pydantic model that represents the response structure from the OpenAI API.
-    Contains:
-        - summary: A string summarizing the provided conversation summaries.
-    """
-    summary: str
 
 
 def count_tokens(text: str, model_name: str) -> int:
@@ -64,12 +45,27 @@ def condense_summaries(summaries: list[str], trace_data: dict):
 
     client = openai.OpenAI()
 
+    # Prompt with Fallback
+    # Perhaps in the future it is necessary to add the organization_type as an input, to load different summarizer
+    # prompts according to the company. For example, different questions might be relevant to marketing compared to
+    # sales teams.
+    prompt = Langfuse().get_prompt(
+        'summary_mining',
+        label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
+        fallback=SUMMARIZER_PROMPT
+    )
+    if prompt.is_fallback:
+        config_kwargs = PROMPT_CONFIG
+    else:
+        config_kwargs = {'langfuse_prompt': prompt}
+        config_kwargs.update(prompt.config)
+
     # Select all summaries to the point of reaching the token cutoff
     selected_text = ''
     for i, summ in enumerate(summaries):
         new_part = f'Conversation #{i + 1}: {summ}'
-        potential_payload = f'{SUMMARIZER_PROMPT}\n\n{selected_text}\n\n{new_part}'
-        if count_tokens(potential_payload, MODEL_NAME) >= TOKEN_CUTOFF and i > 0:
+        potential_payload = f'{prompt.prompt}\n\n{selected_text}\n\n{new_part}'
+        if count_tokens(potential_payload, config_kwargs['model']) >= TOKEN_CUTOFF and i > 0:
             logger.info(f'Generating meta-summary with only {i + 1} most recent conversations.')
             break
         else:
@@ -84,12 +80,11 @@ def condense_summaries(summaries: list[str], trace_data: dict):
             before = time.time()
             logger.info("Making API call to OpenAI.")
             completion = client.chat.completions.create(
-                model=MODEL_NAME,
                 messages=[
-                    {"role": "system", "content": SUMMARIZER_PROMPT},
+                    {"role": "system", "content": prompt.prompt},
                     {"role": "user", "content": selected_text}
                 ],
-                response_format=type_to_response_format_param(SummarizerResponse),
+                **config_kwargs,
                 **trace_data
             )
             after = time.time()
@@ -105,10 +100,10 @@ def condense_summaries(summaries: list[str], trace_data: dict):
                 logger.info("API call successful.")
                 logger.info(f"Input tokens used: {input_tokens}")
                 logger.info(f"Output tokens generated: {output_tokens}")
-                return json.loads(response.content)['summary']
+                return json.loads(response.content)
 
         except Exception as e:
             logger.error(f"An error occurred during the API call to OpenAI. {e}", exc_info=True)
             raise
     else:
-        return "No conversations to summarize. Check back later once new calls have been recorded."
+        return None

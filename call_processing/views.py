@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
-from .serializers import QueueRecordingSerializer
+from .serializers import QueueRecordingSerializer, ProcessRecordingSerializer
 from call_processing.utils.gcs_utils import upload_to_gcs, download_from_gcs
 from call_processing.utils.call_processing import CallProcessingPipeline
 from call_processing.utils.db_handler import check_agent_validity, create_conversation
@@ -22,8 +22,10 @@ class QueueRecordingView(APIView):
     it is designed to work in conjunction with a Cloud Tasks Emulator for local development.
     Only API-token bearing requests should have permission to run this view.
     """
+    serializer_class = QueueRecordingSerializer
+
     def post(self, request):
-        serializer = QueueRecordingSerializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
             organization_id = data['organization_id']
@@ -96,36 +98,57 @@ class QueueRecordingView(APIView):
 
 class ProcessRecordingView(APIView):
     """
-    Carries out the processing steps on a call recording. These include:
+    Carries out the processing steps on a call recording.
     Only the processing pipeline account (PROCESSING_PIPELINE_USER and PROCESSING_PIPELINE_KEY) should have access
     """
+    serializer_class = ProcessRecordingSerializer
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.pipeline = CallProcessingPipeline()
 
-    def post(self, request):
-        # The Cloud Task request will contain JSON with file_name and other metadata
-        file_name = request.data.get("file_name")
-        file_metadata = {
-            "file_name": file_name,
-            "organization_id": request.data.get("organization_id"),
-            "customer_id": request.data.get("customer_id"),
-            "agent_id": request.data.get("agent_id"),
-            "timestamp": request.data.get("timestamp")
-        }
-        if not file_name:
-            return Response({"error": "file_name not provided."}, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Extract validated data
+        file_name = serializer.validated_data["file_name"]
+        organization_id = serializer.validated_data.get("organization_id")
+        customer_id = serializer.validated_data.get("customer_id")
+        agent_id = serializer.validated_data.get("agent_id")
+        timestamp = serializer.validated_data.get("timestamp")
 
         # Download file from GCS
         file_data = download_from_gcs(file_name)
 
-        if len(file_data) > 0:
-            logger.info(f"Processing file {file_name}, size {len(file_data)} bytes.")
-            processing_start = datetime.datetime.now()
-            enriched_data = self.pipeline(file_data, file_metadata)
-            elapsed_time = (datetime.datetime.now() - processing_start).seconds
-            logger.info(f"Processed file {file_name}, required {elapsed_time} seconds")
-            create_conversation(**enriched_data)
-            return Response({"message": "File processed and saved to DB."}, status=status.HTTP_200_OK)
-        else:
-            return Response({"error": f"Specified file {file_name} is empty."}, status=status.HTTP_400_BAD_REQUEST)
+        if not file_data:
+            return Response(
+                {"error": f"Specified file {file_name} is empty."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(f"Processing file {file_name}, size {len(file_data)} bytes.")
+        processing_start = datetime.datetime.now()
+
+        # Enrich data using your pipeline
+        enriched_data = self.pipeline(
+            file_data,
+            {
+                "file_name": file_name,
+                "organization_id": organization_id,
+                "customer_id": customer_id,
+                "agent_id": agent_id,
+                "timestamp": timestamp
+            }
+        )
+
+        elapsed_time = (datetime.datetime.now() - processing_start).seconds
+        logger.info(f"Processed file {file_name}, required {elapsed_time} seconds")
+
+        # Persist the conversation or any other records as needed
+        create_conversation(**enriched_data)
+
+        return Response(
+            {"message": "File processed and saved to DB."},
+            status=status.HTTP_200_OK
+        )
