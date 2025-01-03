@@ -1,4 +1,4 @@
-from rest_framework import viewsets, decorators, response, status
+from rest_framework import viewsets, decorators, response, status, mixins
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import F
 from drf_spectacular.utils import extend_schema
@@ -177,6 +177,7 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
             return response.Response(serializer.data)
 
 
+@extend_schema(parameters=[ID_PARAMETER_SCHEMA])
 class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     """
     A ViewSet for the Conversation model. Inherits from the SearchViewSet to allow users to search for transcripts
@@ -236,6 +237,7 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
         return {'request': self.request}
 
 
+@extend_schema(parameters=[ID_PARAMETER_SCHEMA])
 class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
     """
     A ViewSet for the Organization model. Inherits from the TrendsActionsViewSet to obtain relevant conversation trends.
@@ -263,7 +265,14 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
         return Organization.objects.none()
 
 
-class OrganizationAPIKeyViewSet(viewsets.ModelViewSet):
+@extend_schema(parameters=[ID_PARAMETER_SCHEMA])
+class OrganizationAPIKeyViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet
+):
     """
     A ViewSet for the OrganizationAPIKey model. Used to create, delete, and list an organization's API keys.
     """
@@ -315,6 +324,7 @@ class OrganizationAPIKeyViewSet(viewsets.ModelViewSet):
         return response.Response(serializer.to_representation(created_instance), status=status.HTTP_201_CREATED)
 
 
+@extend_schema(parameters=[ID_PARAMETER_SCHEMA])
 class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
     """
     A ViewSet for the Topic model. Inherits from TrendsActionsViewSet to obtain conversation trends, as well as from the
@@ -391,6 +401,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(parameters=[ID_PARAMETER_SCHEMA])
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     """
     A ViewSet for the Agent model. Inherits from TrendsActionsViewSet to obtain conversation trends, as well as from the
@@ -441,6 +452,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         return response.Response(serializer.get_agent_data(obj))
 
 
+@extend_schema(parameters=[ID_PARAMETER_SCHEMA])
 class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
     """
     A ViewSet for the Customer model. This ViewSet inherits from:
@@ -478,6 +490,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
         return Customer.objects.none()
 
 
+@extend_schema(parameters=[ID_PARAMETER_SCHEMA])
 class EmployeeViewSet(viewsets.ModelViewSet):
     """
     A ViewSet for the Employee model. This is the ViewSet to be used to alter Agent and Analyst data.
