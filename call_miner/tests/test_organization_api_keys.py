@@ -4,7 +4,8 @@ from rest_framework import status
 from call_miner.models import OrganizationAPIKey
 
 ERROR_MESSAGES = {
-    'max_keys_reached': "Cannot add more API keys to this organization; max key count reached."
+    'max_keys_reached': "Cannot add more API keys to this organization; max key count reached.",
+    'duplicated_key_name': 'An API key with this name already exists in this organization.'
 }
 
 
@@ -222,6 +223,17 @@ class TestOrganizationAPIKeyCreate:
         response = client.post(url, {"name": "Excess Key"}, format='json')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert ERROR_MESSAGES['max_keys_reached'] in str(response.data['non_field_errors'])
+
+    def test_create_api_key_with_duplicate_name(self, client, organization_admin_user, organization, api_key):
+        """
+        Even an org admin cannot create an API key with the same name as an existing one.
+        """
+        client.force_authenticate(user=organization_admin_user)
+        url = reverse('api-key-list')
+
+        response = client.post(url, {'name': api_key.name}, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['duplicated_key_name'] in str(response.data['name'])
 
 
 @pytest.mark.django_db

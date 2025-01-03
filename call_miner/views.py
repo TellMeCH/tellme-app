@@ -18,9 +18,9 @@ from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA,
     CONVERSATIONS_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA,
-    SEARCH_QUERY_PARAMETER_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
-    LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
-    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
+    SEARCH_QUERY_PARAMETER_SCHEMA, REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA,
+    TRANSCRIPT_RESPONSE_SCHEMA, LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA,
+    ERROR_RESPONSE_SCHEMA, NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
 )
 
 
@@ -284,6 +284,16 @@ class OrganizationAPIKeyViewSet(viewsets.ModelViewSet):
             return OrganizationAPIKeyModifySerializer
         raise ValueError(f'Action {self.action} not permitted.')
 
+    @extend_schema(
+        description="Deletes and recreates an API key, maintaining its name and organization but re-setting its expiry",
+        parameters=[ID_PARAMETER_SCHEMA],
+        responses={
+            200: REGENERATE_API_KEY_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
     @decorators.action(detail=True, methods=['post'])
     def regenerate(self, request, pk=None):
         """

@@ -350,6 +350,12 @@ class OrganizationAPIKeyModifySerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"non_field_errors": ["Cannot add more API keys to this organization; max key count reached."]}
                 )
+
+            # Check that no key with the same name already exists in the same organization
+            if OrganizationAPIKey.objects.filter(organization=data['organization'], name=data['name']).exists():
+                raise serializers.ValidationError({
+                    "name": "An API key with this name already exists in this organization."
+                })
         return data
 
     def create(self, validated_data):
