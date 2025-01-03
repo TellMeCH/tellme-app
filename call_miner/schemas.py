@@ -35,6 +35,33 @@ SEARCH_QUERY_PARAMETER_SCHEMA = OpenApiParameter(
     required=True,
 )
 
+REGENERATE_API_KEY_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'name': {
+                'type': 'string',
+                'description': 'Name of the newly regenerated API key.'
+            },
+            'organization': {
+                'type': 'integer',
+                'description': 'Primary key of the associated organization.'
+            },
+            'plain_key': {
+                'type': 'string',
+                'description': 'Plain text value of the newly generated API key. Shown only once.'
+            }
+        },
+        'required': ['name', 'organization', 'plain_key'],
+        'example': {
+            'name': 'My Regenerated Key',
+            'organization': 42,
+            'plain_key': 'pk_live_a1b2c3d4'
+        }
+    },
+    description="Response returned when an API key has been successfully regenerated."
+)
+
 TOPIC_DATA_RESPONSE_SCHEMA = {
     'type': 'array',
     'items': {
