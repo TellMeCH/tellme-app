@@ -54,6 +54,31 @@ class OrganizationPermission(permissions.BasePermission):
         return request.user.is_superuser
 
 
+class OrganizationAPIKeyPermission(permissions.BasePermission):
+    """
+    Permissions class for the OrganizationAPIKeyViewSet.
+    """
+    def has_permission(self, request, view):
+        """
+        Superusers can do anything. Organization admins can create a new key or list all existing keys.
+        """
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser or request.user.employee.is_organization_admin:
+            return True
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        """
+        Object-specific actions are only possible for organization admins or superusers
+        """
+        if request.user.is_superuser:
+            return True
+        if request.user.employee.is_organization_admin:
+            return request.user.employee.organization == obj.organization
+        return False
+
+
 class TopicPermission(permissions.BasePermission):
     """
     Permissions class for the TopicViewSet.

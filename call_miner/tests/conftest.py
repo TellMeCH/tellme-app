@@ -4,7 +4,9 @@ from unittest.mock import patch, Mock
 import uuid
 from rest_framework.test import APIClient
 from datetime import timedelta, datetime
-from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic, User, Employee
+from call_miner.models import (
+    Organization, Analyst, Agent, Customer, Conversation, Topic, User, Employee, OrganizationAPIKey
+)
 
 
 @pytest.fixture(autouse=True)
@@ -46,6 +48,13 @@ def client():
 def organization():
     """Create and return a test Organization."""
     return Organization.objects.create(name='Test Organization', max_user_count=10)
+
+
+@pytest.fixture
+def api_key(organization):
+    """Create and return a test Organization API Key"""
+    _ = OrganizationAPIKey.create_key(organization, 'test_key')
+    return organization.api_keys.get(name='test_key')
 
 
 @pytest.fixture
