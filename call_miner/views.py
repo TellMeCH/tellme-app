@@ -3,15 +3,16 @@ from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import F
 from drf_spectacular.utils import extend_schema
 from django.conf import settings
-from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Customer
+from call_miner.models import Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Customer
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
-    OrganizationDetailSerializer, ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer,
-    TopicListSerializer, AgentListSerializer, AgentDetailSerializer, CustomerModifySerializer, CustomerListSerializer,
+    OrganizationDetailSerializer, OrganizationAPIKeyListSerializer, OrganizationAPIKeyModifySerializer,
+    ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer, TopicListSerializer,
+    AgentListSerializer, AgentDetailSerializer, CustomerModifySerializer, CustomerListSerializer,
     EmployeeListSerializer, EmployeeModifySerializer
 )
-from call_miner.permissions import (ConversationPermission, OrganizationPermission, TopicPermission, AgentPermission,
-                                    CustomerPermission, EmployeePermission)
+from call_miner.permissions import (ConversationPermission, OrganizationPermission, OrganizationAPIKeyPermission,
+                                    TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
 from call_miner.utils.paginators import CustomListViewPaginator
 from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
@@ -260,6 +261,48 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
         if self.request.user.employee.organization:
             return Organization.objects.filter(pk=self.request.user.employee.organization.pk)
         return Organization.objects.none()
+
+
+class OrganizationAPIKeyViewSet(viewsets.ModelViewSet):
+    """
+    A ViewSet for the OrganizationAPIKey model. Used to create, delete, and list an organization's API keys.
+    """
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [OrganizationAPIKeyPermission]
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return OrganizationAPIKey.objects.all()
+        if self.request.user.employee.organization:
+            return OrganizationAPIKey.objects.filter(organization=self.request.user.employee.organization)
+        return OrganizationAPIKey.objects.none()
+
+    def get_serializer_class(self):
+        if self.action in ['retrieve', 'list']:
+            return OrganizationAPIKeyListSerializer
+        elif self.action in ['create', 'destroy', 'regenerate']:
+            return OrganizationAPIKeyModifySerializer
+        raise ValueError(f'Action {self.action} not permitted.')
+
+    @decorators.action(detail=True, methods=['post'])
+    def regenerate(self, request, pk=None):
+        """
+        Custom endpoint: delete the existing key, re-create one with the same name.
+        """
+        instance = self.get_object()
+        name = instance.name
+        organization = instance.organization
+        instance.delete()
+
+        data = {'name': name}
+        if self.request.user.is_superuser:
+            data['organization'] = organization.pk
+
+        # Create a new key with the same name
+        serializer = OrganizationAPIKeyModifySerializer(data=data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        created_instance = serializer.save()
+        return response.Response(serializer.to_representation(created_instance), status=status.HTTP_201_CREATED)
 
 
 class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):

@@ -6,6 +6,7 @@ from call_miner import views
 router = DefaultRouter()
 router.register(r'conversations', views.ConversationViewSet, basename='conversation')
 router.register(r'organizations', views.OrganizationViewSet, basename='organization')
+router.register(r'api-keys', views.OrganizationAPIKeyViewSet, basename='api-key')
 router.register(r'topics', views.TopicViewSet, basename='topic')
 router.register(r'agents', views.AgentViewSet, basename='agent')
 router.register(r'customers', views.CustomerViewSet, basename='customer')
