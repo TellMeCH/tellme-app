@@ -1,10 +1,12 @@
 import pytz
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
 import uuid
 from rest_framework.test import APIClient
 from datetime import timedelta, datetime
-from call_miner.models import Organization, Analyst, Agent, Customer, Conversation, Topic, User, Employee
+from call_miner.models import (
+    Organization, Analyst, Agent, Customer, Conversation, Topic, User, Employee, OrganizationAPIKey
+)
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +34,7 @@ def mock_condense_summaries():
     Mocking the call to OpenAI API for re-summarization. Making it autouse to avoid any unexpected costs.
     """
     with patch('call_miner.models.condense_summaries') as mock:
-        mock.return_value = 'Mocked summary text'
+        mock.return_value = {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'}
         yield mock
 
 
@@ -46,6 +48,13 @@ def client():
 def organization():
     """Create and return a test Organization."""
     return Organization.objects.create(name='Test Organization', max_user_count=10)
+
+
+@pytest.fixture
+def api_key(organization):
+    """Create and return a test Organization API Key"""
+    _ = OrganizationAPIKey.create_key(organization, 'test_key')
+    return organization.api_keys.get(name='test_key')
 
 
 @pytest.fixture
@@ -148,13 +157,19 @@ def another_organization_agent_user(another_organization):
 @pytest.fixture
 def customer(organization):
     """Create and return a customer associated with the given organization."""
-    return Customer.objects.create(name='Test Customer', organization=organization)
+    return Customer.objects.create(
+        external_id='02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd',
+        organization=organization
+    )
 
 
 @pytest.fixture
 def another_organization_customer(another_organization):
     """Create and return a customer associated with another organization."""
-    return Customer.objects.create(name='Another Customer', organization=another_organization)
+    return Customer.objects.create(
+        external_id='104da9683b41c996e98eb89311009de7ae3ec2b07c41a52200eda8b0df6dfde9',
+        organization=another_organization
+    )
 
 
 @pytest.fixture
@@ -225,3 +240,22 @@ def another_organization_topic(another_organization):
         organization=another_organization,
         is_active=True
     )
+
+
+@pytest.fixture(autouse=True)
+def mock_langfuse():
+    """
+    Mocks out such that Langfuse() constructor becomes a MagicMock
+    """
+
+    with patch("call_processing.utils.call_processing.Langfuse") as mock_lf_class:
+        # The Langfuse constructor will return a MagicMock
+        mock_lf_instance = MagicMock()
+        mock_lf_class.return_value = mock_lf_instance
+
+        mock_prompt = MagicMock()
+        mock_prompt.is_fallback = False
+        mock_lf_instance.get_prompt.return_value = mock_prompt
+
+        yield mock_lf_instance
+

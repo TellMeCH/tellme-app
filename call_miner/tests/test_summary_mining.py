@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from call_miner.utils.summary_mining import count_tokens, condense_summaries, SummarizerResponse
+from call_miner.utils.summary_mining import count_tokens, condense_summaries
 
 
 def test_count_tokens_empty_string():
@@ -62,7 +62,7 @@ def test_condense_summaries_success(mock_openai):
     # Create a mock message object
     mock_message = MagicMock()
     mock_message.refusal = False  # Simulate that the model did not refuse
-    mock_message.content = '{"summary": "Mocked meta-summary"}'
+    mock_message.content = '{"Reasons for Calling": "Billing issues and account setup inquiries are common."}'
 
     # Set the choices to return the mock message
     mock_completion.choices = [MagicMock(message=mock_message)]
@@ -77,7 +77,7 @@ def test_condense_summaries_success(mock_openai):
     ]
     response = condense_summaries(summaries, {})
 
-    assert response == 'Mocked meta-summary'
+    assert response == {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'}
     mock_client_instance.chat.completions.create.assert_called_once()
 
 
@@ -117,7 +117,7 @@ def test_condense_summaries_token_cutoff(mock_openai):
     # Create a mock message object
     mock_message = MagicMock()
     mock_message.refusal = False
-    mock_message.content = '{"summary": "Mocked meta-summary"}'
+    mock_message.content = '{"Reasons for Calling": "Billing issues and account setup inquiries are common."}'
 
     # Set the choices to return the mock message
     mock_completion.choices = [MagicMock(message=mock_message)]
@@ -126,8 +126,8 @@ def test_condense_summaries_token_cutoff(mock_openai):
     mock_client_instance.chat.completions.create.return_value = mock_completion
 
     summaries = ['a' * 100000] * 13
-    response = condense_summaries(summaries,{})
-    assert response == 'Mocked meta-summary'
+    response = condense_summaries(summaries, {})
+    assert response == {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'}
     mock_client_instance.chat.completions.create.assert_called_once()
 
 
@@ -138,5 +138,5 @@ def test_condense_summaries_no_summaries():
     Verifies that the function returns the appropriate message for no summaries.
     """
     summaries = []
-    response = condense_summaries(summaries,{})
-    assert response == "No conversations to summarize. Check back later once new calls have been recorded."
+    response = condense_summaries(summaries, {})
+    assert response is None

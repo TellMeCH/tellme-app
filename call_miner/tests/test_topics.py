@@ -683,7 +683,9 @@ class TestTopicSummary:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert 'summary' in response.data
-        assert response.data['summary'] == 'Mocked summary text'
+        assert response.data['summary'] == {
+            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
+        }
         assert response.data['summary_call_count'] == 1
         assert response.data['summary_date'].date() == conversation.date.date()
 
@@ -697,7 +699,9 @@ class TestTopicSummary:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert topic.id in response.data
-        assert response.data[topic.id]['summary'] == 'Mocked summary text'
+        assert response.data[topic.id]['summary'] == {
+            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
+        }
         assert response.data[topic.id]['summary_call_count'] == 1
         assert response.data[topic.id]['summary_date'].date() == conversation.date.date()
         assert response.data[topic.id]['name'] == topic.name

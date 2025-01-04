@@ -3,7 +3,9 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema_field
 from django.conf import settings
-from call_miner.models import Conversation, Organization, Topic, Employee, Agent, Analyst, Customer, User
+from call_miner.models import (
+    Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Analyst, Customer, User
+)
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 from call_miner.schemas import TOPIC_DATA_RESPONSE_SCHEMA
 
@@ -284,6 +286,94 @@ class OrganizationDetailSerializer(serializers.HyperlinkedModelSerializer):
         return obj.conversations_scope.count()
 
 
+class OrganizationAPIKeyListSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for listing or retrieving existing API keys. Only exposes name, created, expires.
+    """
+    class Meta:
+        model = OrganizationAPIKey
+        fields = ['id', 'name', 'created', 'expires']
+        read_only_fields = fields
+
+
+class OrganizationAPIKeyModifySerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating and deleting an API key. Accepts the name of the key and the organization ID.
+    """
+    organization = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(),
+        required=False,
+        default=None,
+        help_text='Primary key of the associated organization'
+    )
+    plain_key = serializers.CharField(
+        required=False,
+        help_text='Plain text view of the API key, visible only at creation'
+    )
+
+    class Meta:
+        model = OrganizationAPIKey
+        fields = ['id', 'name', 'organization', 'plain_key']
+        read_only_fields = ['plain_key']
+
+    def validate(self, data):
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            raise serializers.ValidationError("Request user is not available.")
+
+        current_user = request.user
+
+        if self.instance is None:  # Checks when creating a new key
+            # For superusers, make sure that the creation has specified an organization
+            if current_user.is_superuser:
+                if not data.get('organization'):
+                    raise serializers.ValidationError({
+                        "organization": "Superusers must provide an organization when creating an API Key."
+                    })
+            else:  # For non-superusers, enforce the organization
+                if not hasattr(current_user, 'employee'):
+                    raise serializers.ValidationError("Current user is not associated with an Employee profile.")
+
+                # Non-superusers should not specify an organization
+                if 'organization' in data:
+                    if data['organization'] is not None:
+                        raise serializers.ValidationError({
+                            "organization": f"Users should not provide an organization when creating an API Key."
+                        })
+
+                # Enforce the user's organization
+                data['organization'] = current_user.employee.organization
+
+            # Check if creating a new API Key would exceed the organization's MAX_KEYS_PER_ORG
+            current_key_count = OrganizationAPIKey.objects.filter(organization=data['organization']).count()
+            if current_key_count >= OrganizationAPIKey.MAX_KEYS_PER_ORG:
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["Cannot add more API keys to this organization; max key count reached."]}
+                )
+
+            # Check that no key with the same name already exists in the same organization
+            if OrganizationAPIKey.objects.filter(organization=data['organization'], name=data['name']).exists():
+                raise serializers.ValidationError({
+                    "name": "An API key with this name already exists in this organization."
+                })
+        return data
+
+    def create(self, validated_data):
+        name = validated_data['name']
+        organization = validated_data['organization']
+
+        plain_key = OrganizationAPIKey.create_key(
+            organization=organization,
+            name=name
+        )
+
+        return {
+            'name': name,
+            'organization': organization,
+            'plain_key': plain_key
+        }
+
+
 class TopicModifySerializer(serializers.ModelSerializer):
     """
     This serializer is used for POST, PUT, PATCH and DELETE requests creating or modifying a Topic instance.
@@ -435,7 +525,7 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['organization', 'name']
+        fields = ['organization', 'external_id']
 
 
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
@@ -444,7 +534,8 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
     """
     class Meta:
         model = Customer
-        fields = ['url', 'name', 'conversation_count', 'first_conversation_date', 'last_conversation_date', 'created']
+        fields = ['url', 'external_id', 'conversation_count', 'first_conversation_date', 'last_conversation_date',
+                  'created']
 
 
 class UserSerializer(serializers.ModelSerializer):

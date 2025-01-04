@@ -1,4 +1,8 @@
 import re
+import secrets
+import hashlib
+import datetime
+from django.utils import timezone
 from django.db import models
 from django.conf import settings
 from django.dispatch import receiver
@@ -13,7 +17,7 @@ class MetaSummaryAbstractModel(models.Model):
     """
     An abstract model that handles the creation and retrieval of summaries objects for Agent, Customer, and Topic models
     """
-    summary = models.TextField(null=True)
+    summary = models.JSONField(null=True)
     summary_date = models.DateTimeField(auto_now_add=True, null=True)
     summary_call_count = models.IntegerField(default=0)
 
@@ -41,8 +45,8 @@ class MetaSummaryAbstractModel(models.Model):
         # Compare the count with the Summary object's count field
         if self.is_deviation_significant(actual_call_count):
             # Call the external function with the list of summaries
-            new_summary_text = condense_summaries(relevant_summaries, trace_data)
-            self.summary = new_summary_text
+            new_summary = condense_summaries(relevant_summaries, trace_data)
+            self.summary = new_summary
             self.summary_call_count = actual_call_count
             self.summary_date = latest_date
             self.save()  # Save the updated MetaSummary with the new data
@@ -224,6 +228,62 @@ class Organization(models.Model, ConversationTrendMixin):
         verbose_name_plural = "Organizations"
 
 
+class OrganizationAPIKey(models.Model):
+    """
+    Stores a hashed API key for an organization, along with meta information
+    such as creation date, expiration date, and name for reference.
+    """
+    hashed_api_key = models.CharField(max_length=128, unique=True)
+    name = models.CharField(max_length=100, help_text="Descriptive name for the API key.")
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='api_keys'
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    expires = models.DateTimeField()
+
+    MAX_KEYS_PER_ORG = 3
+    KEY_LIFETIME = 90
+
+    def __str__(self):
+        return f"{self.organization.name} - {self.name}"
+
+    class Meta:
+        unique_together = ('organization', 'name')
+        verbose_name_plural = 'Organization API Keys'
+
+    @classmethod
+    def create_key(cls, organization, name):
+        """
+        Creates a new API key for the given organization, ensuring the org does not exceed its allowed maximum number
+        of keys.
+
+        :param organization: The Organization instance
+        :param name: A descriptive name for this key
+        :return: The *plaintext* API key (once), which should be stored securely by the user
+        """
+
+        # Check if the organization already has max_keys
+        if organization.api_keys.count() >= cls.MAX_KEYS_PER_ORG:
+            raise ValueError(f"Organization '{organization.name}' has reached the max number of keys allowed.")
+
+        # Generate and hash an API key
+        plain_key = secrets.token_urlsafe(43)
+        hashed_key = hashlib.sha256(plain_key.encode('utf-8')).hexdigest()
+
+        # Create the database entry with the hashed key
+        api_key = cls.objects.create(
+            hashed_api_key=hashed_key,
+            name=name,
+            organization=organization,
+            expires=timezone.now() + datetime.timedelta(days=cls.KEY_LIFETIME)
+        )
+
+        # Return the plaintext so the caller can store it securely
+        return plain_key
+
+
 class Topic(MetaSummaryAbstractModel, ConversationStatsAbstractModel, ConversationTrendMixin):
     """
     Topic: One of the many topics that can be discussed in the customer calls. These are to be detected by a
@@ -370,19 +430,19 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
     """
-    name = models.CharField(max_length=100, null=False)
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
+    external_id = models.CharField(max_length=128, null=False)  # Comes from call recording software
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('name', 'organization')
+        unique_together = ('organization', 'external_id')
         verbose_name_plural = "Customers"
         indexes = [
-            models.Index(fields=['organization', 'name']),
+            models.Index(fields=['organization', 'external_id']),
         ]
 
     def __str__(self):
-        return self.name
+        return f"Customer [external_id={self.external_id} | org={self.organization_id}]"
 
 
 class Conversation(models.Model):
@@ -423,6 +483,10 @@ class Conversation(models.Model):
         # Ensure that agent and customer have the same associated organization
         if self.customer.organization != self.agent.organization:
             raise ValueError("The assigned customer and agent must be associated with the same organization.")
+
+        # Ensure that the call sentiment is within the expected bounds
+        if not (0 <= self.sentiment <= 5):
+            raise ValueError(f'Sentiment score must be between 0 and 5. Provided value was {self.sentiment}')
         super().save(*args, **kwargs)
 
     def process_transcript(self):

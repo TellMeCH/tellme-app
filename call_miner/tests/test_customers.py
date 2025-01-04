@@ -29,7 +29,7 @@ class TestCustomerList:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
-        assert response.data['results'][0]['name'] == customer.name
+        assert response.data['results'][0]['external_id'] == customer.external_id
 
     def test_customer_list_as_analyst_outside_org(self, client, another_organization_analyst_user, customer,
                                                   another_organization_customer):
@@ -41,7 +41,7 @@ class TestCustomerList:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
-        assert response.data['results'][0]['name'] == another_organization_customer.name
+        assert response.data['results'][0]['external_id'] == another_organization_customer.external_id
 
     def test_customer_list_as_agent_in_org(self, client, agent_user, customer):
         """Test that an agent within the organization can list customers in their organization."""
@@ -50,7 +50,7 @@ class TestCustomerList:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
-        assert response.data['results'][0]['name'] == customer.name
+        assert response.data['results'][0]['external_id'] == customer.external_id
 
     def test_customer_list_as_agent_outside_org(self, client, another_organization_agent_user,
                                                 another_organization_customer):
@@ -60,7 +60,7 @@ class TestCustomerList:
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
-        assert response.data['results'][0]['name'] == another_organization_customer.name
+        assert response.data['results'][0]['external_id'] == another_organization_customer.external_id
 
     def test_customer_list_as_unauthenticated_user(self, client):
         """Test that an unauthenticated user cannot list customers."""
@@ -79,7 +79,7 @@ class TestCustomerRetrieve:
         url = reverse('customer-detail', args=[customer.pk])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['name'] == customer.name
+        assert response.data['external_id'] == customer.external_id
 
     def test_customer_retrieve_as_analyst_in_org(self, client, analyst_user, customer):
         """Test that an analyst within the organization can retrieve a customer."""
@@ -87,7 +87,7 @@ class TestCustomerRetrieve:
         url = reverse('customer-detail', args=[customer.pk])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['name'] == customer.name
+        assert response.data['external_id'] == customer.external_id
 
     def test_customer_retrieve_as_analyst_outside_org(self, client, another_organization_analyst_user, customer):
         """Test that an analyst outside the organization cannot retrieve customers from another organization."""
@@ -102,7 +102,7 @@ class TestCustomerRetrieve:
         url = reverse('customer-detail', args=[customer.pk])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['name'] == customer.name
+        assert response.data['external_id'] == customer.external_id
 
     def test_customer_retrieve_as_agent_outside_org(self, client, another_organization_agent_user, customer):
         """Test that an agent outside the organization cannot retrieve customers from another organization."""
@@ -126,16 +126,24 @@ class TestCustomerCreate:
         """Test that a superuser can create a new customer."""
         client.force_authenticate(user=superuser)
         url = reverse('customer-list')
-        data = {'name': 'New Customer', 'organization': organization.pk}
+        data = {
+            'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84',
+            'organization': organization.pk
+        }
         response = client.post(url, data)
         assert response.status_code == status.HTTP_201_CREATED
-        assert Customer.objects.filter(name='New Customer').exists()
+        assert Customer.objects.filter(
+            external_id='8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84'
+        ).exists()
 
     def test_customer_create_as_analyst_in_org(self, client, analyst_user, organization):
         """Test that an analyst within the organization cannot create a new customer."""
         client.force_authenticate(user=analyst_user)
         url = reverse('customer-list')
-        data = {'name': 'New Customer', 'organization': organization.pk}
+        data = {
+            'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84',
+            'organization': organization.pk
+        }
         response = client.post(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -143,7 +151,8 @@ class TestCustomerCreate:
         """Test that an analyst outside the organization cannot create a customer in another organization."""
         client.force_authenticate(user=another_organization_analyst_user)
         url = reverse('customer-list')
-        data = {'name': 'New Customer', 'organization': organization.pk}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84',
+                'organization': organization.pk}
         response = client.post(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -151,7 +160,8 @@ class TestCustomerCreate:
         """Test that an agent within the organization cannot create a new customer."""
         client.force_authenticate(user=agent_user)
         url = reverse('customer-list')
-        data = {'name': 'New Customer', 'organization': organization.pk}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84',
+                'organization': organization.pk}
         response = client.post(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -159,14 +169,16 @@ class TestCustomerCreate:
         """Test that an agent outside the organization cannot create a customer in another organization."""
         client.force_authenticate(user=another_organization_agent_user)
         url = reverse('customer-list')
-        data = {'name': 'New Customer', 'organization': organization.pk}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84',
+                'organization': organization.pk}
         response = client.post(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_customer_create_as_unauthenticated_user(self, client, organization):
         """Test that an unauthenticated user cannot create a customer."""
         url = reverse('customer-list')
-        data = {'name': 'New Customer', 'organization': organization.pk}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84',
+                'organization': organization.pk}
         response = client.post(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -179,16 +191,16 @@ class TestCustomerUpdate:
         """Test that a superuser can update a customer."""
         client.force_authenticate(user=superuser)
         url = reverse('customer-detail', args=[customer.pk])
-        data = {'name': 'Updated Customer Name'}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84'}
         response = client.patch(url, data)
         assert response.status_code == status.HTTP_200_OK
-        assert Customer.objects.filter(name='Updated Customer Name').exists()
+        assert Customer.objects.filter(external_id='8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84').exists()
 
     def test_customer_update_as_analyst_in_org(self, client, analyst_user, customer):
         """Test that an analyst within the organization cannot update a customer."""
         client.force_authenticate(user=analyst_user)
         url = reverse('customer-detail', args=[customer.pk])
-        data = {'name': 'Updated Customer Name'}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84'}
         response = client.patch(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -196,7 +208,7 @@ class TestCustomerUpdate:
         """Test that an analyst outside the organization cannot update a customer."""
         client.force_authenticate(user=another_organization_analyst_user)
         url = reverse('customer-detail', args=[customer.pk])
-        data = {'name': 'Updated Customer Name'}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84'}
         response = client.patch(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -204,7 +216,7 @@ class TestCustomerUpdate:
         """Test that an agent within the organization cannot update a customer."""
         client.force_authenticate(user=agent_user)
         url = reverse('customer-detail', args=[customer.pk])
-        data = {'name': 'Updated Customer Name'}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84'}
         response = client.patch(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -212,14 +224,14 @@ class TestCustomerUpdate:
         """Test that an agent outside the organization cannot update a customer."""
         client.force_authenticate(user=another_organization_agent_user)
         url = reverse('customer-detail', args=[customer.pk])
-        data = {'name': 'Updated Customer Name'}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84'}
         response = client.patch(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_customer_update_as_unauthenticated_user(self, client, customer):
         """Test that an unauthenticated user cannot update a customer."""
         url = reverse('customer-detail', args=[customer.pk])
-        data = {'name': 'Updated Customer Name'}
+        data = {'external_id': '8cf7b5784836b86e69e4d601a8d111efd75812873a746bbc162244109f2fbf84'}
         response = client.patch(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -420,36 +432,3 @@ class TestCustomerActions:
             assert response.status_code == status.HTTP_200_OK
             assert 'summary' in response.data
             assert response.data['summary'] == 'Mocked summary text'
-
-    def test_customer_search_by_name(self, client, agent_user, customer):
-        """
-        Test that the search action on a customer name behaves as expected
-        """
-        client.force_authenticate(user=agent_user)
-        search_query = customer.name
-        url = reverse('customer-search') + f'?query={search_query}'
-        all_results = []
-        while url:
-            response = client.get(url)
-            assert response.status_code == status.HTTP_200_OK
-            data = response.data
-            results = data.get('results', [])
-            all_results.extend(results)
-            url = data.get('next')
-
-        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in all_results]
-
-        assert len(all_results) == 1
-        assert str(customer.id) in customer_ids
-
-    def test_customer_search_no_results(self, client, analyst_user):
-        """
-        Test the expected response when a query produces no results
-        """
-        client.force_authenticate(user=analyst_user)
-        search_query = "agrearhadfgsdfgfdsgdfg"
-        url = reverse('customer-search') + f'?query={search_query}'
-        response = client.get(url)
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.data['detail'] == 'Your query produced no results.'
-

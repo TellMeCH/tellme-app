@@ -35,6 +35,33 @@ SEARCH_QUERY_PARAMETER_SCHEMA = OpenApiParameter(
     required=True,
 )
 
+REGENERATE_API_KEY_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'name': {
+                'type': 'string',
+                'description': 'Name of the newly regenerated API key.'
+            },
+            'organization': {
+                'type': 'integer',
+                'description': 'Primary key of the associated organization.'
+            },
+            'plain_key': {
+                'type': 'string',
+                'description': 'Plain text value of the newly generated API key. Shown only once.'
+            }
+        },
+        'required': ['name', 'organization', 'plain_key'],
+        'example': {
+            'name': 'My Regenerated Key',
+            'organization': 42,
+            'plain_key': 'pk_live_a1b2c3d4'
+        }
+    },
+    description="Response returned when an API key has been successfully regenerated."
+)
+
 TOPIC_DATA_RESPONSE_SCHEMA = {
     'type': 'array',
     'items': {
@@ -59,8 +86,12 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
         'type': 'object',
         'properties': {
             'summary': {
-                'type': 'string',
-                'description': 'Summary of all conversation summaries of the object.'
+                'type': 'object',
+                'description': """
+                    Dictionary with a series of meta-summary questions and answers. Each key corresponds to a different
+                    meta-summary title, whereas each value corresponds to its meta-summary. Will be null if no the
+                    respective object has no associated conversations. 
+                """
             },
             'summary_date': {
                 'type': 'string',
@@ -74,7 +105,7 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
         },
         'required': ['summary', 'summary_date', 'summary_call_count'],
         'example': {
-            'summary': 'This agent consistently provides excellent customer service.',
+            'summary': {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'},
             'summary_date': '2023-10-15T12:34:56Z',
             'summary_call_count': 150
         }

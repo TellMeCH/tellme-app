@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 import io
 import os
+import sys
+
 import environ
 from urllib.parse import urlparse
 from pathlib import Path
@@ -51,7 +53,8 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
 TELLME_ENV = env('TELLME_ENV', default='dev')
-GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT", default=None)
+GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT")
+REGION = env("REGION")
 
 CLOUDRUN_SERVICE_URLS = env("CLOUDRUN_SERVICE_URLS", default=None)
 if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
@@ -77,6 +80,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'storages',
     'call_miner',
+    'call_processing'
 ]
 
 MIDDLEWARE = [
@@ -138,8 +142,15 @@ if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
     DATABASES["default"]["HOST"] = "127.0.0.1"
     DATABASES["default"]["PORT"] = 5433
 
+# Processing pipeline
+CLOUD_TASKS_QUEUE_NAME = env('CLOUD_TASKS_QUEUE_NAME')
+CALL_PROCESSING_ENDPOINT = env('CALL_PROCESSING_ENDPOINT')
+TASKS_EMULATOR_ADDRESS = env('TASKS_EMULATOR_ADDRESS', default=None)
+CALL_PROCESSING_BUCKET = env('CALL_PROCESSING_BUCKET')
 PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
 PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
+DEEPGRAM_API_KEY = env('DEEPGRAM_API_KEY')
+OPENAI_API_KEY = env('OPENAI_API_KEY')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -231,13 +242,14 @@ SPECTACULAR_SETTINGS = {
 AUTH_USER_MODEL = 'call_miner.User'
 
 # Logging
-sentry_sdk.init(
-    dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",
-    integrations=[DjangoIntegration()],
-    traces_sample_rate=1.0,
-    profiles_sample_rate=1.0,
-    environment=TELLME_ENV
-)
+if TELLME_ENV != 'dev':
+    sentry_sdk.init(
+        dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment=TELLME_ENV
+    )
 
 LOGGING = {
     'version': 1,
@@ -248,7 +260,7 @@ LOGGING = {
             'class': 'sentry_sdk.integrations.logging.EventHandler',
         },
         'console': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'class': 'logging.StreamHandler',
         },
     },
@@ -260,5 +272,3 @@ LOGGING = {
         },
     },
 }
-
-OPENAI_API_KEY = env('OPENAI_API_KEY')

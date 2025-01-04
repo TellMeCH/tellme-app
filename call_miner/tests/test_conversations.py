@@ -585,18 +585,6 @@ class TestConversationSearch:
             next_url = data.get('next')
         return all_results
 
-    def test_search_by_customer_name(self, client, analyst_user, conversation):
-        """
-        Test that conversations can be searched and retrieved based on a customer name.
-        """
-        client.force_authenticate(user=analyst_user)
-        search_query = conversation.customer.name
-        results = self.response_from_search_url(client, search_query)
-        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
-
-        assert len(results) >= 1
-        assert str(conversation.id) in conversation_ids
-
     def test_search_by_transcript_content(self, client, analyst_user, conversation):
         """
         Test that conversations can be searched and retrieved based on content in the transcript.
