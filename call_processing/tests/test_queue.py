@@ -1,16 +1,21 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Conversation
+from call_miner.models import Conversation, OrganizationAPIKey
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 
 @pytest.mark.django_db
 class TestQueueView:
     @pytest.fixture
+    def org_with_key(self, setup_db):
+        org = setup_db[0]
+        plain_key = OrganizationAPIKey.create_key(organization=org, name='Test Key')
+        return org, plain_key
+
+    @pytest.fixture
     def valid_payload(self):
         return {
-            "organization_id": 1,
             "customer_id": "CUST123",
             "agent_id": 123,
             "timestamp": "2024-01-01T12:00:00",
@@ -21,24 +26,42 @@ class TestQueueView:
             )
         }
 
-    def test_queue_success(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks, setup_db):
+    def test_queue_success(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks,
+                           setup_db, org_with_key):
         """
         If the payload is valid, we should get a 202 response and a valid GCS URI in the response.
         A Cloud Task should also be created.
         """
+        org, plain_key = org_with_key
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {plain_key}')
+
         url = reverse("queue")
-        response = api_client.post(
-            url, data=valid_payload, format="multipart"
-        )
+        response = api_client.post(url, data=valid_payload, format="multipart")
+
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert "gcs_uri" in response.data
         mock_gcs_upload_download[0].assert_called_once()
         mock_cloud_tasks.create_task.assert_called_once()
 
-    def test_queue_invalid_agent(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks, setup_db):
+    def test_unauthenticated_fails(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks,
+                                   setup_db):
+        """
+        If the caller is not authenticated with an API key, the call should be forbidden
+        """
+
+        url = reverse("queue")
+        response = api_client.post(url, data=valid_payload, format="multipart")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_queue_invalid_agent(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks, setup_db,
+                                 org_with_key):
         """
         Agent does not exist in the DB, so the request is invalid.
         """
+        org, plain_key = org_with_key
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {plain_key}')
+
         current_payload = valid_payload.copy()
         current_payload["agent_id"] = 99999
         url = reverse("queue")
@@ -48,12 +71,15 @@ class TestQueueView:
         mock_cloud_tasks.create_task.assert_not_called()
 
     def test_check_agent_validity_timestamp_overlap(
-        self, api_client, setup_db, valid_payload, mock_gcs_upload_download, mock_deepgram, mock_openai
+        self, api_client, setup_db, valid_payload, mock_gcs_upload_download, mock_deepgram, mock_openai, org_with_key
     ):
         """
         If the agent already has a conversation that hasn't ended by the time the new call starts,
         check_agent_validity() should fail.
         """
+        org, plain_key = org_with_key
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {plain_key}')
+
         # Create a conversation that ends *after* 2024-01-01T12:00:00, such that the creation of a new one starting
         # at that time will be blocked
         overlapping_conv = Conversation.objects.create(
@@ -76,11 +102,14 @@ class TestQueueView:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Invalid agent. This agent's last call was still taking place" in response.data["message"]
 
-    def test_queue_missing_field(self, api_client, valid_payload, mock_cloud_tasks, setup_db):
+    def test_queue_missing_field(self, api_client, valid_payload, mock_cloud_tasks, setup_db, org_with_key):
         """
         If any required field is missing, the serializer should fail and return a 400.
         """
-        for field in ['organization_id', 'customer_id', 'agent_id', 'timestamp', 'file']:
+        org, plain_key = org_with_key
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {plain_key}')
+
+        for field in ['customer_id', 'agent_id', 'timestamp', 'file']:
             current_payload = valid_payload.copy()
             del current_payload[field]
             url = reverse("queue")

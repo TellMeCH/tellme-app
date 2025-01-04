@@ -8,8 +8,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
+from rest_framework.permissions import IsAuthenticated
 from call_processing.serializers import QueueRecordingSerializer, ProcessRecordingSerializer
-from call_processing.authentication import OrganizationAPIKeyAuthentication
+from call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
+from call_processing.permissions import IsAuthenticatedOrganization
 from call_processing.utils.gcs_utils import upload_to_gcs, download_from_gcs
 from call_processing.utils.call_processing import CallProcessingPipeline
 from call_processing.utils.db_handler import check_agent_validity, create_conversation
@@ -24,13 +26,14 @@ class QueueRecordingView(APIView):
     Only API-token bearing requests should have permission to run this view.
     """
     serializer_class = QueueRecordingSerializer
-    authentication_class = OrganizationAPIKeyAuthentication
+    authentication_classes = [OrganizationAPIKeyAuthentication]
+    permission_classes = [IsAuthenticatedOrganization]
 
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
-            organization_id = request.user
+            organization_id = request.user.id
             customer_id = data['customer_id']
             agent_id = data['agent_id']
             timestamp = data['timestamp']
@@ -61,7 +64,10 @@ class QueueRecordingView(APIView):
                     "http_request": {
                         "http_method": tasks_v2.HttpMethod.POST,
                         "url": settings.CALL_PROCESSING_ENDPOINT,
-                        "headers": {"Content-Type": "application/json"},
+                        "headers": {
+                            "Content-Type": "application/json",
+                            "Authorization": f"Token {settings.PROCESSING_PIPELINE_KEY}"
+                        },
                         "body": json.dumps(payload).encode()
                     }
                 }
@@ -104,6 +110,8 @@ class ProcessRecordingView(APIView):
     Only the processing pipeline account (PROCESSING_PIPELINE_USER and PROCESSING_PIPELINE_KEY) should have access
     """
     serializer_class = ProcessRecordingSerializer
+    authentication_classes = [ProcessingKeyAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

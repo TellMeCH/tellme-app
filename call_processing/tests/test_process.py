@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Conversation
+from call_miner.models import Conversation, User
 
 
 @pytest.mark.django_db
@@ -18,12 +18,40 @@ class TestProcessRecordingView:
             "timestamp": "2024-01-01T12:00:00"
         }
 
-    def test_process_missing_file_name(self, api_client, setup_db):
+    def test_authentication_success(self, settings, setup_db, api_client):
+        settings.PROCESSING_PIPELINE_KEY = "test_pipeline_key"
+        settings.PROCESSING_PIPELINE_USER = "pipeline@example.com"
+
+        # Create the user expected by the authentication class
+        User.objects.create_user("pipeline", "pipeline@example.com", "password")
+
+        # Set the authorization header
+        url = reverse("process")
+        api_client.credentials(HTTP_AUTHORIZATION="Token test_pipeline_key")
+        response = api_client.post(url, data={}, format="json")
+
+        # Ensure the response shows a failed body payload validation (authentication worked)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_authentication_failure(self, settings, setup_db, api_client):
+        settings.PROCESSING_PIPELINE_KEY = "test_pipeline_key"
+        settings.PROCESSING_PIPELINE_USER = "pipeline@example.com"
+
+        # Missing user setup
+        url = reverse("process")
+        api_client.credentials(HTTP_AUTHORIZATION="Token wrong_key")
+        response = api_client.post(url, data={}, format="json")
+
+        # Ensure authentication failure
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_process_missing_file_name(self, api_client, setup_db, mock_processing_user):
         url = reverse("process")
         response = api_client.post(url, data={}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_process_empty_file(self, api_client, mock_gcs_upload_download, setup_db, valid_task_payload):
+    def test_process_empty_file(self, api_client, mock_gcs_upload_download, setup_db, valid_task_payload,
+                                mock_processing_user):
         mock_gcs_upload_download[1].return_value = b""
         url = reverse("process")
         response = api_client.post(url, data=valid_task_payload, format="json")
@@ -33,7 +61,7 @@ class TestProcessRecordingView:
     @patch("call_processing.views.create_conversation")
     def test_process_success(
             self, mock_create_conversation, api_client, valid_task_payload, setup_db, mock_gcs_upload_download,
-            mock_deepgram, mock_openai, mock_pydub
+            mock_deepgram, mock_openai, mock_pydub, mock_processing_user
     ):
         """
         If everything is valid, the pipeline runs, the conversation is created in DB,
@@ -47,7 +75,7 @@ class TestProcessRecordingView:
 
     def test_create_conversation_in_db(
             self, api_client, setup_db, valid_task_payload, mock_gcs_upload_download, mock_deepgram, mock_openai,
-            mock_pydub
+            mock_pydub, mock_processing_user
     ):
         """
         Instead of patching create_conversation, let's confirm that a Conversation object is
