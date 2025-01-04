@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
-from .serializers import QueueRecordingSerializer, ProcessRecordingSerializer
+from call_processing.serializers import QueueRecordingSerializer, ProcessRecordingSerializer
+from call_processing.authentication import OrganizationAPIKeyAuthentication
 from call_processing.utils.gcs_utils import upload_to_gcs, download_from_gcs
 from call_processing.utils.call_processing import CallProcessingPipeline
 from call_processing.utils.db_handler import check_agent_validity, create_conversation
@@ -23,12 +24,13 @@ class QueueRecordingView(APIView):
     Only API-token bearing requests should have permission to run this view.
     """
     serializer_class = QueueRecordingSerializer
+    authentication_class = OrganizationAPIKeyAuthentication
 
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
-            organization_id = data['organization_id']
+            organization_id = request.user
             customer_id = data['customer_id']
             agent_id = data['agent_id']
             timestamp = data['timestamp']
