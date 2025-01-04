@@ -210,3 +210,16 @@ def mock_langfuse():
         mock_lf_instance.get_prompt.return_value = mock_prompt
 
         yield mock_lf_instance
+
+
+@pytest.fixture
+def mock_processing_user():
+    """
+    Mocks the ProcessingKeyAuthentication by patching it to always return a mock user.
+    """
+    with patch("call_processing.views.ProcessingKeyAuthentication.authenticate") as mock_auth:
+        mock_user = MagicMock()
+        mock_user.is_authenticated = True
+        mock_user.email = "pipeline@example.com"
+        mock_auth.return_value = (mock_user, None)
+        yield mock_auth
