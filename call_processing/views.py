@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
+from django.urls import reverse
 from rest_framework.permissions import IsAuthenticated
 from call_processing.serializers import QueueRecordingSerializer, ProcessRecordingSerializer
 from call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
@@ -53,6 +54,12 @@ class QueueRecordingView(APIView):
                 gcs_uri = upload_to_gcs(file_obj, file_name)
 
                 # Create a task to process this recording
+                if settings.CALL_PROCESSING_ENDPOINT is None:
+                    process_endpoint_path = reverse('process')
+                    process_url = request.build_absolute_uri(process_endpoint_path)
+                else:
+                    process_url = settings.CALL_PROCESSING_ENDPOINT
+                print(f'Target URL for Processing: {process_url}')
                 payload = {
                     "file_name": file_name,
                     "organization_id": organization_id,
@@ -63,7 +70,7 @@ class QueueRecordingView(APIView):
                 task = {
                     "http_request": {
                         "http_method": tasks_v2.HttpMethod.POST,
-                        "url": settings.CALL_PROCESSING_ENDPOINT,
+                        "url": process_url,
                         "headers": {
                             "Content-Type": "application/json",
                             "Authorization": f"Token {settings.PROCESSING_PIPELINE_KEY}"

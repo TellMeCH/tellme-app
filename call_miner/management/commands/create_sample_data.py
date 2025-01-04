@@ -2,10 +2,11 @@ import time
 import hashlib
 from datetime import datetime, timedelta
 import random
+from django.conf import settings
 from django.utils import timezone
 from django.core.management.base import BaseCommand, CommandError
 from firebase_admin import auth
-from call_miner.models import Organization, Analyst, Agent, Topic, Customer, Conversation, User
+from call_miner.models import Organization, OrganizationAPIKey, Analyst, Agent, Topic, Customer, Conversation, User
 
 COMMON_PASSWORD = 'tell_me_long'
 TOPIC_DATA = [
@@ -574,7 +575,7 @@ CONVERSATION_DATA = [
 
 
 class Command(BaseCommand):
-    help = "Creates a sample set of data to test the app"
+    help = "Creates a sample set of data to test the app. Meant to be run locally."
 
     def handle(self, *args, **options):
         try:
@@ -773,6 +774,27 @@ class Command(BaseCommand):
             )
         except Exception as e:
             raise CommandError(f'Failed to create Superuser: {e}')
+
+        try:
+            self.stdout.write('Creating Superuser Account for Invoking Processing Pipeline')
+            user = User.objects.create_superuser(
+                username=f'processing.{settings.TELLME_ENV}',
+                password=COMMON_PASSWORD,
+                email=settings.PROCESSING_PIPELINE_USER
+            )
+            auth.update_user(
+                user.id,
+                email_verified=True
+            )
+        except Exception as e:
+            raise CommandError(f'Failed to create Superuser: {e}')
+
+        try:
+            self.stdout.write('Creating Organization API Key for Processing')
+            plain_key = OrganizationAPIKey.create_key(org, name='test_key')
+            self.stdout.write(f'Created API Key for {org.name}: {plain_key}')
+        except Exception as e:
+            raise CommandError(f'Failed to create Organization API Key: {e}')
 
         self.stdout.write(
             self.style.SUCCESS('Successfully created expanded sample data')
