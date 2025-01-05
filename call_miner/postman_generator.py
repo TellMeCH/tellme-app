@@ -69,6 +69,7 @@ viewsets = {
             'summary_data': {'method': 'GET', 'url': '/agents/{id}/summary_data/'},
             'conversations': {'method': 'GET', 'url': '/agents/{id}/conversations/'},
             'trend': {'method': 'GET', 'url': '/agents/{id}/trend/'},
+            'managed_agents': {'method': 'GET', 'url': '/agents/{id}/managed_agents/'},
         }
     },
     'customers': {
@@ -94,9 +95,18 @@ viewsets = {
             'destroy': {'method': 'DELETE', 'url': '/employees/{id}/'},
         }
     },
+    'organization_api_keys': {
+        'actions': {
+            'list': {'method': 'GET', 'url': '/organization_api_keys/'},
+            'retrieve': {'method': 'GET', 'url': '/organization_api_keys/{id}/'},
+            'create': {'method': 'POST', 'url': '/organization_api_keys/'},
+            'destroy': {'method': 'DELETE', 'url': '/organization_api_keys/{id}/'},
+            'regenerate': {'method': 'POST', 'url': '/organization_api_keys/{id}/regenerate/'},
+        }
+    },
 }
 
-# Map viewset names to permission summaries
+# Folder descriptions updated based on the latest permissions
 folder_descriptions = {
     'conversations': (
         "Permissions:\n"
@@ -135,6 +145,10 @@ folder_descriptions = {
         "- Superusers and organization admins can create, update, and delete employees in their organization.\n"
         "- Employees can retrieve their own employee record."
     ),
+    'organization_api_keys': (
+        "Permissions:\n"
+        "- Superusers and organization admins can list, retrieve, create and delete organization API keys"
+    )
 }
 
 # Initialize the collection
@@ -159,7 +173,7 @@ for viewset_name, viewset_data in viewsets.items():
     actions = viewset_data['actions']
     for action_name, action_data in actions.items():
         method = action_data['method']
-        url = action_data['url']  # e.g., '/conversations/{id}/'
+        url = action_data['url']
         for user_type in user_types:
             request_name = f"{action_name} - {user_type}"
 

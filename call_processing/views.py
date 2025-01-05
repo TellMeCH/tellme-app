@@ -59,7 +59,6 @@ class QueueRecordingView(APIView):
                     process_url = request.build_absolute_uri(process_endpoint_path)
                 else:
                     process_url = settings.CALL_PROCESSING_ENDPOINT
-                print(f'Target URL for Processing: {process_url}')
                 payload = {
                     "file_name": file_name,
                     "organization_id": organization_id,
