@@ -26,33 +26,31 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(DEBUG=(bool, False))
 env_file = os.path.join(BASE_DIR, ".env")
 
-if os.path.isfile(env_file):  # Local environment: .env is expected
-    env.read_env(env_file)
-    if env('TELLME_ENV') != 'dev':
-        raise Exception('Only local execution (TELLME_ENV=dev) should run with an environment file.')
-elif env("GOOGLE_CLOUD_PROJECT", default=None):  # Cloud environment: project variable is expected
-    if env('TELLME_ENV') == 'dev':
-        raise Exception('Local execution (TELLME_ENV=dev) should run with an environment file.')
-
-    # Load environments from SETTINGS_NAME
-    project_id = env("GOOGLE_CLOUD_PROJECT")
-    client = secretmanager.SecretManagerServiceClient()
-    secret_name = env("SETTINGS_NAME", default="django_settings")
-    secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-    response = client.access_secret_version(name=secret_path)
-    payload = response.payload.data.decode("UTF-8")
-    if '#' in payload:
-        raise Exception('Watch out with special characters in your passwords! This step will mess with them')
-    env.read_env(io.StringIO(payload))
+if env('TELLME_ENV') == 'dev':  # Local environment: .env is expected
+    if os.path.isfile(env_file):
+        env.read_env(env_file)
+    else:
+        raise Exception('Local execution can only run with a .env file')
 else:
-    raise Exception("No local .env or GOOGLE_CLOUD_PROJECT detected. No secrets found.")
+    if env("GOOGLE_CLOUD_PROJECT", default=None):  # Load environments from SETTINGS_NAME
+        project_id = env("GOOGLE_CLOUD_PROJECT")
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = env("SETTINGS_NAME", default="django_settings")
+        secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(name=secret_path)
+        payload = response.payload.data.decode("UTF-8")
+        if '#' in payload:
+            raise Exception('Watch out with special characters in your passwords! This step will mess with them')
+        env.read_env(io.StringIO(payload))
+    else:
+        raise Exception("No GOOGLE_CLOUD_PROJECT detected. No secrets found.")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("DEBUG")
-TELLME_ENV = env('TELLME_ENV', default='dev')
+TELLME_ENV = env('TELLME_ENV')
 GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT")
 REGION = env("REGION")
 
@@ -220,7 +218,7 @@ REST_FRAMEWORK = {
 # Setting for the API Documentation
 SPECTACULAR_SETTINGS = {
     'TITLE': 'TellMe Backend API',
-    'DESCRIPTION': 'Empowering call center agents and executives with valuable insights from their customer interactions.',
+    'DESCRIPTION': 'Helping companies know their customers better through call center interactions.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'SECURITY': [
