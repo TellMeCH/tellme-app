@@ -70,6 +70,8 @@ jobs:
       - name: Make Migrations
         run: |
           poetry run python manage.py makemigrations
+        env:
+          TELLME_ENV: dev
 
       - name: Run Migrations
         run: |
