@@ -360,6 +360,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.username
 
+    def delete(self, using=None, keep_parents=False):
+        """
+        Whenever this method is called, delete the corresponding Firebase user first
+        and then proceed with deleting from Django's DB.
+        """
+        auth.delete_user(self.pk)  # self.pk == self.id
+        return super().delete(using=using, keep_parents=keep_parents)
+
 
 class Employee(models.Model):
     """

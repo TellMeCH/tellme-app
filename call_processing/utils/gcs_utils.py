@@ -14,6 +14,6 @@ def upload_to_gcs(file_obj, destination_blob_name):
 def download_from_gcs(destination_blob_name):
     """Download a file from GCS and return its contents."""
     client = storage.Client()
-    bucket = client.bucket(settings.CALL_PROCESSING_BUCKET)
+    bucket = client.bucket(f"{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}")
     blob = bucket.blob(destination_blob_name)
     return blob.download_as_bytes()
