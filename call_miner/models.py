@@ -364,8 +364,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         """
         Whenever this method is called, delete the corresponding Firebase user first
         and then proceed with deleting from Django's DB.
+        No error will be raised in case user can't be found in Firebase
         """
-        auth.delete_user(self.pk)  # self.pk == self.id
+        try:
+            auth.delete_user(self.pk)  # self.pk == self.id
+        except auth.UserNotFoundError:
+            pass
         return super().delete(using=using, keep_parents=keep_parents)
 
 
