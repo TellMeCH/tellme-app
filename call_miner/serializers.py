@@ -171,7 +171,7 @@ class ConversationModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
+        fields = ['id', 'created', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
                   'agent', 'customer', 'input_tokens', 'output_tokens']
 
     def validate(self, data):
@@ -268,7 +268,7 @@ class ConversationDetailSerializer(ConversationListSerializer):
         }
 
 
-class OrganizationDetailSerializer(serializers.HyperlinkedModelSerializer):
+class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
     """
     Serializer to retrieve a single Organization instance.
     """
@@ -313,7 +313,7 @@ class OrganizationAPIKeyModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrganizationAPIKey
-        fields = ['id', 'name', 'organization', 'plain_key']
+        fields = ['id', 'name', 'organization', 'plain_key', 'created']
         read_only_fields = ['plain_key']
 
     def validate(self, data):
@@ -388,7 +388,7 @@ class TopicModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Topic
-        fields = ['name', 'description', 'organization', 'is_active']
+        fields = ['id', 'created', 'name', 'description', 'organization', 'is_active']
 
     def validate(self, data):
         """
@@ -525,7 +525,7 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['organization', 'external_id']
+        fields = ['id', 'created', 'organization', 'external_id']
 
 
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
@@ -615,7 +615,7 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ['organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
+        fields = ['id', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
         read_only_fields = ['created', 'updated']
 
     def validate(self, data):

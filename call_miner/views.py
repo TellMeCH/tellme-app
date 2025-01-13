@@ -6,7 +6,7 @@ from django.conf import settings
 from call_miner.models import Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Customer
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
-    OrganizationDetailSerializer, OrganizationAPIKeyListSerializer, OrganizationAPIKeyModifySerializer,
+    OrganizationSerializer, OrganizationAPIKeyListSerializer, OrganizationAPIKeyModifySerializer,
     ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer, TopicListSerializer,
     AgentListSerializer, AgentDetailSerializer, CustomerModifySerializer, CustomerListSerializer,
     EmployeeListSerializer, EmployeeModifySerializer
@@ -250,7 +250,7 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
 
     def get_serializer_class(self):
         if self.action in ['retrieve', 'list', 'modify', 'create', 'update', 'destroy', 'partial_update']:
-            return OrganizationDetailSerializer
+            return OrganizationSerializer
         elif self.action in ['conversations', 'trend']:
             return ConversationTrendsSerializer
         raise ValueError(f'Action {self.action} not permitted.')
