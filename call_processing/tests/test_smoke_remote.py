@@ -4,12 +4,13 @@ import json
 import time
 import pytest
 import requests
+import logging
 import firebase_admin
 from firebase_admin import auth
 from io import BytesIO
 from urllib.parse import urlparse
 from google.cloud import storage
-import logging
+from google.cloud import secretmanager
 from google.cloud import logging_v2, tasks_v2
 from django.utils import timezone, crypto
 from django.conf import settings
@@ -38,8 +39,7 @@ class TestSmokeTestCloudRunWithLogs:
         yield app
         firebase_admin.delete_app(app)
 
-    @staticmethod
-    def user_id_token(user_email: str) -> str:
+    def user_id_token(self, user_email: str) -> str:
         """
         Obtain an ID token for an existing superuser in Firebase and Django. To do so, creates a custom token and
         immediately exchanges it for an ID token (requires an Identity Toolkit REST call).
@@ -47,8 +47,7 @@ class TestSmokeTestCloudRunWithLogs:
         user = auth.get_user_by_email(user_email)
         custom_token = auth.create_custom_token(user.uid)
 
-        api_key = os.getenv("FIREBASE_WEB_API_KEY")
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={api_key}"
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={self.firebase_api_key}"
         payload = {
             "token": custom_token.decode("utf-8"),
             "returnSecureToken": True
@@ -139,6 +138,13 @@ class TestSmokeTestCloudRunWithLogs:
         self.service_name = os.getenv("SERVICE_NAME")
         if not self.service_name:
             raise EnvironmentError("SERVICE_NAME environment variable not set")
+
+        self.firebase_api_key = os.getenv("FIREBASE_WEB_API_KEY")
+        if not self.firebase_api_key:
+            client = secretmanager.SecretManagerServiceClient()
+            secret_path = f"projects/{settings.GOOGLE_CLOUD_PROJECT}/secrets/firebase_api_key/versions/latest"
+            response = client.access_secret_version(name=secret_path)
+            self.firebase_api_key = response.payload.data.decode("UTF-8")
 
         # Authorization header for setup and teardown
         superuser_id_token = self.user_id_token(f'app.admin.{settings.TELLME_ENV}@tell-me.ch')
