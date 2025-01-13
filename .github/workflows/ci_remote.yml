@@ -3,7 +3,7 @@ name: Remote Smoke Test
 on:
   workflow_run:
     workflows: ["Deployment"]
-    types: [ "completed" ]
+    types: ["completed"]
 
 jobs:
   smoke_test:
@@ -19,7 +19,6 @@ jobs:
       DEBUG: 0
       COLLECT_STATIC: false
       CREATE_SUPERUSERS: false
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     permissions:
