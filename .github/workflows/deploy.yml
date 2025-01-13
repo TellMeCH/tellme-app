@@ -20,8 +20,8 @@ jobs:
       CLOUD_TASKS_QUEUE_NAME: call-processing
       CALL_PROCESSING_BUCKET: call_recordings
       DEBUG: 0
-      COLLECT_STATIC: false
-      CREATE_SUPERUSERS: false
+      COLLECT_STATIC: true
+      CREATE_SUPERUSERS: true
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
