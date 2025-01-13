@@ -1,0 +1,411 @@
+import time
+import hashlib
+import json
+from datetime import datetime
+from io import BytesIO
+from django.conf import settings
+import deepgram
+import httpx
+from pydub import AudioSegment
+from langfuse import openai, Langfuse
+from langfuse.decorators import observe, langfuse_context
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
+import google.cloud.dlp
+from call_miner.models import Topic
+from call_processing.utils.fallback_prompt import ENRICHMENT_PROMPT, PROMPT_CONFIG
+
+DEEPGRAM_COSTS = {  # A dictionary of transcription costs in dollars per second
+    'whisper-medium': 0.00007,
+    'whisper-large': 0.00008
+}
+
+
+class CallProcessingPipeline:
+    """
+    A processing pipeline in charge of the transcription, diarization, and mining of call recording data.
+
+    Steps:
+    1. Splits the recording into CHUNK_SIZE minute segments.
+    2. Transcribes each chunk with Deepgram.
+    3. Ensures consistency in detected language across chunks.
+    4. Logs the entire process in Langfuse for observability.
+
+    Attributes:
+        REQUIRED_METADATA_FIELDS (list of str): Required fields in recording metadata
+        CHUNK_SIZE (float): Duration of each audio chunk in minutes.
+        TRANSCRIPTION_MODEL_NAME (str): The name of the transcription model to use.
+        API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with the Deepgram or OpenAI API
+        API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with the Deepgram or OpenAI API
+        API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with the Deepgram or OpenAI API
+        DLP_ENTITY_TYPES (list of str): List of entities to detect as sensitive information and redact
+    """
+    REQUIRED_METADATA_FIELDS: list[str] = ['file_name', 'organization_id', 'customer_id', 'agent_id', 'timestamp']
+    CHUNK_SIZE: float = 5
+    TRANSCRIPTION_MODEL_NAME: str = 'whisper-medium'
+    API_MAX_RETRIES: int = 5
+    API_BASE_DELAY: float = 1.0
+    API_BACKOFF_FACTOR: int = 2
+    DLP_ENTITY_TYPES: list[str] = ["EMAIL_ADDRESS", "PERSON_NAME", "PHONE_NUMBER", "CREDIT_CARD_NUMBER", "LOCATION", "IBAN_CODE", "PASSPORT"]
+
+    def __init__(self) -> None:
+        """
+        Initializes the pipeline by setting up the Deepgram client and transcription options, as well as the Open AI
+        client and prompt.
+
+        Raises:
+            ValueError: If the DEEPGRAM_API_KEY or OPENAI_API_KEY is not set in the django settings.
+        """
+        # Deepgram
+        if not hasattr(settings, 'DEEPGRAM_API_KEY') or not settings.DEEPGRAM_API_KEY:
+            raise ValueError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY setting value.")
+        self.deepgram = deepgram.DeepgramClient(settings.DEEPGRAM_API_KEY)
+        self.transcription_options = deepgram.PrerecordedOptions(
+            model=self.TRANSCRIPTION_MODEL_NAME,
+            smart_format=True,
+            detect_language=True,
+            punctuate=True,
+            diarize=True,
+        )
+        # OpenAI
+        if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
+            raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY setting value.")
+        else:
+            openai.api_key = settings.OPENAI_API_KEY
+        self.openai = openai.OpenAI()
+
+        # Prompt with Fallback
+        self.enrichment_prompt = Langfuse().get_prompt(
+            'call_enrichment',
+            label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
+            fallback=ENRICHMENT_PROMPT
+        )
+
+        # Configuration for DLP
+        self.dlp_client = google.cloud.dlp_v2.DlpServiceClient()
+        self.dlp_config = {
+            "parent": f"projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/global",
+            "deidentify_config": {
+                "info_type_transformations": {
+                    "transformations": [
+                        {"primitive_transformation": {"replace_with_info_type_config": {}}}
+                    ]
+                }
+            },
+            "inspect_config": {"info_types": [{"name": info_type} for info_type in self.DLP_ENTITY_TYPES]}
+        }
+
+    @observe()
+    def __call__(self, file_data: bytes, file_metadata: dict[str, str]) -> dict:
+        """
+        Processes the given audio data through the pipeline and returns the transcript and base language.
+
+        This top-level method is decorated with @observe(), creating a top-level Langfuse trace.
+
+        Args:
+            file_data (bytes): Raw binary data of the audio file.
+            file_metadata (dict[str, str]): Contains file metadata for Langfuse
+
+        Returns:
+            dict: The full results of the call enrichment, including the transcript, language, agent and
+                customer speaker labels, the detected topics, the summary, the call title, and the call sentiment.
+        """
+        for field in self.REQUIRED_METADATA_FIELDS:
+            if field not in file_metadata:
+                raise ValueError(f'Incorrect format for recording metadata. Missing field "{field}"')
+
+        langfuse_context.update_current_trace(
+            name="Call Processing",
+            user_id='Cloud Task Manager',
+            session_id=self.define_session_id(file_metadata),
+            tags=[settings.TELLME_ENV],
+            metadata=file_metadata
+        )
+
+        # Transcribe the audio file
+        transcript, language, total_duration = self.transcribe(file_data)
+
+        if len(transcript) == 0:
+            raise ValueError('Call Processing: Produced transcript is empty.')
+
+        # Redact sensitive information
+        transcript = self.redact_transcript(transcript)
+
+        # Extract the active topics of the organization
+        active_topics = self.obtain_active_topics(file_metadata['organization_id'])
+
+        # Obtain additional information from the transcript
+        enriched_data, input_tokens, output_tokens = self.enrich_recording(transcript, active_topics)
+
+        # Replace speaker labels
+        enriched_data = self.replace_speaker_labels(transcript, enriched_data)
+
+        enriched_data['language'] = language
+        enriched_data['input_tokens'] = input_tokens
+        enriched_data['output_tokens'] = output_tokens
+        enriched_data['duration'] = total_duration
+        enriched_data.update(file_metadata)
+        return enriched_data
+
+    @staticmethod
+    def define_session_id(file_metadata: dict[str, str]) -> str:
+        """
+        Define a unique session ID to propagate through all processing traces, based on the file metadata and current
+        time.
+
+        Args:
+            file_metadata (dict[str, str]): Contains file metadata
+
+        Returns:
+            str: Session ID of the processing routine
+        """
+        current_epoch = str(int(time.time()))
+        combined_string = ''.join([str(v) for v in file_metadata.values()]) + current_epoch
+        return hashlib.sha256(combined_string.encode()).hexdigest()
+
+    @observe(capture_output=False)
+    def transcribe(self, file_data: bytes) -> (str, str, float):
+        """
+        Internal method to handle the full transcription process:
+        1. Cuts the audio into chunks.
+        2. Transcribes each chunk.
+        3. Checks for consistent language detection.
+
+        Args:
+            file_data (bytes): The raw audio data to transcribe.
+
+        Returns:
+            Tuple[str, str, float]: The full transcript, the detected base language and the call duration in seconds.
+
+        Raises:
+            Warning: If language changes across chunks.
+        """
+        recording_chunks, total_duration = self.cut_into_chunks(file_data)
+        langfuse_context.update_current_trace(
+            metadata={
+                'chunk_count': len(recording_chunks),
+                'total_duration_minutes': round(total_duration / 60000, 2),
+                'total_size_mbs': round(len(file_data) / 1000000, 2)
+            }
+        )
+
+        base_language = None
+        full_transcript = ''
+        for i, chunk in enumerate(recording_chunks):
+            chunk_transcript, chunk_language = self.transcribe_chunk(chunk)
+            if i == 0 or not full_transcript:
+                base_language = chunk_language
+                full_transcript = chunk_transcript
+            else:
+                if base_language != chunk_language:
+                    raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
+                full_transcript += '\n' + chunk_transcript
+
+        if base_language is None:
+            base_language = "unknown"
+
+        return full_transcript, base_language, total_duration / 1000
+
+    def cut_into_chunks(self, file_data: bytes) -> (list[bytes], int):
+        """
+        Splits the provided audio data into CHUNK_SIZE minute segments using pydub.
+
+        Args:
+            file_data (bytes): The raw audio file data.
+
+        Returns:
+            List[bytes]: A list of chunks in bytes format.
+            int: Raw audio file length in milliseconds
+        """
+        # Load the audio file from bytes
+        audio = AudioSegment.from_file(BytesIO(file_data), format="wav")
+
+        # Calculate chunk length in milliseconds.
+        chunk_length_ms = int(self.CHUNK_SIZE * 60 * 1000)
+        chunks = []
+
+        # Iterate over the audio by chunk_length_ms intervals.
+        for start_ms in range(0, len(audio), chunk_length_ms):
+            end_ms = start_ms + chunk_length_ms
+            chunk = audio[start_ms:end_ms]
+            chunk_buffer = BytesIO()
+            chunk.export(chunk_buffer, format="wav")
+            chunks.append(chunk_buffer.getvalue())
+
+        return chunks, len(audio)
+
+    @observe(as_type="generation")
+    @retry(
+        reraise=True,
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
+        retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
+    )
+    def transcribe_chunk(self, chunk_data: bytes) -> (str, str):
+        """
+        Transcribes a single audio chunk using the Deepgram API, with exponential backoff on 429 responses.
+
+        Decorated with @observe() so each chunk call is a child observation under the main trace.
+        This allows you to associate each chunk call to Deepgram with a separate observation in Langfuse.
+
+        Args:
+            chunk_data (bytes): The raw binary data of the audio chunk.
+
+        Returns:
+            Tuple[str, str]: The transcript text and detected language for this chunk.
+
+        Raises:
+            httpx.HTTPError: If transcription fails after multiple retries.
+        """
+        payload = {'buffer': chunk_data}
+
+        # Update Langfuse observation with input metadata
+        langfuse_context.update_current_observation(
+            name="Chunk Transcription with Deepgram",
+            start_time=datetime.now(),
+        )
+
+        response = None
+        try:
+            response = self.deepgram.listen.rest.v("1").transcribe_file(
+                payload, self.transcription_options, timeout=httpx.Timeout(600.0, connect=10.0)
+            )
+
+            transcript = response['results']['channels'][0]['alternatives'][0]['paragraphs']['transcript']
+            transcript = transcript.replace("\n\n", "\n").strip()
+            language = response['results']['channels'][0]['detected_language']
+
+            # Update observation with results
+            langfuse_context.update_current_observation(
+                end_time=datetime.now(),
+                input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response['metadata']['duration']},
+                output={"transcript_chunk_size": len(transcript), "language": language},
+                model=f'deepgram-{self.TRANSCRIPTION_MODEL_NAME}',
+                usage={
+                    'total': response['metadata']['duration'],
+                    'unit': 'SECONDS',
+                    'totalCost': DEEPGRAM_COSTS[self.TRANSCRIPTION_MODEL_NAME] * response['metadata']['duration']
+                }
+            )
+
+            return transcript, language
+
+        except IndexError as e:
+            langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
+            raise ValueError(f'Could not parse transcription response: {json.dumps(response, indent=4)}') from e
+        except httpx.HTTPStatusError as e:
+            langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
+            raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
+
+    @observe(as_type="generation")
+    @retry(
+        reraise=True,
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
+        retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
+    )
+    def redact_transcript(self, transcript: str) -> str:
+        """
+        Remove sensitive information from the obtained transcript using the Google Cloud DLP API
+
+        Args:
+            transcript (str): The transcript text
+
+        Returns:
+            str: Redacted transcript
+        """
+        # Update Langfuse observation with input metadata
+        langfuse_context.update_current_observation(
+            name="Redaction with Google DLP",
+            start_time=datetime.now(),
+        )
+
+        current_request = self.dlp_config.copy()
+        current_request["item"] = {"value": transcript}
+        response = self.dlp_client.deidentify_content(request=current_request)
+        redacted_transcript = response.item.value
+
+        # Update observation with results
+        langfuse_context.update_current_observation(
+            end_time=datetime.now(),
+            input={"transcript_size": len(transcript)},
+            output={"redacted_transcript": redacted_transcript},
+            model=f'dlp-service-client'
+        )
+        return redacted_transcript
+
+    @staticmethod
+    def obtain_active_topics(organization: int):
+        """
+        Query the call_miner data model to extract all active topics from the organization.
+
+        Args:
+            organization (int): ID of the organization to query
+
+        Returns:
+            str: A string enumerating the names and descriptions of all active topics
+        """
+        active_topics = ''
+        for topic in Topic.objects.filter(organization=organization, is_active=True):
+            active_topics += f'{topic.name}: {topic.description}, '
+        return active_topics
+
+    @observe()
+    @retry(
+        reraise=True,
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
+        retry=retry_if_exception_type(httpx.HTTPError)
+    )
+    def enrich_recording(self, transcript: str, topic_data: str) -> (dict, int, int):
+        """
+        Call OpenAI to obtain additional information from the call transcript. Uses the topic data string to complete
+        the prompt's system message.
+
+        Args:
+            transcript (str): Call transcript from which to extract information
+            topic_data (str): String numerating names and descriptions of all active topics
+
+        Returns:
+            dict: Results of enrichment, defined according to EnrichmentResponse
+            int: Input tokens to completion
+            int: Output tokens from completion
+        """
+        # Prepare Prompt and Response Format
+        system_message = self.enrichment_prompt.compile(topics_string=topic_data)
+        if self.enrichment_prompt.is_fallback:
+            config_kwargs = PROMPT_CONFIG
+        else:
+            config_kwargs = {'langfuse_prompt': self.enrichment_prompt}
+            config_kwargs.update(self.enrichment_prompt.config)
+
+        langfuse_context.update_current_observation(
+            name="Recording Enrichment with OpenAI",
+            prompt=self.enrichment_prompt
+        )
+        completion = self.openai.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": f"Here is the call transcript:\n{transcript}"}
+            ],
+            **config_kwargs
+        )
+
+        response = completion.choices[0].message
+        input_tokens = completion.usage.prompt_tokens
+        output_tokens = completion.usage.completion_tokens
+        return json.loads(response.content), input_tokens, output_tokens
+
+    @staticmethod
+    def replace_speaker_labels(transcript: str, data: dict) -> dict:
+        """
+        Apply the identified speaker roles to the diarized transcript, by replacing speaker labels
+        """
+        speaker_types = {'agent_speaker_labels': '<agent>', 'customer_speaker_labels': '<customer>'}
+        for label_type, new_label in speaker_types.items():
+            for old_label in data[label_type]:
+                if ':' in old_label:
+                    transcript = transcript.replace(old_label, new_label + ':')
+                else:
+                    transcript = transcript.replace(old_label, new_label)
+        data['transcript'] = transcript
+        return data

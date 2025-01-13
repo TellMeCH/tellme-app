@@ -9,24 +9,61 @@ https://docs.djangoproject.com/en/5.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
+import io
+import os
+import sys
 
+import environ
+from urllib.parse import urlparse
 from pathlib import Path
+import sentry_sdk
+from google.cloud import secretmanager
+from sentry_sdk.integrations.django import DjangoIntegration
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+env = environ.Env(DEBUG=(bool, False))
+env_file = os.path.join(BASE_DIR, ".env")
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
+if env('TELLME_ENV') == 'dev':  # Local environment: .env is expected
+    if os.path.isfile(env_file):
+        env.read_env(env_file)
+    else:
+        raise Exception('Local execution can only run with a .env file')
+else:
+    if env("GOOGLE_CLOUD_PROJECT", default=None):  # Load environments from SETTINGS_NAME
+        project_id = env("GOOGLE_CLOUD_PROJECT")
+        client = secretmanager.SecretManagerServiceClient()
+        secret_name = env("SETTINGS_NAME", default="django_settings")
+        secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(name=secret_path)
+        payload = response.payload.data.decode("UTF-8")
+        if '#' in payload:
+            raise Exception('Watch out with special characters in your passwords! This step will mess with them')
+        env.read_env(io.StringIO(payload))
+    else:
+        raise Exception("No GOOGLE_CLOUD_PROJECT detected. No secrets found.")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-=q$bbw)*+dhcn6cssgvma)jd3ae*p26=8yl3vg9rzq1a_hr630'
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG")
+TELLME_ENV = env('TELLME_ENV')
+GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT")
+REGION = env("REGION")
 
-ALLOWED_HOSTS = []
+CLOUDRUN_SERVICE_URLS = env("CLOUDRUN_SERVICE_URLS", default=None)
+if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
+    CSRF_TRUSTED_ORIGINS = env("CLOUDRUN_SERVICE_URLS").split(",")
+    # Remove the scheme from URLs for ALLOWED_HOSTS
+    ALLOWED_HOSTS = [urlparse(url).netloc for url in CSRF_TRUSTED_ORIGINS]
 
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+else:
+    ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='').split(',')
 
 # Application definition
 
@@ -37,7 +74,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'drf_spectacular',
+    'storages',
     'call_miner',
+    'call_processing'
 ]
 
 MIDDLEWARE = [
@@ -74,13 +115,40 @@ WSGI_APPLICATION = 'tell_me.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if TELLME_ENV != 'dev':
+    os.environ['DATABASE_URL'] = (
+        f"postgres://{env('DATABASE_USERNAME')}:{env('DATABASE_PASSWORD')}@//cloudsql/{env('GOOGLE_CLOUD_PROJECT')}:" +
+        f"{env('REGION')}:{env('SQL_INSTANCE_NAME')}/{env('DATABASE_NAME')}"
+    )
+    DATABASES = {"default": env.db()}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': env('DATABASE_NAME'),
+            'USER': env('DATABASE_USERNAME'),
+            'PASSWORD': env('DATABASE_PASSWORD'),
+            'HOST': env('DATABASE_HOST', default='localhost'),
+            'PORT': env('DATABASE_PORT', default='5432'),
+        }
     }
-}
 
+# If the flag as been set, configure to use Cloud SQL Proxy
+# Remember to start it with:
+# ./cloud_setup/cloud-sql-proxy --port=5433 --gcloud-auth $GOOGLE_CLOUD_PROJECT:$REGION:$INSTANCE_NAME
+if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
+    DATABASES["default"]["HOST"] = "127.0.0.1"
+    DATABASES["default"]["PORT"] = 5433
+
+# Processing pipeline
+CLOUD_TASKS_QUEUE_NAME = env('CLOUD_TASKS_QUEUE_NAME')
+CALL_PROCESSING_ENDPOINT = env('CALL_PROCESSING_ENDPOINT', default=None)
+TASKS_EMULATOR_ADDRESS = env('TASKS_EMULATOR_ADDRESS', default=None)
+CALL_PROCESSING_BUCKET = env('CALL_PROCESSING_BUCKET')
+PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
+PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
+DEEPGRAM_API_KEY = env('DEEPGRAM_API_KEY')
+OPENAI_API_KEY = env('OPENAI_API_KEY')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -116,9 +184,89 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+
+
+GS_BUCKET_NAME = env("GS_BUCKET_NAME", default=None)
+if GS_BUCKET_NAME and TELLME_ENV != 'dev':
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "storages.backends.gcloud.GoogleCloudStorage",
+        },
+    }
+    GS_DEFAULT_ACL = "publicRead"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
+    'PAGE_SIZE': 15,
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'call_miner.authentication.FirebaseAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# Setting for the API Documentation
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'TellMe Backend API',
+    'DESCRIPTION': 'Helping companies know their customers better through call center interactions.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SECURITY': [
+        {'BearerAuth': []},
+    ],
+    'SECURITY_SCHEMES': {
+        'BearerAuth': {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'Firebase',
+        },
+    },
+    'EXTENSIONS': [
+        'call_miner.authentication_extensions',
+    ],
+}
+
+# User model for authentication
+AUTH_USER_MODEL = 'call_miner.User'
+
+# Logging
+if TELLME_ENV != 'dev':
+    sentry_sdk.init(
+        dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment=TELLME_ENV
+    )
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'sentry': {
+            'level': 'ERROR',
+            'class': 'sentry_sdk.integrations.logging.EventHandler',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'sentry'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}
