@@ -1,0 +1,110 @@
+name: Remote Smoke Test
+
+on:
+  workflow_run:
+    workflows: ["Deployment"]
+    types: [ "completed" ]
+
+jobs:
+  smoke_test:
+    env:
+      SERVICE_NAME: tellme-service
+      SQL_INSTANCE_NAME: tellme-app
+      DATABASE_NAME: db
+      MEDIA_BUCKET: static_files
+      SETTINGS_NAME: django_settings
+      PASSWORDS_NAME: superuser_passwords
+      CLOUD_TASKS_QUEUE_NAME: call-processing
+      CALL_PROCESSING_BUCKET: call_recordings
+      DEBUG: 0
+      COLLECT_STATIC: false
+      CREATE_SUPERUSERS: false
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+      pull-requests: 'read'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Environment Variables Based on Branch
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "TELLME_ENV=prod" >> $GITHUB_ENV
+            echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_PROD }}" >> $GITHUB_ENV
+            echo "WORKLOAD_IDENTITY_PROVIDER=${{ secrets.WORKLOAD_IDENTITY_PROVIDER_PROD }}" >> $GITHUB_ENV
+            echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            echo "TELLME_ENV=staging" >> $GITHUB_ENV
+            echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_DEV }}" >> $GITHUB_ENV
+            echo "WORKLOAD_IDENTITY_PROVIDER=${{ secrets.WORKLOAD_IDENTITY_PROVIDER_DEV }}" >> $GITHUB_ENV
+            echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_DEV }}" >> $GITHUB_ENV
+          fi
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.CICD_SERVICE_ACCOUNT }}
+          export_default_credentials: true
+
+      - name: Start Cloud SQL Proxy
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        run: |
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          nohup ./cloud-sql-proxy \
+            --port=5433 \
+            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
+            > cloud_sql_proxy.log 2>&1 &
+          sleep 10
+
+      - name: Set up Python
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
+
+      - name: Install Dependencies
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        run: |
+          poetry install --with dev --sync
+
+      - name: Check Cloud SQL Proxy Is Running
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        run: |
+          cat cloud_sql_proxy.log
+          if ! pgrep -f cloud-sql-proxy; then
+            echo "Cloud SQL Proxy is not running."
+            exit 1
+          fi
+
+      - name: Run Remote Smoke Tests
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_PROJECT_REGION }}
+          TELLME_ENV: ${{ env.TELLME_ENV }}
+          DEBUG: ${{ env.DEBUG }}
+          SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ env.DATABASE_NAME }}
+          PASSWORDS_NAME: ${{ env.PASSWORDS_NAME }}
+          GS_BUCKET_NAME: ${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+          CLOUD_TASKS_QUEUE_NAME: ${{ env.CLOUD_TASKS_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ env.CALL_PROCESSING_BUCKET }}
+          USE_CLOUD_SQL_AUTH_PROXY: 1
+        run: |
+          poetry run pytest -v ./call_processing/tests/test_smoke_remote.py
