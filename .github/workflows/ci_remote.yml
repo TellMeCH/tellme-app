@@ -2,8 +2,8 @@ name: Remote Smoke Test
 
 on:
   workflow_run:
-    workflows: ["Deployment"]
-    types: ["completed"]
+    workflows: [Deployment]
+    types: [completed]
 
 jobs:
   smoke_test:
