@@ -20,6 +20,7 @@ jobs:
       COLLECT_STATIC: false
       CREATE_SUPERUSERS: false
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     permissions:
       contents: 'read'
@@ -55,7 +56,6 @@ jobs:
           export_default_credentials: true
 
       - name: Start Cloud SQL Proxy
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
@@ -66,24 +66,20 @@ jobs:
           sleep 10
 
       - name: Set up Python
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
 
       - name: Install Poetry
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
 
       - name: Install Dependencies
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
           poetry install --with dev --sync
 
       - name: Check Cloud SQL Proxy Is Running
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
           cat cloud_sql_proxy.log
           if ! pgrep -f cloud-sql-proxy; then
