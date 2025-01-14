@@ -79,7 +79,7 @@ class Command(BaseCommand):
                 email_verified=True
             )
             self.stdout.write(
-                self.style.SUCCESS(f'Successfully created superuser account for application management: {user.id}.')
+                self.style.SUCCESS(f'Successfully created superuser account for application management.')
             )
         except Exception as e:
             raise CommandError(f'Failed to create Superuser Account for Application Management: {e}')
@@ -92,7 +92,7 @@ class Command(BaseCommand):
                 email=settings.PROCESSING_PIPELINE_USER
             )
             self.stdout.write(
-                self.style.SUCCESS(f'Successfully created superuser account for processing pipeline: {user.id}.')
+                self.style.SUCCESS(f'Successfully created superuser account for processing pipeline.')
             )
         except Exception as e:
             raise CommandError(f'Failed to create Superuser Account for Processing Pipeline: {e}')
