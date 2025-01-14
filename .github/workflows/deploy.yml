@@ -10,6 +10,7 @@ on:
 jobs:
   deploy:
     env:
+      TELLME_ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
       ARTIFACT_REPO: cloud-run-source-deploy
       SERVICE_NAME: tellme-service
       SQL_INSTANCE_NAME: tellme-app
@@ -24,6 +25,8 @@ jobs:
       CREATE_SUPERUSERS: true
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name }}
 
     permissions:
       contents: 'read'
@@ -34,28 +37,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set Environment Variables Based on Branch
-        run: |
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "TELLME_ENV=prod" >> $GITHUB_ENV
-            echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_PROD }}" >> $GITHUB_ENV
-            echo "WORKLOAD_IDENTITY_PROVIDER=${{ secrets.WORKLOAD_IDENTITY_PROVIDER_PROD }}" >> $GITHUB_ENV
-            echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
-          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
-            echo "TELLME_ENV=staging" >> $GITHUB_ENV
-            echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_DEV }}" >> $GITHUB_ENV
-            echo "WORKLOAD_IDENTITY_PROVIDER=${{ secrets.WORKLOAD_IDENTITY_PROVIDER_DEV }}" >> $GITHUB_ENV
-            echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_DEV }}" >> $GITHUB_ENV
-          fi
-
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          project_id: ${{ env.GCP_PROJECT_ID }}
-          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ env.CICD_SERVICE_ACCOUNT }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CICD_SERVICE_ACCOUNT }}
           export_default_credentials: true
 
       - name: Detect New Migrations
@@ -73,7 +62,7 @@ jobs:
           chmod +x cloud-sql-proxy
           nohup ./cloud-sql-proxy \
             --port=5433 \
-            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
+            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
             > cloud_sql_proxy.log 2>&1 &
           sleep 10
 
@@ -106,14 +95,14 @@ jobs:
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true'
         env:
-          GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
           REGION: ${{ secrets.GCP_PROJECT_REGION }}
           TELLME_ENV: ${{ env.TELLME_ENV }}
           DEBUG: ${{ env.DEBUG }}
           SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
           SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ env.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
           USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py migrate
@@ -121,14 +110,14 @@ jobs:
       - name: Collect Static
         if: env.COLLECT_STATIC == 'true'
         env:
-          GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
           REGION: ${{ secrets.GCP_PROJECT_REGION }}
           TELLME_ENV: ${{ env.TELLME_ENV }}
           DEBUG: ${{ env.DEBUG }}
           SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
           SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ env.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
           USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py collectstatic --noinput
@@ -136,7 +125,7 @@ jobs:
       - name: Create Superuser Accounts
         if: env.CREATE_SUPERUSERS == 'true'
         env:
-          GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
           REGION: ${{ secrets.GCP_PROJECT_REGION }}
           TELLME_ENV: ${{ env.TELLME_ENV }}
           DEBUG: ${{ env.DEBUG }}
@@ -144,7 +133,7 @@ jobs:
           SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ env.DATABASE_NAME }}
           PASSWORDS_NAME: ${{ env.PASSWORDS_NAME }}
-          GS_BUCKET_NAME: ${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
           USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py create_superusers
@@ -162,7 +151,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          tags: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         id: deploy
@@ -174,19 +163,19 @@ jobs:
             --allow-unauthenticated
             --min-instances=0 
             --execution-environment=gen2
-            --service-account=${{ env.SERVICE_NAME }}-account@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-            --add-cloudsql-instances=${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
+            --service-account=${{ env.SERVICE_NAME }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+            --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
           region: ${{ secrets.GCP_PROJECT_REGION }}
-          image: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          image: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |
-            GOOGLE_CLOUD_PROJECT=${{ env.GCP_PROJECT_ID }}
+            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
             REGION=${{ secrets.GCP_PROJECT_REGION }}
             TELLME_ENV=${{ env.TELLME_ENV }}
             DEBUG=${{ env.DEBUG }}
             SETTINGS_NAME=${{ env.SETTINGS_NAME }}
             SQL_INSTANCE_NAME=${{ env.SQL_INSTANCE_NAME }}
             DATABASE_NAME=${{ env.DATABASE_NAME }}
-            GS_BUCKET_NAME=${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+            GS_BUCKET_NAME=${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
             CLOUD_TASKS_QUEUE_NAME=${{ env.CLOUD_TASKS_QUEUE_NAME }}
             CALL_PROCESSING_BUCKET=${{ env.CALL_PROCESSING_BUCKET }}
 

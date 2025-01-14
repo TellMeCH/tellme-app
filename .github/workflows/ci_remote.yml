@@ -8,6 +8,7 @@ on:
 jobs:
   smoke_test:
     env:
+      TELLME_ENV: ${{ github.event.workflow_run.head_branch == 'refs/heads/main' && 'prod' || 'staging' }}
       SERVICE_NAME: tellme-service
       SQL_INSTANCE_NAME: tellme-app
       DATABASE_NAME: db
@@ -17,8 +18,9 @@ jobs:
       CLOUD_TASKS_QUEUE_NAME: call-processing
       CALL_PROCESSING_BUCKET: call_recordings
       DEBUG: 0
-    runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.workflow_run.head_branch == 'refs/heads/main' && 'main' || 'staging' }}
 
     permissions:
       contents: 'read'
@@ -29,28 +31,14 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set Environment Variables Based on Branch
-        run: |
-          if [ "${{ github.event.workflow_run.head_branch }}" == "refs/heads/main" ]; then
-            echo "TELLME_ENV=prod" >> $GITHUB_ENV
-            echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_PROD }}" >> $GITHUB_ENV
-            echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
-            echo "CICD_SERVICE_ACCOUNT_JSON_KEY=${{ secrets.CICD_SERVICE_ACCOUNT_JSON_KEY_PROD }}" >> $GITHUB_ENV
-          elif [ "${{ github.event.workflow_run.head_branch }}" == "refs/heads/staging" ]; then
-            echo "TELLME_ENV=staging" >> $GITHUB_ENV
-            echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_DEV }}" >> $GITHUB_ENV
-            echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_DEV }}" >> $GITHUB_ENV
-            echo "CICD_SERVICE_ACCOUNT_JSON_KEY=${{ secrets.CICD_SERVICE_ACCOUNT_JSON_KEY_DEV }}" >> $GITHUB_ENV
-          fi
-
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
-          project_id: ${{ env.GCP_PROJECT_ID }}
-          credentials_json: ${{ env.CICD_SERVICE_ACCOUNT_JSON_KEY }}
-          service_account: ${{ env.CICD_SERVICE_ACCOUNT }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.CICD_SERVICE_ACCOUNT_JSON_KEY }}
+          service_account: ${{ secrets.CICD_SERVICE_ACCOUNT }}
 
       - name: Start Cloud SQL Proxy
         run: |
@@ -58,7 +46,7 @@ jobs:
           chmod +x cloud-sql-proxy
           nohup ./cloud-sql-proxy \
             --port=5433 \
-            ${{ env.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
+            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
             > cloud_sql_proxy.log 2>&1 &
           sleep 10
 
@@ -93,13 +81,13 @@ jobs:
 
       - name: Run Remote Smoke Tests
         env:
-          GOOGLE_CLOUD_PROJECT: ${{ env.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
           REGION: ${{ secrets.GCP_PROJECT_REGION }}
           TELLME_ENV: ${{ env.TELLME_ENV }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
           SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ env.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ env.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
           SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
           PASSWORDS_NAME: ${{ env.PASSWORDS_NAME }}
           CLOUD_TASKS_QUEUE_NAME: ${{ env.CLOUD_TASKS_QUEUE_NAME }}
