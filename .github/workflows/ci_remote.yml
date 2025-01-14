@@ -31,12 +31,12 @@ jobs:
 
       - name: Set Environment Variables Based on Branch
         run: |
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          if [ "${{ github.event.workflow_run.head_branch }}" == "refs/heads/main" ]; then
             echo "TELLME_ENV=prod" >> $GITHUB_ENV
             echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_PROD }}" >> $GITHUB_ENV
             echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_PROD }}" >> $GITHUB_ENV
             echo "CICD_SERVICE_ACCOUNT_JSON_KEY=${{ secrets.CICD_SERVICE_ACCOUNT_JSON_KEY_PROD }}" >> $GITHUB_ENV
-          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+          elif [ "${{ github.event.workflow_run.head_branch }}" == "refs/heads/staging" ]; then
             echo "TELLME_ENV=staging" >> $GITHUB_ENV
             echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_DEV }}" >> $GITHUB_ENV
             echo "CICD_SERVICE_ACCOUNT=${{ secrets.CICD_SERVICE_ACCOUNT_DEV }}" >> $GITHUB_ENV
