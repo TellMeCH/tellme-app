@@ -8,6 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    environment: develop
     services:
       postgres:
         image: postgres:13
@@ -50,7 +51,7 @@ jobs:
 
       - name: Create temporal .env file
         run: |
-          echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID_DEV }}" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}" >> .env
           echo "REGION=europe-west6" >> .env
           echo "DATABASE_NAME=test_db" >> .env
           echo "DATABASE_USERNAME=postgres" >> .env
@@ -58,7 +59,7 @@ jobs:
           echo "DATABASE_HOST=localhost" >> .env
           echo "DATABASE_PORT=5432" >> .env
           echo "DEBUG=1" >> .env
-          echo "SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY_DEV }}" >> .env
+          echo "SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" >> .env
           echo "PROCESSING_PIPELINE_KEY=''" >> .env
           echo "CLOUD_TASKS_QUEUE_NAME=''" >> .env
           echo "CALL_PROCESSING_ENDPOINT=''" >> .env
