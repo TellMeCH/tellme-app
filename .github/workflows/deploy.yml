@@ -18,6 +18,18 @@ jobs:
 
     runs-on: ubuntu-latest
     env:
+      GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ secrets.GCP_PROJECT_REGION }}
+      DEBUG: 0
+      SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+      SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+      DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+      GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+      ARTIFACT_REPO: ${{ vars.ARTIFACT_REPO }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+      CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+      CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+      USE_CLOUD_SQL_AUTH_PROXY: 1
       COLLECT_STATIC: true
       CREATE_SUPERUSERS: true
     if: github.event.pull_request.merged == true
@@ -88,47 +100,18 @@ jobs:
 
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true'
-        env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REGION: ${{ secrets.GCP_PROJECT_REGION }}
-          TELLME_ENV: ${{ env.TELLME_ENV }}
-          DEBUG: 0
-          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-          USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py migrate
 
       - name: Collect Static
         if: env.COLLECT_STATIC == 'true'
-        env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REGION: ${{ secrets.GCP_PROJECT_REGION }}
-          TELLME_ENV: ${{ env.TELLME_ENV }}
-          DEBUG: 0
-          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-          USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py collectstatic --noinput
 
       - name: Create Superuser Accounts
         if: env.CREATE_SUPERUSERS == 'true'
         env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REGION: ${{ secrets.GCP_PROJECT_REGION }}
-          TELLME_ENV: ${{ env.TELLME_ENV }}
-          DEBUG: 0
-          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
-          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-          USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py create_superusers
 
