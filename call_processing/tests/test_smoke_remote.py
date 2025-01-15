@@ -42,7 +42,7 @@ class TestSmokeTestCloudRunWithLogs:
     def user_id_token(self, user_email: str) -> str:
         """
         Obtain an ID token for an existing superuser in Firebase and Django. To do so, creates a custom token and
-        immediately exchanges it for an ID token (requires an Identity Toolkit REST call).
+        immediately exchanges it for an ID token (requires an Identity Toolkit REST call!).
         """
         user = auth.get_user_by_email(user_email)
         custom_token = auth.create_custom_token(user.uid)

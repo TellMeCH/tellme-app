@@ -7,26 +7,32 @@ on:
       - staging
     types: [closed]
 
+env:
+  TELLME_ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
+
 jobs:
   deploy:
+    environment:
+      name: ${{ github.ref_name }}
+    name: Deploy to GCP
+
+    runs-on: ubuntu-latest
     env:
-      TELLME_ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
-      ARTIFACT_REPO: cloud-run-source-deploy
-      SERVICE_NAME: tellme-service
-      SQL_INSTANCE_NAME: tellme-app
-      DATABASE_NAME: db
-      MEDIA_BUCKET: static_files
-      SETTINGS_NAME: django_settings
-      PASSWORDS_NAME: superuser_passwords
-      CLOUD_TASKS_QUEUE_NAME: call-processing
-      CALL_PROCESSING_BUCKET: call_recordings
+      GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ secrets.GCP_PROJECT_REGION }}
       DEBUG: 0
+      SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+      SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+      DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+      GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+      ARTIFACT_REPO: ${{ vars.ARTIFACT_REPO }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+      CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+      CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+      USE_CLOUD_SQL_AUTH_PROXY: 1
       COLLECT_STATIC: true
       CREATE_SUPERUSERS: true
     if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    environment:
-      name: ${{ github.ref_name }}
 
     permissions:
       contents: 'read'
@@ -62,7 +68,7 @@ jobs:
           chmod +x cloud-sql-proxy
           nohup ./cloud-sql-proxy \
             --port=5433 \
-            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }} \
+            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }} \
             > cloud_sql_proxy.log 2>&1 &
           sleep 10
 
@@ -94,47 +100,18 @@ jobs:
 
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true'
-        env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REGION: ${{ secrets.GCP_PROJECT_REGION }}
-          TELLME_ENV: ${{ env.TELLME_ENV }}
-          DEBUG: ${{ env.DEBUG }}
-          SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ env.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
-          USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py migrate
 
       - name: Collect Static
         if: env.COLLECT_STATIC == 'true'
-        env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REGION: ${{ secrets.GCP_PROJECT_REGION }}
-          TELLME_ENV: ${{ env.TELLME_ENV }}
-          DEBUG: ${{ env.DEBUG }}
-          SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ env.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
-          USE_CLOUD_SQL_AUTH_PROXY: 1
         run: |
           poetry run python manage.py collectstatic --noinput
 
       - name: Create Superuser Accounts
         if: env.CREATE_SUPERUSERS == 'true'
         env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REGION: ${{ secrets.GCP_PROJECT_REGION }}
-          TELLME_ENV: ${{ env.TELLME_ENV }}
-          DEBUG: ${{ env.DEBUG }}
-          SETTINGS_NAME: ${{ env.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ env.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ env.DATABASE_NAME }}
-          PASSWORDS_NAME: ${{ env.PASSWORDS_NAME }}
-          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
-          USE_CLOUD_SQL_AUTH_PROXY: 1
+          PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
         run: |
           poetry run python manage.py create_superusers
 
@@ -151,44 +128,109 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          tags: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: ${{ env.SERVICE_NAME }}
+          service: ${{ vars.SERVICE_NAME }}
           timeout: 30m
           flags: |
             --allow-unauthenticated
             --min-instances=0 
             --execution-environment=gen2
-            --service-account=${{ env.SERVICE_NAME }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-            --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ env.SQL_INSTANCE_NAME }}
+            --service-account=${{ vars.SERVICE_NAME }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+            --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }}
           region: ${{ secrets.GCP_PROJECT_REGION }}
-          image: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          image: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |
             GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
             REGION=${{ secrets.GCP_PROJECT_REGION }}
             TELLME_ENV=${{ env.TELLME_ENV }}
-            DEBUG=${{ env.DEBUG }}
-            SETTINGS_NAME=${{ env.SETTINGS_NAME }}
-            SQL_INSTANCE_NAME=${{ env.SQL_INSTANCE_NAME }}
-            DATABASE_NAME=${{ env.DATABASE_NAME }}
-            GS_BUCKET_NAME=${{ secrets.GCP_PROJECT_ID }}_${{ env.MEDIA_BUCKET }}
-            CLOUD_TASKS_QUEUE_NAME=${{ env.CLOUD_TASKS_QUEUE_NAME }}
-            CALL_PROCESSING_BUCKET=${{ env.CALL_PROCESSING_BUCKET }}
+            DEBUG=0
+            SETTINGS_NAME=${{ vars.SETTINGS_NAME }}
+            SQL_INSTANCE_NAME=${{ vars.SQL_INSTANCE_NAME }}
+            DATABASE_NAME=${{ vars.DATABASE_NAME }}
+            GS_BUCKET_NAME=${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+            CLOUD_TASKS_QUEUE_NAME=${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+            CALL_PROCESSING_BUCKET=${{ vars.CALL_PROCESSING_BUCKET }}
 
       - name: Determine Cloud Run URL
         id: extract_urls
         run: |
           PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
-          CLOUD_RUN_URLS="https://${{ env.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
+          CLOUD_RUN_URLS="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
           CLOUD_RUN_URLS="${CLOUD_RUN_URLS},${{ steps.deploy.outputs.url }}"
           echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
 
       - name: Update the Application to use those Service URLs
         run: |
-          gcloud run services update ${{ env.SERVICE_NAME }} \
+          gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
             --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }}"
+
+  smoke_test:
+    environment:
+      name: ${{ github.ref_name }}
+    name: Test Deployed Application
+
+    runs-on: ubuntu-latest
+    needs: deploy
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+      pull-requests: 'read'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.CICD_SERVICE_ACCOUNT_JSON_KEY }}
+          service_account: ${{ secrets.CICD_SERVICE_ACCOUNT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
+
+      - name: Install Dependencies
+        run: |
+          poetry install --with dev --sync
+
+      - name: Determine Cloud Run URL
+        id: extract_urls
+        run: |
+          PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
+          CLOUD_RUN_URLS="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
+          echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
+
+      - name: Run Remote Smoke Tests
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ secrets.GCP_PROJECT_REGION }}
+          TELLME_ENV: ${{ env.TELLME_ENV }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+          PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
+          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          DEBUG: 0
+          USE_CLOUD_SQL_AUTH_PROXY: 1
+          CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.urls }}
+        run: |
+          poetry run pytest -v ./call_processing/tests/test_smoke_remote.py
