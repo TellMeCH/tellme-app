@@ -34,12 +34,9 @@ services:
   storage:
     image: oittaa/gcp-storage-emulator:latest
     command:
-      - -d=${GCS_EMULATOR_PATH}
       - start
       - --host=storage
       - --default-bucket=${GOOGLE_CLOUD_PROJECT}_${CALL_PROCESSING_BUCKET}
-    volumes:
-      - ${GCS_EMULATOR_PATH}:/storage
     ports:
       - "9023:9023"
     environment:
