@@ -36,18 +36,16 @@ Its CI/CD is designed to deploy the application to GCP's Cloud Run, where a fron
 gcloud config set project $GOOGLE_CLOUD_PROJECT
 gcloud auth application-default login
 ```
-2. Create a directory /local_setup/gcs_emulator/ that will be used for emulating GCS. Store its address.
-3. Create a simple .env file with the following variables:
+2. Create a simple .env file with the following variables:
    * GOOGLE_CLOUD_PROJECT : Use the app's GCP project
    * GOOGLE_APPLICATION_CREDENTIALS: Use the credential location defined in step 1. 
-   * GCS_EMULATOR_PATH='/Users/altogi/My Drive/Google Drive/TellMe/tell_me/local_setup/gcs_emulator'
-4. Ask the development team for the remaining .env variables and append them to your .env
-5. Run the following to start the local environment, run migrations, and create sample data for experimentation
+3. Ask the development team for the remaining .env variables and append them to your .env
+4. Run the following to start the local environment, run migrations, and create sample data for experimentation
 ```bash
 ./run-compose.sh --with-db-setup
 ```
-6. Enjoy!
-7. Make sure you stop the local environment normally, using Ctrl+C. Moreover, for subsequent executions, avoid running migrations and run:
+5. Enjoy!
+6. Make sure you stop the local environment normally, using Ctrl+C. Moreover, for subsequent executions, avoid running migrations and run:
 ```bash
 ./run-compose.sh
 ```
@@ -155,7 +153,6 @@ The Django project is separated into two apps:
 │   │   ├── fallback_prompt.py
 │   │   └── gcs_utils.py
 │   └── views.py
-├── cloud_setup
 ├── data
 │   └── sample_recording.wav
 ├── docker-compose.yml
