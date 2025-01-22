@@ -37,7 +37,7 @@ services:
       - -d=${GCS_EMULATOR_PATH}
       - start
       - --host=storage
-      - --default-bucket=${CALL_PROCESSING_BUCKET}
+      - --default-bucket=${GOOGLE_CLOUD_PROJECT}_${CALL_PROCESSING_BUCKET}
     volumes:
       - ${GCS_EMULATOR_PATH}:/storage
     ports:
