@@ -195,7 +195,7 @@ class TestSmokeTestCloudRunWithLogs:
         )
         resp.raise_for_status()
         apikey_json = resp.json()
-        self.api_key_plain = apikey_json["plain_key"]
+        self.__api_key_plain = apikey_json["plain_key"]
         logger.info(f"Created Org API Key {apikey_json['name']}")
 
         # Create Agent via the Employees endpoint
@@ -247,7 +247,7 @@ class TestSmokeTestCloudRunWithLogs:
             queue_url,
             data=data,
             files=files,
-            headers={"Authorization": f"X-API-KEY {self.api_key_plain}"}
+            headers={"Authorization": f"X-API-KEY {self.__api_key_plain}"}
         )
         assert response.status_code == 202, f"Unexpected status code: {response.status_code}"
         response_data = response.json()
@@ -328,7 +328,7 @@ class TestSmokeTestCloudRunWithLogs:
             "-v", f"{os.getcwd()}/data:/app/data",
             "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
             "-e", f"WAV_FILE=/app/data/sample_recording.wav",
-            "-e", f"API_KEY={self.api_key_plain}",
+            "-e", f"API_KEY={self.__api_key_plain}",
             emulator_image
         ]
 
