@@ -216,6 +216,11 @@ jobs:
           CLOUD_RUN_URLS="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
           echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
 
+      - name: Build Audiohook emulator image
+        run: |
+          docker build -t genesys_audiohook_emulator:latest -f ./genesys_audiohook_emulator/Dockerfile .
+
+
       - name: Run Remote Smoke Tests
         env:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
