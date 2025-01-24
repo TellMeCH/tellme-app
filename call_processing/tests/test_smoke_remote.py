@@ -320,7 +320,7 @@ class TestSmokeTestCloudRunWithLogs:
         """
         Trigger the /process endpoint, this time using the Audiohook emulator
         """
-        audiohook_ws_url = f"wss://{self.cloud_run_host.replace('https://', 'ws://')}/ws/audiohook/"
+        audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
         trigger_timestamp = timezone.now().isoformat()
         emulator_image = "genesys_audiohook_emulator:latest"
         docker_cmd = [
