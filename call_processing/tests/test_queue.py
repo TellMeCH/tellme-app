@@ -41,7 +41,7 @@ class TestQueueView:
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert "gcs_uri" in response.data
         mock_gcs_upload_download[0].assert_called_once()
-        mock_cloud_tasks.create_task.assert_called_once()
+        mock_cloud_tasks.assert_called_once()
 
     def test_unauthenticated_fails(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks,
                                    setup_db):
