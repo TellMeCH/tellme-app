@@ -218,7 +218,9 @@ jobs:
 
       - name: Build Audiohook emulator image
         run: |
-          docker build -t genesys_audiohook_emulator:latest -f ./genesys_audiohook_emulator/Dockerfile .
+          docker build -t genesys_audiohook_emulator:latest \
+            -f ./genesys_audiohook_emulator/Dockerfile \
+            ./genesys_audiohook_emulator
 
 
       - name: Run Remote Smoke Tests
