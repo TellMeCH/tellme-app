@@ -25,6 +25,8 @@ pydub = "^0.25.1"
 gunicorn = "^23.0.0"
 tenacity = "^9.0.0"
 google-cloud-dlp = "^3.26.0"
+channels = "^4.2.0"
+daphne = "^4.1.2"
 
 
 [tool.poetry.group.dev.dependencies]

@@ -50,13 +50,9 @@ def mock_cloud_tasks():
     """
     Mocks out the Google Cloud Tasks create_task call.
     """
-    with patch("google.cloud.tasks_v2.CloudTasksClient") as mock_client_class:
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
-        mock_client_instance.create_task.return_value = {
-            "name": "projects/TEST/locations/TEST/queues/TEST/tasks/TEST"
-        }
-        yield mock_client_instance
+    with patch("call_processing.views.create_task") as mock_create:
+        mock_create.return_value = None
+        yield mock_create
 
 
 @pytest.fixture

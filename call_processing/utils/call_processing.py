@@ -291,7 +291,7 @@ class CallProcessingPipeline:
 
         except IndexError as e:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
-            raise ValueError(f'Could not parse transcription response: {json.dumps(response, indent=4)}') from e
+            raise ValueError(f'Could not parse transcription response: {response}') from e
         except httpx.HTTPStatusError as e:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
