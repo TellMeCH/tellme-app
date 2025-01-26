@@ -30,7 +30,7 @@ jobs:
       CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
       CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
       USE_CLOUD_SQL_AUTH_PROXY: 1
-      COLLECT_STATIC: true
+      COLLECT_STATIC: false
       CREATE_SUPERUSERS: true
     if: github.event.pull_request.merged == true
 
