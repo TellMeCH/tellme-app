@@ -27,4 +27,6 @@ COPY . /app/
 
 EXPOSE 8080
 
+ENV DJANGO_SETTINGS_MODULE=tell_me.settings
+
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8080", "tell_me.asgi:application"]
