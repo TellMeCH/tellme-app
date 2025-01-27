@@ -7,7 +7,6 @@ import hashlib
 from channels.generic.websocket import WebsocketConsumer
 from rest_framework import exceptions
 from django.conf import settings
-from django.urls import reverse
 from django.utils import timezone
 from call_miner.models import OrganizationAPIKey
 from call_processing.utils import gcs_utils, audio_utils, tasks_utils
@@ -25,6 +24,7 @@ class AudioHookConsumer(WebsocketConsumer):
     """
     AUDIOHOOK_CHANNELS = 2
     AUDIOHOOK_SAMPLE_RATE = 8000
+    MAXIMUM_ERROR_RETRIES = 5
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -37,6 +37,7 @@ class AudioHookConsumer(WebsocketConsumer):
         self.recording_started = False
         self.recording_closed = False
         self.error_close = False
+        self.error_retries = 0  # Number of times to wait until the client sends "close" after an error
         self.temp_file = None
         self.temp_file_path = None
 
@@ -204,6 +205,16 @@ class AudioHookConsumer(WebsocketConsumer):
                     self.handle_ping()
                 else:
                     logger.info(f"Unhandled msg_type='{msg_type}', ignoring.")
+            else:
+                # If disconnect has been sent, and the connection has not yet been closed, simply send 'disconnect'
+                # again, until a maximum retry count is met
+                self.send_error('error', 'Expected "close" message.')
+                self.error_retries += 1
+
+                if self.error_retries > self.MAXIMUM_ERROR_RETRIES:
+                    self.finalize_recording()
+                    self.disconnect('error')
+                    self.close()
 
     def handle_audio_frame(self, data: bytes):
         """
@@ -238,16 +249,14 @@ class AudioHookConsumer(WebsocketConsumer):
         if self.temp_file:
             self.temp_file.close()
 
-        size_bytes = 0
         if self.temp_file_path and os.path.exists(self.temp_file_path):
             size_bytes = os.path.getsize(self.temp_file_path)
-        logger.info(f"Local file size: {size_bytes} bytes")
-
-        if size_bytes == 0:
+            logger.info(f"Local file size: {size_bytes} bytes")
+        else:
             logger.warning("No audio data received.")
             return
 
-        if not self.error_close:
+        if not self.error_close and size_bytes > 0:
             # Encode as WAV with linear PCM and proper headers
             wav_data = audio_utils.decode_mulaw_file_to_wav(
                 self.temp_file_path,
@@ -260,16 +269,16 @@ class AudioHookConsumer(WebsocketConsumer):
             gcs_uri = gcs_utils.upload_to_gcs(wav_data, blob_name)
             logger.info(f"Uploaded local file to GCS ({gcs_uri})")
 
-            # Remove local file
-            os.remove(self.temp_file_path)
-            logger.info(f"Removed local temp file {self.temp_file_path}")
-
             # Create a Cloud Task
             process_url = settings.CALL_PROCESSING_ENDPOINT
             logger.info(f'Creating an HTTP Task Targeting: {process_url}')
             tasks_utils.create_task(
                 process_url, blob_name, self.org.id, self.customer_id, 8, self.connection_timestamp, logger
             )
+
+        # Remove local file
+        os.remove(self.temp_file_path)
+        logger.info(f"Removed local temp file {self.temp_file_path}")
 
     def send_error(self, reason: str, message: str):
         """
