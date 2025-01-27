@@ -29,6 +29,7 @@ jobs:
       SERVICE_NAME: ${{ vars.SERVICE_NAME }}
       CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
       CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+      CALL_PROCESSING_ENDPOINT: none
       USE_CLOUD_SQL_AUTH_PROXY: 1
       COLLECT_STATIC: false
       CREATE_SUPERUSERS: true
@@ -238,9 +239,9 @@ jobs:
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
           CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}/processing/v1/process/
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
           CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.url }}
-          CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}/processing/v1/process/
         run: |
           poetry run pytest -v ./call_processing/tests/test_smoke_remote.py
