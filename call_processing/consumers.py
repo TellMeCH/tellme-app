@@ -265,10 +265,7 @@ class AudioHookConsumer(WebsocketConsumer):
             logger.info(f"Removed local temp file {self.temp_file_path}")
 
             # Create a Cloud Task
-            if settings.CALL_PROCESSING_ENDPOINT is None:
-                process_url = "http://localhost:8000" + reverse("process")
-            else:
-                process_url = settings.CALL_PROCESSING_ENDPOINT
+            process_url = settings.CALL_PROCESSING_ENDPOINT
             tasks_utils.create_task(
                 process_url, blob_name, self.org.id, self.customer_id, 8, self.connection_timestamp, logger
             )
