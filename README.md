@@ -1,44 +1,32 @@
 # TellMe
-The right call to know your customer.
-
----
-
-## Table of Contents
-1. Project Description
-2. Prerequisites
-3. Installation
-4. Usage
-5. Features
-6. Testing
-7. Project Structure
+The right call to know your customers.
 
 ---
 
 ## Project Description
-Explain the purpose of your application, key features, and target audience.
 TellMe aims to help companies understand their customer base by analyzing customer center calls.
 Using AI, call recordings are transcribed, clustered, and summarized, to provide insights at the level of the company, the customer, or the topic cluster.
 This application provides endpoints to serve this data according to different user roles, as well as the routines for processing every call and storing its results.
 Its CI/CD is designed to deploy the application to GCP's Cloud Run, where a frontend will be able to reach it.
 ---
 
-## Prerequisites for Local Execution
+## Local Execution
+
+### Prerequisites:
 - Docker
 - Docker Compose
 - gcloud CLI
 - Authenticated Access to the app's GCP project
 
----
-
-## Usage in Local Setup
+### Steps:
 1. Authenticate to app's GCP project with the following bash commands. Take note of where the application default credentials are stored.
 ```bash
 gcloud config set project $GOOGLE_CLOUD_PROJECT
 gcloud auth application-default login
 ```
 2. Create a simple .env file with the following variables:
-   * GOOGLE_CLOUD_PROJECT : Use the app's GCP project
-   * GOOGLE_APPLICATION_CREDENTIALS: Use the credential location defined in step 1. 
+   * `GOOGLE_CLOUD_PROJECT` : Use the app's GCP project
+   * `GOOGLE_APPLICATION_CREDENTIALS`: Use the credential location defined in step 1. 
 3. Ask the development team for the remaining .env variables and append them to your .env
 4. Run the following to start the local environment, run migrations, and create sample data for experimentation
 ```bash
@@ -50,10 +38,6 @@ gcloud auth application-default login
 ./run-compose.sh
 ```
 
-
-## Features
-
-
 ---
 
 ## Testing
@@ -64,7 +48,7 @@ For local testing, proceed as follows:
    ```bash
    set -a; source .env; set +a;
    ```
-4. Set DATABASE_HOST and FIREBASE_AUTH_EMULATOR_HOST as follows:
+4. Set `DATABASE_HOST` and `FIREBASE_AUTH_EMULATOR_HOST` as follows:
    ```bash
    export DATABASE_HOST=localhost; export FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099;
    ```
@@ -77,98 +61,26 @@ For local testing, proceed as follows:
 
 ## Project Structure
 The Django project is separated into two apps:
-- call_miner: Aimed at serving the DBs data to a frontend. Serves as a REST API providing call data to relevant users.
-- call_processing: Contains the processing routine through which every call goes.
-
-<project-root>/
-├── Dockerfile
-├── README.md
-├── call_miner
-│   ├── __init__.py
-│   ├── admin.py
-│   ├── apps.py
-│   ├── authentication.py
-│   ├── authentication_extensions.py
-│   ├── forms.py
-│   ├── management
-│   │   ├── __init__.py
-│   │   └── commands
-│   │       ├── __init__.py
-│   │       ├── create_sample_data.py
-│   │       └── create_superusers.py
-│   ├── migrations
-│   │   ├── 0001_initial.py
-│   │   ├── __init__.py
-│   ├── models.py
-│   ├── permissions.py
-│   ├── postman_generator.py
-│   ├── schemas.py
-│   ├── serializers.py
-│   ├── templates
-│   │   └── call_detail.html
-│   ├── tests
-│   │   ├── __init__.py
-│   │   ├── conftest.py
-│   │   ├── test_agents.py
-│   │   ├── test_conversations.py
-│   │   ├── test_customers.py
-│   │   ├── test_employees.py
-│   │   ├── test_models.py
-│   │   ├── test_organization_api_keys.py
-│   │   ├── test_organizations.py
-│   │   ├── test_summary_mining.py
-│   │   └── test_topics.py
-│   ├── urls.py
-│   ├── utils
-│   │   ├── __init__.py
-│   │   ├── fallback_prompt.py
-│   │   ├── paginators.py
-│   │   └── summary_mining.py
-│   └── views.py
-├── call_processing
-│   ├── __init__.py
-│   ├── admin.py
-│   ├── apps.py
-│   ├── authentication.py
-│   ├── authentication_extensions.py
-│   ├── consumers.py
-│   ├── migrations
-│   │   ├── __init__.py
-│   ├── models.py
-│   ├── permissions.py
-│   ├── serializers.py
-│   ├── tests
-│   │   ├── __init__.py
-│   │   ├── conftest.py
-│   │   ├── test_call_processing.py
-│   │   ├── test_process.py
-│   │   ├── test_queue.py
-│   │   └── test_smoke_remote.py
-│   ├── tests.py
-│   ├── urls.py
-│   ├── utils
-│   │   ├── __init__.py
-│   │   ├── call_processing.py
-│   │   ├── db_handler.py
-│   │   ├── fallback_prompt.py
-│   │   └── gcs_utils.py
-│   └── views.py
-├── data
-│   └── sample_recording.wav
-├── docker-compose.yml
-├── firebase-emulator
-├── genesys_audiohook_emulator
-├── manage.py
-├── poetry.lock
-├── pyproject.toml
-├── pytest.ini
-├── run-compose.sh
-├── static
-└── tell_me
-    ├── __init__.py
-    ├── asgi.py
-    ├── settings.py
-    ├── urls.py
-    └── wsgi.py
-
-
+### call_miner 
+Aimed at serving the DBs data to a frontend. Serves as a REST API providing call data to relevant users. This app's structure revolves around its data model, which consists of:
+  - **Organizations:** Entities using the product, each serving as an isolated container for DB access
+  - **Topics:** Semantic labels associated to a call
+  - **Customers:** Represents an organization's customer involved in a call recording
+  - **User:** An account with access to the application
+  - **Employee:** A user associated to a specific Organization
+  - **Analysts and Agents:** Types of employee instances, with different functions. Analysts are user accounts that can access the DB but are not involved in its data. Agents, on the other hand, appear as participants in Conversations.
+  - **Conversations:** Data point representing a call recording, associated to an agent, a customer, and zero or many topics 
+### call_processing
+Contains the processing routine through which every call goes. A bit more about this routine:
+  1. Calls are transcribed 
+  2. Using AI, calls are associated to one or more relevant topics based on the call content and the topic descriptions. 
+  3. Also using AI, we obtain the probability of customer churn in a scale from 1 to 5, 1 being a customer who will certainly never interact with the company again, and 5 being a customer that is completely satisfied with the product or service in question. This is a proxy of the call sentiment. 
+  4. With AI, a summary of each call is produced 
+  5. Furthermore, call recordings of all the calls belonging to a single topic are aggregated and analyzed, to obtain the following:
+     - Reasons for Calling 
+     - Stages of the Customer Journey 
+     - Call Resolution Rates
+     - Churn Potential
+     - Causes for Dissatisfaction
+     - Causes for Engagement
+     - Suggested Actions
