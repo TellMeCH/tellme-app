@@ -268,7 +268,7 @@ LOGGING = {
         'django': {
             'handlers': ['console', 'sentry'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
         },
     },
 }

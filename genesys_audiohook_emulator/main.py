@@ -319,6 +319,7 @@ class AudioHookEmulator:
         4) send close, wait
         5) done
         """
+        print(f'Attempting the connection to {self.ws_url}')
         async with websockets.connect(self.ws_url, additional_headers={'X-API-KEY': API_KEY}) as ws:
             # Create tasks: read messages & ping
             reader_task = asyncio.create_task(self.reader_loop(ws))
@@ -372,12 +373,6 @@ class AudioHookEmulator:
             print("Session complete.")
 
 
-def main():
-    loop = asyncio.get_event_loop()
-    emulator = AudioHookEmulator(WEBSOCKET_URL)
-    loop.run_until_complete(emulator.run_session())
-    loop.close()
-
-
 if __name__ == "__main__":
-    main()
+    emulator = AudioHookEmulator(WEBSOCKET_URL)
+    asyncio.run(emulator.run_session())
