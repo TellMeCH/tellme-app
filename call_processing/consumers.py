@@ -30,6 +30,7 @@ class AudioHookConsumer(WebsocketConsumer):
         super().__init__(*args, **kwargs)
         self.org = None
         self.customer_id = None
+        self.agent_id = None
         self.connection_timestamp = None
         self.server_seq = 0         # Outgoing seq for messages the app sends
         self.last_client_seq = 0    # The last seq received from client (Genesys)
@@ -105,6 +106,9 @@ class AudioHookConsumer(WebsocketConsumer):
 
         # Extract the customer ID from the message
         self.customer_id = message['parameters'].get('participant', {'id': None}).get('id')
+
+        # Extract the agent ID from the message (Fake, to see how Genesys provides this)
+        self.agent_id = message['parameters'].get('agent', {'id': None}).get('id')
 
         # Of the offered media, select the configuration that offers 2 channels. If no such option exist, select
         # the first configuration in the offered media
@@ -265,7 +269,7 @@ class AudioHookConsumer(WebsocketConsumer):
             )
 
             # Upload to GCS
-            blob_name = f"{self.org.id}/{self.customer_id}_{self.connection_timestamp.isoformat()}.wav"
+            blob_name = f"{self.org.id}/{self.customer_id}_{self.agent_id}_{self.connection_timestamp.isoformat()}.wav"
             gcs_uri = gcs_utils.upload_to_gcs(wav_data, blob_name)
             logger.info(f"Uploaded local file to GCS ({gcs_uri})")
 
@@ -273,7 +277,7 @@ class AudioHookConsumer(WebsocketConsumer):
             process_url = settings.CALL_PROCESSING_ENDPOINT
             logger.info(f'Creating an HTTP Task Targeting: {process_url}')
             tasks_utils.create_task(
-                process_url, blob_name, self.org.id, self.customer_id, 8, self.connection_timestamp, logger
+                process_url, blob_name, self.org.id, self.customer_id, self.agent_id, self.connection_timestamp, logger
             )
 
         # Remove local file

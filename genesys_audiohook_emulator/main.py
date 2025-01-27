@@ -19,6 +19,7 @@ SAMPLE_RATE = 8000
 WEBSOCKET_URL = os.environ.get("AUDIOHOOK_WS_URL")
 WAV_FILE = os.environ.get("WAV_FILE")
 API_KEY = os.environ.get('API_KEY')
+AGENT_ID = os.environ.get('AGENT_ID')
 
 
 def read_and_convert_lin_to_mulaw(file_path, chunk_ms=100):
@@ -190,6 +191,7 @@ class AudioHookEmulator:
                 "aniName": ANI_NAME,
                 "dnis": DNIS
             },
+            "agent": {"id": AGENT_ID},
             "media": [
                 {
                     "type": "audio",
@@ -371,25 +373,9 @@ class AudioHookEmulator:
 
 
 def main():
-    """
-    Simple loop that waits for user input. Press ENTER to start streaming or 'q' to quit.
-    """
-    print("Genesys AudioHook Emulator")
-    print("Press ENTER to start streaming or 'q' + ENTER to quit.")
-
     loop = asyncio.get_event_loop()
-
-    while True:
-        user_input = input("> ")
-        if user_input.strip().lower() == 'q':
-            print("Quitting.")
-            break
-
-        emulator = AudioHookEmulator(WEBSOCKET_URL)
-        loop.run_until_complete(emulator.run_session())
-        if emulator.close_reason:
-            print("Session ended with a fatal error. (You can try again.)")
-
+    emulator = AudioHookEmulator(WEBSOCKET_URL)
+    loop.run_until_complete(emulator.run_session())
     loop.close()
 
 
