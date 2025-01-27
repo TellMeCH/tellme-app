@@ -56,6 +56,7 @@ class QueueRecordingView(APIView):
 
                 # Create a task to process this recording
                 process_url = settings.CALL_PROCESSING_ENDPOINT
+                logger.info(f'Creating an HTTP Task Targeting: {process_url}')
                 create_task(process_url, file_name, organization_id, customer_id, agent_id, timestamp, logger)
                 return Response(
                     {"message": "File queued for processing.", "gcs_uri": gcs_uri}, status=status.HTTP_202_ACCEPTED

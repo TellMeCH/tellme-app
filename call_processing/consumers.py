@@ -266,6 +266,7 @@ class AudioHookConsumer(WebsocketConsumer):
 
             # Create a Cloud Task
             process_url = settings.CALL_PROCESSING_ENDPOINT
+            logger.info(f'Creating an HTTP Task Targeting: {process_url}')
             tasks_utils.create_task(
                 process_url, blob_name, self.org.id, self.customer_id, 8, self.connection_timestamp, logger
             )
