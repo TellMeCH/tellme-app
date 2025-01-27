@@ -155,6 +155,7 @@ jobs:
             GS_BUCKET_NAME=${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
             CLOUD_TASKS_QUEUE_NAME=${{ vars.CLOUD_TASKS_QUEUE_NAME }}
             CALL_PROCESSING_BUCKET=${{ vars.CALL_PROCESSING_BUCKET }}
+            CALL_PROCESSING_ENDPOINT=None
 
       - name: Determine Cloud Run URL
         id: extract_urls
@@ -163,12 +164,13 @@ jobs:
           CLOUD_RUN_URLS="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
           CLOUD_RUN_URLS="${CLOUD_RUN_URLS},${{ steps.deploy.outputs.url }}"
           echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
+          echo "base_url=https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app" >> $GITHUB_OUTPUT
 
       - name: Update the Application to use those Service URLs
         run: |
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }}"
+            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }},CALL_PROCESSING_ENDPOINT=${{ steps.extract_urls.outputs.base_url }}/processing/v1/process/"
 
   smoke_test:
     environment:
@@ -213,8 +215,8 @@ jobs:
         id: extract_urls
         run: |
           PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
-          CLOUD_RUN_URLS="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
-          echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
+          CLOUD_RUN_URL="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
+          echo "url=$CLOUD_RUN_URL" >> $GITHUB_OUTPUT
 
       - name: Build Audiohook emulator image
         run: |
@@ -238,6 +240,7 @@ jobs:
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
-          CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.urls }}
+          CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.url }}
+          CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}/processing/v1/process/
         run: |
           poetry run pytest -v ./call_processing/tests/test_smoke_remote.py
