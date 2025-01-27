@@ -55,12 +55,7 @@ class QueueRecordingView(APIView):
                 gcs_uri = upload_to_gcs(file_obj, file_name)
 
                 # Create a task to process this recording
-                if settings.CALL_PROCESSING_ENDPOINT is None:
-                    process_endpoint_path = reverse('process')
-                    process_url = request.build_absolute_uri(process_endpoint_path)
-                else:
-                    process_url = settings.CALL_PROCESSING_ENDPOINT
-
+                process_url = settings.CALL_PROCESSING_ENDPOINT
                 create_task(process_url, file_name, organization_id, customer_id, agent_id, timestamp, logger)
                 return Response(
                     {"message": "File queued for processing.", "gcs_uri": gcs_uri}, status=status.HTTP_202_ACCEPTED
