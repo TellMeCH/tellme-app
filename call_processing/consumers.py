@@ -82,7 +82,7 @@ class AudioHookConsumer(WebsocketConsumer):
         self.accept()
         try:
             self.org = self.authenticate_api_key_from_scope_headers(self.scope["headers"])
-            logger.info(f"Authenticated Organization: {self.org}")
+            logger.info(f"Authenticated Organization: {self.org.id}")
         except exceptions.AuthenticationFailed as e:
             logger.warning(f"Authentication failed: {e}")
             self.send_error('unauthorized', str(e))
