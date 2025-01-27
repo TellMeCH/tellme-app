@@ -171,7 +171,7 @@ jobs:
         run: |
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }},CALL_PROCESSING_ENDPOINT=${{ steps.extract_urls.outputs.base_url }}/processing/v1/process/"
+            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }},CALL_PROCESSING_ENDPOINT=${{ steps.extract_urls.outputs.base_url }}${{ vars.CALL_PROCESSING_ADDRESS }}"
 
   smoke_test:
     environment:
@@ -239,6 +239,7 @@ jobs:
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
           CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}${{ vars.CALL_PROCESSING_ADDRESS }}
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
           CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.url }}
