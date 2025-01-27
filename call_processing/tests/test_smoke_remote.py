@@ -323,18 +323,22 @@ class TestSmokeTestCloudRunWithLogs:
         audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
         trigger_timestamp = timezone.now().isoformat()
         emulator_image = "genesys_audiohook_emulator:latest"
-        docker_cmd = [
-            "docker", "run", "-i", "--rm",
-            "-v", f"{os.getcwd()}/data:/app/data",
-            "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
-            "-e", f"WAV_FILE=/app/data/sample_recording.wav",
-            "-e", f"API_KEY={self.__api_key_plain}",
-            emulator_image
-        ]
+        docker_cmd = ["docker", "run", "-i", "--rm", "-v", f"{os.getcwd()}/data:/app/data", emulator_image]
 
         logger.info(f"Running AudioHook emulator Docker cmd: {docker_cmd}")
         try:
-            subprocess.run(docker_cmd, check=True, capture_output=True, text=True, input="\n")
+            subprocess.run(
+                docker_cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                env={
+                    'AUDIOHOOK_WS_URL': audiohook_ws_url,
+                    'WAV_FILE': '/app/data/sample_recording.wav',
+                    'API_KEY': self.__api_key_plain,
+                    'AGENT_ID': self.agent_id
+                }
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"Emulator container failed:\n{e.stdout}\n{e.stderr}")
             pytest.fail("Audiohook Emulator container exited with an error.")
