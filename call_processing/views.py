@@ -1,5 +1,3 @@
-import json
-import grpc
 import logging
 import datetime
 from rest_framework.views import APIView
