@@ -171,7 +171,7 @@ class AudioHookConsumer(WebsocketConsumer):
 
         # Now finalize
         self.finalize_recording()
-        self.disconnect(reason)
+        self.disconnect(200)
         self.close()
 
     def handle_protocol_message(self, raw_text):
@@ -183,7 +183,7 @@ class AudioHookConsumer(WebsocketConsumer):
             message = json.loads(raw_text)
         except json.JSONDecodeError:
             logger.warning("Invalid JSON from client.")
-            self.send_error(400, "Invalid JSON")
+            self.send_error("error", "Invalid JSON")
             return
 
         msg_type = message.get("type")
@@ -192,7 +192,7 @@ class AudioHookConsumer(WebsocketConsumer):
         # Check that seq is equal to last_client_seq + 1
         if not isinstance(seq, int) or seq != self.last_client_seq + 1:
             logger.error(f"Out-of-order seq: got={seq}, expected={self.last_client_seq + 1}")
-            self.send_error(409, "Out-of-order seq")
+            self.send_error("error", "Out-of-order seq")
             return
         self.last_client_seq = seq
 
@@ -217,7 +217,7 @@ class AudioHookConsumer(WebsocketConsumer):
 
                 if self.error_retries > self.MAXIMUM_ERROR_RETRIES:
                     self.finalize_recording()
-                    self.disconnect('error')
+                    self.disconnect(400)
                     self.close()
 
     def handle_audio_frame(self, data: bytes):
