@@ -336,7 +336,7 @@ class TestSmokeTestCloudRunWithLogs:
                     'AUDIOHOOK_WS_URL': audiohook_ws_url,
                     'WAV_FILE': '/app/data/sample_recording.wav',
                     'API_KEY': self.__api_key_plain,
-                    'AGENT_ID': self.agent_id
+                    'AGENT_ID': str(self.agent_id)
                 }
             )
         except subprocess.CalledProcessError as e:
