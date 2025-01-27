@@ -171,7 +171,7 @@ jobs:
         run: |
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars CLOUDRUN_SERVICE_URLS="${{ steps.extract_urls.outputs.urls }}"
+            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }}"
 
       - name: Update the Application to use the correct Call Processing Endpoint
         run: |
