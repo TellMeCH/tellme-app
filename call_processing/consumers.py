@@ -8,7 +8,7 @@ from channels.generic.websocket import WebsocketConsumer
 from rest_framework import exceptions
 from django.conf import settings
 from django.utils import timezone
-from call_miner.models import OrganizationAPIKey
+from call_miner.models import OrganizationAPIKey, Organization
 from call_processing.utils import gcs_utils, audio_utils, tasks_utils
 
 logger = logging.getLogger('django')
@@ -261,6 +261,9 @@ class AudioHookConsumer(WebsocketConsumer):
             return
 
         if not self.error_close and size_bytes > 0:
+            # Potentially might have to run
+            # agent_valid, validity_message = check_agent_validity(agent_id, organization_id, timestamp)
+
             # Encode as WAV with linear PCM and proper headers
             wav_data = audio_utils.decode_mulaw_file_to_wav(
                 self.temp_file_path,
@@ -292,7 +295,7 @@ class AudioHookConsumer(WebsocketConsumer):
             "version": "2",
             "type": "disconnect",
             "seq": self.increment_server_seq(),
-            "serverseq": self.last_client_seq,
+            "clientseq": self.last_client_seq,
             "id": self.session_id or "",
             "parameters": {
                 "reason": reason,
