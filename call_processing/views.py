@@ -1,19 +1,14 @@
-import json
-import grpc
 import logging
 import datetime
-from google.cloud import tasks_v2
-from google.protobuf import timestamp_pb2
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
-from django.urls import reverse
 from rest_framework.permissions import IsAuthenticated
 from call_processing.serializers import QueueRecordingSerializer, ProcessRecordingSerializer
 from call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
 from call_processing.permissions import IsAuthenticatedOrganization
-from call_processing.utils.gcs_utils import upload_to_gcs, download_from_gcs
+from call_processing.utils import gcs_utils, tasks_utils
 from call_processing.utils.call_processing import CallProcessingPipeline
 from call_processing.utils.db_handler import check_agent_validity, create_conversation
 
@@ -51,56 +46,14 @@ class QueueRecordingView(APIView):
 
             if agent_valid:
                 # Upload to GCS
-                gcs_uri = upload_to_gcs(file_obj, file_name)
+                gcs_uri = gcs_utils.upload_to_gcs(file_obj, file_name)
 
                 # Create a task to process this recording
-                if settings.CALL_PROCESSING_ENDPOINT is None:
-                    process_endpoint_path = reverse('process')
-                    process_url = request.build_absolute_uri(process_endpoint_path)
-                else:
-                    process_url = settings.CALL_PROCESSING_ENDPOINT
-                payload = {
-                    "file_name": file_name,
-                    "organization_id": organization_id,
-                    "customer_id": customer_id,
-                    "agent_id": agent_id,
-                    "timestamp": timestamp.isoformat()
-                }
-                task = {
-                    "http_request": {
-                        "http_method": tasks_v2.HttpMethod.POST,
-                        "url": process_url,
-                        "headers": {
-                            "Content-Type": "application/json",
-                            "Authorization": f"Token {settings.PROCESSING_PIPELINE_KEY}"
-                        },
-                        "body": json.dumps(payload).encode()
-                    }
-                }
-                # Specify the task schedule time
-                timestamp = timestamp_pb2.Timestamp()
-                timestamp.FromDatetime(datetime.datetime.now(datetime.UTC))
-                task['schedule_time'] = timestamp
-
-                # Create a Cloud Task Client, using the Cloud Tasks emulator when necessary
-                if settings.TASKS_EMULATOR_ADDRESS:
-                    # Create a gRPC channel to the local emulator
-                    channel = grpc.insecure_channel(settings.TASKS_EMULATOR_ADDRESS)
-                    transport = tasks_v2.services.cloud_tasks.transports.CloudTasksGrpcTransport(channel=channel)
-                    client = tasks_v2.CloudTasksClient(transport=transport)
-                else:
-                    # Use the default CloudTasksClient configuration
-                    client = tasks_v2.CloudTasksClient()
-
-                # Create the task in its parent
-                parent = client.queue_path(
-                    settings.GOOGLE_CLOUD_PROJECT,
-                    settings.REGION,
-                    settings.CLOUD_TASKS_QUEUE_NAME
+                process_url = settings.CALL_PROCESSING_ENDPOINT
+                logger.info(f'Creating an HTTP Task Targeting: {process_url}')
+                tasks_utils.create_task(
+                    process_url, file_name, organization_id, customer_id, agent_id, timestamp, logger
                 )
-                logger.info(f'Creating task in queue with parent {parent}')
-                _ = client.create_task(parent=parent, task=task)
-                logger.info(f'Created task in {settings.CLOUD_TASKS_QUEUE_NAME}')
                 return Response(
                     {"message": "File queued for processing.", "gcs_uri": gcs_uri}, status=status.HTTP_202_ACCEPTED
                 )
@@ -135,7 +88,7 @@ class ProcessRecordingView(APIView):
         timestamp = serializer.validated_data.get("timestamp")
 
         # Download file from GCS
-        file_data = download_from_gcs(file_name)
+        file_data = gcs_utils.download_from_gcs(file_name)
 
         if not file_data:
             return Response(

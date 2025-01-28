@@ -27,4 +27,6 @@ COPY . /app/
 
 EXPOSE 8080
 
-CMD ["gunicorn", "tell_me.wsgi:application", "--bind", "0.0.0.0:8080", "--timeout", "1200"]
+ENV DJANGO_SETTINGS_MODULE=tell_me.settings
+
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8080", "tell_me.asgi:application"]

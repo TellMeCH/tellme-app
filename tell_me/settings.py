@@ -68,6 +68,7 @@ else:
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -110,6 +111,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'tell_me.wsgi.application'
+ASGI_APPLICATION = "tell_me.asgi.application"
 
 
 # Database
@@ -142,7 +144,7 @@ if os.getenv("USE_CLOUD_SQL_AUTH_PROXY", None):
 
 # Processing pipeline
 CLOUD_TASKS_QUEUE_NAME = env('CLOUD_TASKS_QUEUE_NAME')
-CALL_PROCESSING_ENDPOINT = env('CALL_PROCESSING_ENDPOINT', default=None)
+CALL_PROCESSING_ENDPOINT = env('CALL_PROCESSING_ENDPOINT')
 TASKS_EMULATOR_ADDRESS = env('TASKS_EMULATOR_ADDRESS', default=None)
 CALL_PROCESSING_BUCKET = env('CALL_PROCESSING_BUCKET')
 PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
@@ -266,7 +268,7 @@ LOGGING = {
         'django': {
             'handlers': ['console', 'sentry'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
         },
     },
 }

@@ -5,6 +5,7 @@ import time
 import pytest
 import requests
 import logging
+import subprocess
 import firebase_admin
 from firebase_admin import auth
 from io import BytesIO
@@ -29,6 +30,8 @@ class TestSmokeTestCloudRunWithLogs:
     agent_name = "testagent-smoke"
     agent_email = "testagent-smoke@example.com"
     customer_id = "smoke_customer_123"
+    uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+    timestamp_pattern = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00'
 
     @pytest.fixture
     def firebase_app(self):
@@ -118,8 +121,17 @@ class TestSmokeTestCloudRunWithLogs:
 
         if wait_time >= timeout:
             raise TimeoutError(f'Could not retrieve logs within {timeout} seconds')
-        logs = [entry.to_api_repr() for entry in self.logging_client.list_entries(filter_=retrieval_query)]
+        logs = [entry.to_api_repr() for entry in self.logging_client.list_entries(filter_=retrieval_query, )]
         return logs
+
+    def generate_logs_filter(self, trigger_timestamp):
+        return f"""
+            resource.type = "cloud_run_revision"
+            resource.labels.service_name = "{self.service_name}"
+            resource.labels.location = "{settings.REGION}"
+            severity >= DEFAULT
+            timestamp >= "{trigger_timestamp}"
+        """
 
     @staticmethod
     def parse_gcs_uri(gcs_uri: str):
@@ -139,6 +151,7 @@ class TestSmokeTestCloudRunWithLogs:
         if not self.service_name:
             raise EnvironmentError("SERVICE_NAME environment variable not set")
 
+        # Firebase API Key
         self.firebase_api_key = os.getenv("FIREBASE_WEB_API_KEY")
         if not self.firebase_api_key:
             client = secretmanager.SecretManagerServiceClient()
@@ -193,7 +206,7 @@ class TestSmokeTestCloudRunWithLogs:
         )
         resp.raise_for_status()
         apikey_json = resp.json()
-        self.api_key_plain = apikey_json["plain_key"]
+        self.__api_key_plain = apikey_json["plain_key"]
         logger.info(f"Created Org API Key {apikey_json['name']}")
 
         # Create Agent via the Employees endpoint
@@ -227,15 +240,17 @@ class TestSmokeTestCloudRunWithLogs:
             self.sample_file = BytesIO(f.read())
             self.sample_file.name = "sample_recording.wav"
 
-    def test_smoke_with_logs(self):
-        # Trigger the /queue endpoint, using X-API-KEY
+    def test_smoke_post_with_logs(self):
+        """
+        Trigger the /queue endpoint, using X-API-KEY
+        """
         queue_url = f"{self.cloud_run_host}/processing/v1/queue/"
-        self.trigger_timestamp = timezone.now().isoformat()
+        trigger_timestamp = timezone.now().isoformat()
 
         data = {
             "customer_id": self.customer_id,
             "agent_id": self.agent_id,
-            "timestamp": self.trigger_timestamp
+            "timestamp": trigger_timestamp
         }
         files = {"file": (self.sample_file.name, self.sample_file, "audio/wav")}
 
@@ -243,7 +258,7 @@ class TestSmokeTestCloudRunWithLogs:
             queue_url,
             data=data,
             files=files,
-            headers={"Authorization": f"X-API-KEY {self.api_key_plain}"}
+            headers={"Authorization": f"X-API-KEY {self.__api_key_plain}"}
         )
         assert response.status_code == 202, f"Unexpected status code: {response.status_code}"
         response_data = response.json()
@@ -251,13 +266,7 @@ class TestSmokeTestCloudRunWithLogs:
         self.uploaded_gcs_uri = response_data["gcs_uri"]
 
         # Retrieve logs for /queue and /process
-        log_filter = f"""
-            resource.type = "cloud_run_revision"
-            resource.labels.service_name = "{self.service_name}"
-            resource.labels.location = "{settings.REGION}"
-            severity >= DEFAULT
-            timestamp >= "{self.trigger_timestamp}"
-        """
+        log_filter = self.generate_logs_filter(trigger_timestamp)
         waiting_filter = log_filter + '\ntextPayload =~ ".*Processed.*"'
         logs = self.retrieve_logs_with_timeout(
             retrieval_query=log_filter,
@@ -272,14 +281,17 @@ class TestSmokeTestCloudRunWithLogs:
             r"^Execution Time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$",
             r"^Created: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+00:00$",
             rf"^Organization: {self.org_id}$",
-            rf"^File: {self.org_id}/{self.customer_id}_{self.agent_id}_\d{{4}}-\d{{2}}-\d{{2}}T\d{{2}}:\d{{2}}:\d{{2}}\.\d{{6}}\+00:00\.wav$",
+            rf"^File: {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}\.wav$",
             rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.CLOUD_TASKS_QUEUE_NAME}$",
             rf"^Created task in {settings.CLOUD_TASKS_QUEUE_NAME}$",
-            rf"^Processing file {self.org_id}/{self.customer_id}_{self.agent_id}_\d{{4}}-\d{{2}}-\d{{2}}T\d{{2}}:\d{{2}}:\d{{2}}\.\d{{6}}\+00:00\.wav, size \d+ bytes\.$",
-            rf"^Processed file {self.org_id}/{self.customer_id}_{self.agent_id}_\d{{4}}-\d{{2}}-\d{{2}}T\d{{2}}:\d{{2}}:\d{{2}}\.\d{{6}}\+00:00\.wav, required \d+ seconds$"
+            rf"^Processing file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, size \d+ bytes\.$",
+            rf"^Processed file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, required \d+ seconds$"
         ]
         for pattern in expected_patterns:
-            assert any(re.match(pattern, line) for line in text_logs), f"Could not find expected pattern {pattern} in execution logs"
+            assert (
+                any(re.match(pattern, line) for line in text_logs),
+                f"Could not find expected pattern {pattern} in execution logs"
+            )
 
         # Verify conversation creation with a GET call
         resp = requests.get(
@@ -296,6 +308,99 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         customer = resp.json()
         assert customer['external_id'] == self.customer_id
+
+        self.conversation_url = conversations[0]['url']
+        logger.info(f"Verified conversation creation: {conversations}")
+
+        # Check Cloud Tasks creation, verifying the payload contains the org_id & agent_id
+        client = tasks_v2.CloudTasksClient()
+        parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.CLOUD_TASKS_QUEUE_NAME)
+        tasks_list = list(client.list_tasks(parent=parent))
+
+        # Iterate over existing task and identify those that are test-related. Check that none remain
+        test_tasks = []
+        for task in tasks_list:
+            if task.http_request.url == f"{self.cloud_run_host}/processing/v1/process/":
+                test_tasks.append(task)
+        assert len(test_tasks) == 0, f"Expected 1 task in queue, found {len(test_tasks)}."
+
+    def test_smoke_audiohook_with_logs(self):
+        """
+        Trigger the /process endpoint, this time using the Audiohook emulator
+        """
+        audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
+        trigger_timestamp = timezone.now().isoformat()
+        emulator_image = "genesys_audiohook_emulator:latest"
+        docker_cmd = [
+            "docker", "run", "-i", "--rm",
+            "-v", f"{os.getcwd()}/data:/app/data",
+            "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
+            "-e", f"WAV_FILE=/app/data/sample_recording.wav",
+            "-e", f"API_KEY={self.__api_key_plain}",
+            "-e", f"AGENT_ID={self.agent_id}",
+            emulator_image
+        ]
+
+        logger.info(f"Running AudioHook emulator Docker cmd")
+        try:
+            subprocess.run(
+                docker_cmd,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Emulator container failed:\n{e.stdout}\n{e.stderr}")
+            pytest.fail("Audiohook Emulator container exited with an error.")
+
+        logger.info("Audiohook emulator has finished streaming audio.")
+
+        # Retrieve logs for /queue and /process
+        log_filter = f"""
+            resource.type = "cloud_run_revision"
+            resource.labels.service_name = "{self.service_name}"
+            resource.labels.location = "{settings.REGION}"
+            severity >= DEFAULT
+            timestamp >= "{trigger_timestamp}"
+        """
+        waiting_filter = log_filter + '\ntextPayload =~ ".*Processed.*"'
+        logs = self.retrieve_logs_with_timeout(
+            retrieval_query=log_filter,
+            waiting_query=waiting_filter,
+            timeout=600
+        )
+        assert logs is not None, "No logs retrieved recording processing"
+        text_logs = [log['textPayload'] for log in logs if 'textPayload' in log]
+
+        # Verify produced logs
+        expected_patterns = [
+            rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.CLOUD_TASKS_QUEUE_NAME}$",
+            rf"^Created task in {settings.CLOUD_TASKS_QUEUE_NAME}$",
+            rf"^Processing file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav, size \d+ bytes\.$",
+            rf"^Processed file {self.org_id}/{self.uuid_pattern}__{self.agent_id}_{self.timestamp_pattern}\.wav, required \d+ seconds$"
+        ]
+        for pattern in expected_patterns:
+            assert (
+                any(re.match(pattern, line) for line in text_logs),
+                f"Could not find expected pattern {pattern} in execution logs"
+            )
+
+        # Verify conversation creation with a GET call
+        resp = requests.get(
+            f"{self.cloud_run_host}/api/v1/conversations/",
+            headers=self.superuser_headers
+        )
+        resp.raise_for_status()
+        conversations = resp.json()["results"]
+        assert len(conversations) == 1, f"Expected 1 conversation, found {len(conversations)}."
+        assert conversations[0]['agent_name'] == self.agent_name
+        self.uploaded_gcs_uri = f"gs://{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}/{conversations[0]['path']}"
+
+        # Check corresponding customer
+        resp = requests.get(conversations[0]['customer'], headers=self.superuser_headers)
+        resp.raise_for_status()
+        customer = resp.json()
+        assert re.match(self.uuid_pattern, customer['external_id']) is not None
 
         self.conversation_url = conversations[0]['url']
         logger.info(f"Verified conversation creation: {conversations}")

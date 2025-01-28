@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock, Mock
 import uuid
 from rest_framework.test import APIClient
-from call_miner.models import Organization, User, Agent, Topic, Customer
+from call_miner.models import Organization, User, Agent, Topic, Customer, OrganizationAPIKey
 
 
 @pytest.fixture(autouse=True)
@@ -38,8 +38,8 @@ def mock_gcs_upload_download():
     Mocks out the GCS upload_to_gcs and download_from_gcs functions.
     We'll patch them globally wherever they are imported.
     """
-    with (patch("call_processing.views.upload_to_gcs") as mock_upload,
-          patch("call_processing.views.download_from_gcs") as mock_download):
+    with (patch("call_processing.utils.gcs_utils.upload_to_gcs") as mock_upload,
+          patch("call_processing.utils.gcs_utils.download_from_gcs") as mock_download):
         mock_upload.return_value = "gs://mocked_bucket/mocked_blob"
         mock_download.return_value = b"FakeAudioBytes"
         yield mock_upload, mock_download
@@ -50,13 +50,9 @@ def mock_cloud_tasks():
     """
     Mocks out the Google Cloud Tasks create_task call.
     """
-    with patch("google.cloud.tasks_v2.CloudTasksClient") as mock_client_class:
-        mock_client_instance = MagicMock()
-        mock_client_class.return_value = mock_client_instance
-        mock_client_instance.create_task.return_value = {
-            "name": "projects/TEST/locations/TEST/queues/TEST/tasks/TEST"
-        }
-        yield mock_client_instance
+    with patch("call_processing.utils.tasks_utils.create_task") as mock_create:
+        mock_create.return_value = None
+        yield mock_create
 
 
 @pytest.fixture
@@ -179,7 +175,8 @@ def setup_db(db):
     agent = Agent.objects.create(id=123, organization=org, user=user)
     topic = Topic.objects.create(name="Sales", description="Sales topic", organization=org, is_active=True)
     customer = Customer.objects.create(organization=org, external_id='customer_id')
-    return org, agent, topic, customer
+    plain_key = OrganizationAPIKey.create_key(organization=org, name='Test Key')
+    return org, agent, topic, customer, plain_key
 
 
 @pytest.fixture(autouse=True)
