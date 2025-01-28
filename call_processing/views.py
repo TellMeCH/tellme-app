@@ -8,8 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from call_processing.serializers import QueueRecordingSerializer, ProcessRecordingSerializer
 from call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
 from call_processing.permissions import IsAuthenticatedOrganization
-from call_processing.utils.gcs_utils import upload_to_gcs, download_from_gcs
-from call_processing.utils.tasks_utils import create_task
+from call_processing.utils import gcs_utils, tasks_utils
 from call_processing.utils.call_processing import CallProcessingPipeline
 from call_processing.utils.db_handler import check_agent_validity, create_conversation
 
@@ -47,12 +46,14 @@ class QueueRecordingView(APIView):
 
             if agent_valid:
                 # Upload to GCS
-                gcs_uri = upload_to_gcs(file_obj, file_name)
+                gcs_uri = gcs_utils.upload_to_gcs(file_obj, file_name)
 
                 # Create a task to process this recording
                 process_url = settings.CALL_PROCESSING_ENDPOINT
                 logger.info(f'Creating an HTTP Task Targeting: {process_url}')
-                create_task(process_url, file_name, organization_id, customer_id, agent_id, timestamp, logger)
+                tasks_utils.create_task(
+                    process_url, file_name, organization_id, customer_id, agent_id, timestamp, logger
+                )
                 return Response(
                     {"message": "File queued for processing.", "gcs_uri": gcs_uri}, status=status.HTTP_202_ACCEPTED
                 )
@@ -87,7 +88,7 @@ class ProcessRecordingView(APIView):
         timestamp = serializer.validated_data.get("timestamp")
 
         # Download file from GCS
-        file_data = download_from_gcs(file_name)
+        file_data = gcs_utils.download_from_gcs(file_name)
 
         if not file_data:
             return Response(
