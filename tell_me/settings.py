@@ -78,11 +78,13 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_spectacular',
     'storages',
+    'corsheaders',
     'call_miner',
     'call_processing'
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -151,6 +153,12 @@ PROCESSING_PIPELINE_USER = f"processing.{TELLME_ENV}@tell-me.ch"
 PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
 DEEPGRAM_API_KEY = env('DEEPGRAM_API_KEY')
 OPENAI_API_KEY = env('OPENAI_API_KEY')
+
+# CORS Settings
+if env('FRONTEND_PATH') == '*':
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS = [env('FRONTEND_PATH')]
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
