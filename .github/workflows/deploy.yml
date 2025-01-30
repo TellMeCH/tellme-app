@@ -29,6 +29,7 @@ jobs:
       SERVICE_NAME: ${{ vars.SERVICE_NAME }}
       CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
       CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+      FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
       CALL_PROCESSING_ENDPOINT: none
       USE_CLOUD_SQL_AUTH_PROXY: 1
       COLLECT_STATIC: false
@@ -156,6 +157,7 @@ jobs:
             GS_BUCKET_NAME=${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
             CLOUD_TASKS_QUEUE_NAME=${{ vars.CLOUD_TASKS_QUEUE_NAME }}
             CALL_PROCESSING_BUCKET=${{ vars.CALL_PROCESSING_BUCKET }}
+            FRONTEND_PATH=${{ secrets.FRONTEND_PATH }}
             CALL_PROCESSING_ENDPOINT=None
 
       - name: Determine Cloud Run URL
@@ -246,6 +248,7 @@ jobs:
           CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}${{ vars.CALL_PROCESSING_ADDRESS }}
+          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
           CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.url }}

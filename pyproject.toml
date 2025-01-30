@@ -27,6 +27,7 @@ tenacity = "^9.0.0"
 google-cloud-dlp = "^3.26.0"
 channels = "^4.2.0"
 daphne = "^4.1.2"
+django-cors-headers = "^4.6.0"
 
 
 [tool.poetry.group.dev.dependencies]
