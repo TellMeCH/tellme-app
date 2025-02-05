@@ -118,6 +118,32 @@ def mock_deepgram():
 
 
 @pytest.fixture
+def mock_groq():
+    """
+    Mocks out the Groq transcription calls (Groq).
+    """
+    with patch("groq.Groq") as mock_groq_class:
+        mock_groq_instance = MagicMock()
+        mock_groq_class.return_value = mock_groq_instance
+
+        # Define a mock response similar to what Groq would return
+        mock_groq_response = MagicMock()
+        # The mock "segments" array is analogous to the "verbose_json" format from Groq
+        mock_groq_response.segments = [
+            {"text": "Hello from Groq chunk 1."},
+            {"text": "This is second phrase from chunk 1."}
+        ]
+        # Groq also returns a .language and .duration attribute
+        mock_groq_response.language = "en"
+        mock_groq_response.duration = 10.0
+
+        # So groq.audio.transcriptions.create(...) will return `mock_groq_response`
+        mock_groq_instance.audio.transcriptions.create.return_value = mock_groq_response
+
+        yield mock_groq_instance
+
+
+@pytest.fixture
 def mock_openai():
     """
     Mocks out the OpenAI chat completion call.
