@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 from django.conf import settings
 import deepgram
+import groq
 import httpx
 from pydub import AudioSegment
 from langfuse import openai, Langfuse
@@ -12,11 +13,18 @@ from langfuse.decorators import observe, langfuse_context
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
 import google.cloud.dlp
 from call_miner.models import Topic
-from call_processing.utils.fallback_prompt import ENRICHMENT_PROMPT, PROMPT_CONFIG
+from call_processing.utils.fallback_prompt import (
+    DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
+)
 
-DEEPGRAM_COSTS = {  # A dictionary of transcription costs in dollars per second
+# Transcription costs in dollars per second
+DEEPGRAM_COSTS = {
     'whisper-medium': 0.00007,
     'whisper-large': 0.00008
+}
+GROQ_COSTS = {
+    'whisper-large-v3': 0.111 / 3600,
+    'whisper-large-v3-turbo': 0.04 / 3600
 }
 
 
@@ -26,22 +34,24 @@ class CallProcessingPipeline:
 
     Steps:
     1. Splits the recording into CHUNK_SIZE minute segments.
-    2. Transcribes each chunk with Deepgram.
+    2. Transcribes each chunk with Deepgram. If this fails, falls back to Groq
     3. Ensures consistency in detected language across chunks.
     4. Logs the entire process in Langfuse for observability.
 
     Attributes:
         REQUIRED_METADATA_FIELDS (list of str): Required fields in recording metadata
         CHUNK_SIZE (float): Duration of each audio chunk in minutes.
-        TRANSCRIPTION_MODEL_NAME (str): The name of the transcription model to use.
-        API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with the Deepgram or OpenAI API
-        API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with the Deepgram or OpenAI API
-        API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with the Deepgram or OpenAI API
+        TRANSCRIPTION_MODEL_NAME_DEEPGRAM (str): The name of the transcription model to use when using the Deepgram API.
+        TRANSCRIPTION_MODEL_NAME_GROQ (str): The name of the transcription model to use when using the Groq API.
+        API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with any API
+        API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with any API
+        API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with any API
         DLP_ENTITY_TYPES (list of str): List of entities to detect as sensitive information and redact
     """
     REQUIRED_METADATA_FIELDS: list[str] = ['file_name', 'organization_id', 'customer_id', 'agent_id', 'timestamp']
     CHUNK_SIZE: float = 5
-    TRANSCRIPTION_MODEL_NAME: str = 'whisper-medium'
+    TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
+    TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
     API_MAX_RETRIES: int = 5
     API_BASE_DELAY: float = 1.0
     API_BACKOFF_FACTOR: int = 2
@@ -49,23 +59,29 @@ class CallProcessingPipeline:
 
     def __init__(self) -> None:
         """
-        Initializes the pipeline by setting up the Deepgram client and transcription options, as well as the Open AI
-        client and prompt.
+        Initializes the pipeline by setting up the Deepgram client and transcription options, the Groq client, as well
+        as the Open AI client and prompt.
 
         Raises:
-            ValueError: If the DEEPGRAM_API_KEY or OPENAI_API_KEY is not set in the django settings.
+            ValueError: If the DEEPGRAM_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY is not set in the django settings.
         """
         # Deepgram
         if not hasattr(settings, 'DEEPGRAM_API_KEY') or not settings.DEEPGRAM_API_KEY:
             raise ValueError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY setting value.")
         self.deepgram = deepgram.DeepgramClient(settings.DEEPGRAM_API_KEY)
         self.transcription_options = deepgram.PrerecordedOptions(
-            model=self.TRANSCRIPTION_MODEL_NAME,
+            model=self.TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
             smart_format=True,
             detect_language=True,
             punctuate=True,
             diarize=True,
         )
+
+        # Groq
+        if not hasattr(settings, 'GROQ_API_KEY') or not settings.GROQ_API_KEY:
+            raise ValueError("Groq API key not found. Please set the OPENAI_API_KEY setting value.")
+        self.groq = groq.Groq(api_key=settings.GROQ_API_KEY)
+
         # OpenAI
         if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
             raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY setting value.")
@@ -73,7 +89,12 @@ class CallProcessingPipeline:
             openai.api_key = settings.OPENAI_API_KEY
         self.openai = openai.OpenAI()
 
-        # Prompt with Fallback
+        # Prompts with Fallback
+        self.diarization_prompt = Langfuse().get_prompt(
+            'call_diarization',
+            label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
+            fallback=DIARIZATION_PROMPT
+        )
         self.enrichment_prompt = Langfuse().get_prompt(
             'call_enrichment',
             label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
@@ -190,15 +211,39 @@ class CallProcessingPipeline:
 
         base_language = None
         full_transcript = ''
+        go_to_fallback = False
         for i, chunk in enumerate(recording_chunks):
-            chunk_transcript, chunk_language = self.transcribe_chunk(chunk)
-            if i == 0 or not full_transcript:
+            try:
+                chunk_transcript, chunk_language = self.transcribe_chunk_with_deepgram(chunk)
+            except (ValueError, httpx.HTTPError):
+                base_language = None
+                full_transcript = ''
+                go_to_fallback = True
+                break
+            if not full_transcript:
                 base_language = chunk_language
                 full_transcript = chunk_transcript
             else:
                 if base_language != chunk_language:
                     raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
                 full_transcript += '\n' + chunk_transcript
+
+        if go_to_fallback:
+            for i, chunk in enumerate(recording_chunks):
+                try:
+                    chunk_transcript, chunk_language = self.transcribe_chunk_with_groq(chunk)
+                except Exception as e:
+                    raise Exception(f'Could not proceed with fallback transcription method. Stack trace:\n{e}')
+                if not full_transcript:
+                    base_language = chunk_language
+                    full_transcript = chunk_transcript
+                else:
+                    if base_language != chunk_language:
+                        raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
+                    full_transcript += '\n' + chunk_transcript
+
+            # Lastly, apply diarization
+            full_transcript = self.diarize_transcript(full_transcript)
 
         if base_language is None:
             base_language = "unknown"
@@ -240,7 +285,7 @@ class CallProcessingPipeline:
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
     )
-    def transcribe_chunk(self, chunk_data: bytes) -> (str, str):
+    def transcribe_chunk_with_deepgram(self, chunk_data: bytes) -> (str, str):
         """
         Transcribes a single audio chunk using the Deepgram API, with exponential backoff on 429 responses.
 
@@ -267,26 +312,22 @@ class CallProcessingPipeline:
         response = None
         try:
             response = self.deepgram.listen.rest.v("1").transcribe_file(
-                payload, self.transcription_options, timeout=httpx.Timeout(600.0, connect=10.0)
+                payload, self.transcription_options, timeout=httpx.Timeout(self.CHUNK_SIZE * 60, connect=10.0)
             )
 
             transcript = response['results']['channels'][0]['alternatives'][0]['paragraphs']['transcript']
             transcript = transcript.replace("\n\n", "\n").strip()
             language = response['results']['channels'][0]['detected_language']
+            cost = DEEPGRAM_COSTS[self.TRANSCRIPTION_MODEL_NAME_DEEPGRAM] * response['metadata']['duration']
 
             # Update observation with results
             langfuse_context.update_current_observation(
                 end_time=datetime.now(),
                 input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response['metadata']['duration']},
                 output={"transcript_chunk_size": len(transcript), "language": language},
-                model=f'deepgram-{self.TRANSCRIPTION_MODEL_NAME}',
-                usage={
-                    'total': response['metadata']['duration'],
-                    'unit': 'SECONDS',
-                    'totalCost': DEEPGRAM_COSTS[self.TRANSCRIPTION_MODEL_NAME] * response['metadata']['duration']
-                }
+                model=f'deepgram-{self.TRANSCRIPTION_MODEL_NAME_DEEPGRAM}',
+                usage={'total': response['metadata']['duration'], 'unit': 'SECONDS', 'totalCost': cost}
             )
-
             return transcript, language
 
         except IndexError as e:
@@ -295,6 +336,99 @@ class CallProcessingPipeline:
         except httpx.HTTPStatusError as e:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
+
+    @observe(as_type="generation")
+    @retry(
+        reraise=True,
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
+        retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
+    )
+    def transcribe_chunk_with_groq(self, chunk_data: bytes) -> (str, str):
+        """
+        Transcribes a single audio chunk using the Groq Speech API, with exponential backoff on 429 responses.
+
+        Decorated with @observe() so each chunk call is a child observation under the main trace.
+        This allows you to associate each chunk call to Groq with a separate observation in Langfuse.
+
+        Args:
+            chunk_data (bytes): The raw binary data of the audio chunk.
+
+        Returns:
+            Tuple[str, str]: The transcript text and detected language for this chunk.
+
+        Raises:
+            httpx.HTTPError: If transcription fails after multiple retries.
+        """
+        langfuse_context.update_current_observation(
+            name="Chunk Transcription with Groq",
+            start_time=datetime.now(),
+        )
+
+        try:
+            response = self.groq.audio.transcriptions.create(
+              file=('recording_chunk.wav', chunk_data),
+              model=self.TRANSCRIPTION_MODEL_NAME_GROQ,
+              response_format="verbose_json",
+            )
+            transcript = '\n'.join([f"Speaker X: {phrase['text']}" for phrase in response.segments])
+            language = response.language
+
+            # Update observation with results
+            langfuse_context.update_current_observation(
+                end_time=datetime.now(),
+                input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response.duration},
+                output={"transcript_chunk_size": len(transcript), "language": language},
+                model=f'groq-{self.TRANSCRIPTION_MODEL_NAME_GROQ}',
+                usage={
+                    'total': response.duration,
+                    'unit': 'SECONDS',
+                    'totalCost': GROQ_COSTS[self.TRANSCRIPTION_MODEL_NAME_GROQ] * response.duration
+                }
+            )
+
+            return transcript, language
+
+        except httpx.HTTPStatusError as e:
+            langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
+            raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
+
+    @observe()
+    @retry(
+        reraise=True,
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
+        retry=retry_if_exception_type(httpx.HTTPError)
+    )
+    def diarize_transcript(self, transcript: str) -> str:
+        """
+        Call OpenAI to diarize the transcript, in case the transcription did not include this step
+
+        Args:
+            transcript (str): Call transcript from which to extract information
+
+        Returns:
+            str: Diarized transcript
+        """
+        # Prepare Prompt and Response Format
+        if self.diarization_prompt.is_fallback:
+            config_kwargs = DIARIZATION_CONFIG
+        else:
+            config_kwargs = {'langfuse_prompt': self.diarization_prompt}
+            config_kwargs.update(self.diarization_prompt.config)
+
+        langfuse_context.update_current_observation(
+            name="Transcript Diarization with OpenAI",
+            prompt=self.diarization_prompt
+        )
+        completion = self.openai.chat.completions.create(
+            messages=[
+                {"role": "system", "content": self.diarization_prompt},
+                {"role": "user", "content": f"This is the list of transcribed phrases:\n{transcript}"}
+            ],
+            **config_kwargs
+        )
+        return completion.choices[0].message.content
 
     @observe(as_type="generation")
     @retry(
@@ -373,7 +507,7 @@ class CallProcessingPipeline:
         # Prepare Prompt and Response Format
         system_message = self.enrichment_prompt.compile(topics_string=topic_data)
         if self.enrichment_prompt.is_fallback:
-            config_kwargs = PROMPT_CONFIG
+            config_kwargs = ENRICHMENT_CONFIG
         else:
             config_kwargs = {'langfuse_prompt': self.enrichment_prompt}
             config_kwargs.update(self.enrichment_prompt.config)
