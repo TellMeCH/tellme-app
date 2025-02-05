@@ -66,6 +66,7 @@ jobs:
           echo "TASKS_EMULATOR_ADDRESS=''" >> .env
           echo "CALL_PROCESSING_BUCKET=''" >> .env
           echo "DEEPGRAM_API_KEY=fake_key" >> .env
+          echo "GROQ_API_KEY=fake_key" >> .env
           echo "OPENAI_API_KEY=fake_key" >> .env
           echo "FRONTEND_PATH='*'" >> .env
 
