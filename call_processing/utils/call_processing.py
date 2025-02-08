@@ -10,6 +10,7 @@ import httpx
 from pydub import AudioSegment
 from langfuse import openai, Langfuse
 from langfuse.decorators import observe, langfuse_context
+from deepgram.clients.common.v1.errors import DeepgramApiError
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
 import google.cloud.dlp
 from call_miner.models import Topic
@@ -215,7 +216,7 @@ class CallProcessingPipeline:
         for i, chunk in enumerate(recording_chunks):
             try:
                 chunk_transcript, chunk_language = self.transcribe_chunk_with_deepgram(chunk)
-            except (ValueError, httpx.HTTPError):
+            except (ValueError, httpx.HTTPError, DeepgramApiError):
                 base_language = None
                 full_transcript = ''
                 go_to_fallback = True
@@ -283,7 +284,10 @@ class CallProcessingPipeline:
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
         stop=stop_after_attempt(API_MAX_RETRIES),
-        retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
+        retry=retry_if_exception(
+            lambda e: (isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429) or
+                      (isinstance(e, DeepgramApiError) and e.status == '429')
+        )
     )
     def transcribe_chunk_with_deepgram(self, chunk_data: bytes) -> (str, str):
         """
@@ -423,7 +427,7 @@ class CallProcessingPipeline:
         )
         completion = self.openai.chat.completions.create(
             messages=[
-                {"role": "system", "content": self.diarization_prompt},
+                {"role": "system", "content": self.diarization_prompt.prompt},
                 {"role": "user", "content": f"This is the list of transcribed phrases:\n{transcript}"}
             ],
             **config_kwargs
