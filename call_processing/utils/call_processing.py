@@ -7,12 +7,14 @@ from django.conf import settings
 import deepgram
 import groq
 import httpx
+import google.cloud.dlp
+from google import genai
+from google.genai import types
 from pydub import AudioSegment
 from langfuse import openai, Langfuse
 from langfuse.decorators import observe, langfuse_context
 from deepgram.clients.common.v1.errors import DeepgramApiError
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
-import google.cloud.dlp
 from call_miner.models import Topic
 from call_processing.utils.fallback_prompt import (
     DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
@@ -82,6 +84,9 @@ class CallProcessingPipeline:
         if not hasattr(settings, 'GROQ_API_KEY') or not settings.GROQ_API_KEY:
             raise ValueError("Groq API key not found. Please set the OPENAI_API_KEY setting value.")
         self.groq = groq.Groq(api_key=settings.GROQ_API_KEY)
+
+        # VertexAI
+        self.vertexai = genai.Client(vertexai=True, project=settings.GOOGLE_CLOUD_PROJECT, location='us-central1')
 
         # OpenAI
         if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
@@ -309,7 +314,7 @@ class CallProcessingPipeline:
 
         # Update Langfuse observation with input metadata
         langfuse_context.update_current_observation(
-            name="Chunk Transcription with Deepgram",
+            name="transcription_deepgram",
             start_time=datetime.now(),
         )
 
@@ -365,7 +370,7 @@ class CallProcessingPipeline:
             httpx.HTTPError: If transcription fails after multiple retries.
         """
         langfuse_context.update_current_observation(
-            name="Chunk Transcription with Groq",
+            name="transcription_groq",
             start_time=datetime.now(),
         )
 
@@ -397,7 +402,7 @@ class CallProcessingPipeline:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
 
-    @observe()
+    @observe(as_type="generation")
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
@@ -406,7 +411,7 @@ class CallProcessingPipeline:
     )
     def diarize_transcript(self, transcript: str) -> str:
         """
-        Call OpenAI to diarize the transcript, in case the transcription did not include this step
+        Call Gemini to diarize the transcript, in case the transcription did not include this step
 
         Args:
             transcript (str): Call transcript from which to extract information
@@ -421,18 +426,27 @@ class CallProcessingPipeline:
             config_kwargs = {'langfuse_prompt': self.diarization_prompt}
             config_kwargs.update(self.diarization_prompt.config)
 
+        response = self.vertexai.models.generate_content(
+            model=config_kwargs['model'],
+            contents=f"This is the list of transcribed phrases:\n{transcript}",
+            config=types.GenerateContentConfig(
+                system_instruction=self.diarization_prompt.prompt,
+                temperature=config_kwargs['temperature'],
+            ),
+        )
+
+        # Send observation data to Langfuse
         langfuse_context.update_current_observation(
-            name="Transcript Diarization with OpenAI",
-            prompt=self.diarization_prompt
+            name="diarization_vertexai",
+            prompt=self.diarization_prompt,
+            model=config_kwargs['model'],
+            usage={
+                "promptTokens": response.usage_metadata.prompt_token_count,
+                "completionTokens": response.usage_metadata.candidates_token_count,
+                "totalTokens": response.usage_metadata.total_token_count
+            }
         )
-        completion = self.openai.chat.completions.create(
-            messages=[
-                {"role": "system", "content": self.diarization_prompt.prompt},
-                {"role": "user", "content": f"This is the list of transcribed phrases:\n{transcript}"}
-            ],
-            **config_kwargs
-        )
-        return completion.choices[0].message.content
+        return response.candidates[0].content.parts[0].text
 
     @observe(as_type="generation")
     @retry(
@@ -453,7 +467,7 @@ class CallProcessingPipeline:
         """
         # Update Langfuse observation with input metadata
         langfuse_context.update_current_observation(
-            name="Redaction with Google DLP",
+            name="redaction_google_dlp",
             start_time=datetime.now(),
         )
 
@@ -517,7 +531,7 @@ class CallProcessingPipeline:
             config_kwargs.update(self.enrichment_prompt.config)
 
         langfuse_context.update_current_observation(
-            name="Recording Enrichment with OpenAI",
+            name="enrichment_openai",
             prompt=self.enrichment_prompt
         )
         completion = self.openai.chat.completions.create(

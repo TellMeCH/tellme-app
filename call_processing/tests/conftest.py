@@ -144,6 +144,42 @@ def mock_groq():
 
 
 @pytest.fixture
+def mock_vertexai():
+    """
+    Mocks out the google.genai.Client used in CallProcessingPipeline.
+    Specifically, it mocks the .models.generate_content call.
+    """
+    with patch("google.genai.Client") as mock_genai_client_class:
+        # Create a mock client instance returned by the constructor
+        mock_client_instance = MagicMock()
+        mock_genai_client_class.return_value = mock_client_instance
+
+        # Now mock the .models.generate_content(...) call
+        mock_gen_content = MagicMock()
+        # The structure we return should mimic the real Vertex AI (Gemini) response
+        mock_response = MagicMock()
+        mock_response.candidates = [
+            MagicMock(
+                content=MagicMock(
+                    parts=[MagicMock(text="Speaker 0: Diarized from Gemini\nSpeaker 1: Yes, indeed.")]
+                )
+            )
+        ]
+        mock_response.usage_metadata = MagicMock(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15
+        )
+        # When generate_content is called, return the mock_response
+        mock_gen_content.return_value = mock_response
+
+        # Attach the mock to the `.models.generate_content` on the client
+        mock_client_instance.models.generate_content = mock_gen_content
+
+        yield mock_gen_content
+
+
+@pytest.fixture
 def mock_openai():
     """
     Mocks out the OpenAI chat completion call.
@@ -230,6 +266,7 @@ def mock_langfuse():
 
         mock_prompt = MagicMock()
         mock_prompt.is_fallback = False
+        mock_prompt.config = {'model': None, 'temperature': 0}
         mock_lf_instance.get_prompt.return_value = mock_prompt
 
         yield mock_lf_instance
