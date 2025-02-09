@@ -6,7 +6,7 @@ from call_processing.utils.call_processing import CallProcessingPipeline
 @pytest.mark.django_db
 class TestCallProcessingPipeline:
     @pytest.fixture
-    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp):
+    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai):
         return CallProcessingPipeline()
 
     def test_pipeline_missing_metadata_field(self, pipeline):
@@ -149,7 +149,7 @@ class TestCallProcessingPipeline:
         assert "<agent>:" in result["transcript"] or "<customer>:" in result["transcript"]
 
     def test_fallback_transcription_if_deepgram_fails(
-        self, pipeline, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_pydub, mock_dlp
+        self, pipeline, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_pydub, mock_dlp, mock_vertexai
     ):
         """
         Ensure that if Deepgram fails on any chunk, the pipeline falls back to Groq
@@ -182,7 +182,8 @@ class TestCallProcessingPipeline:
         assert mock_groq.audio.transcriptions.create.call_count > 0
 
         # We expect 2 calls total: 1 for diarization, 1 for enrichment.
-        assert mock_openai.chat.completions.create.call_count == 2
+        assert mock_openai.chat.completions.create.call_count == 1
+        assert mock_vertexai.call_count == 1
 
         # Basic checks on the final enriched data
         assert "title" in result

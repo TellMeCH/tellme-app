@@ -19,7 +19,7 @@ DIARIZATION_PROMPT = """
 """
 
 DIARIZATION_CONFIG = {
-    "model": "gpt-4o",
+    "model": "gemini-2.0-flash-001",
     "temperature": 0.2
 }
 

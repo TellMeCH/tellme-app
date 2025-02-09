@@ -463,7 +463,7 @@ class Conversation(models.Model):
     Among its attributes, it contains the path to the call recording, the call date and time, the call duration,
     the call transcript, the call topics mentioned, and the call sentiment
     """
-    path = models.CharField(max_length=100)
+    path = models.CharField(max_length=500)
     date = models.DateTimeField()
     duration = models.FloatField()
     transcript = models.TextField()
