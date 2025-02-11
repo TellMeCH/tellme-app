@@ -9,7 +9,7 @@ import groq
 import httpx
 import google.cloud.dlp
 from google import genai
-from google.genai import types
+from google.genai import types, errors
 from pydub import AudioSegment
 from langfuse import openai, Langfuse
 from langfuse.decorators import observe, langfuse_context
@@ -56,7 +56,7 @@ class CallProcessingPipeline:
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
     TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
     API_MAX_RETRIES: int = 5
-    API_BASE_DELAY: float = 1.0
+    API_BASE_DELAY: float = 5.0
     API_BACKOFF_FACTOR: int = 2
     DLP_ENTITY_TYPES: list[str] = ["EMAIL_ADDRESS", "PERSON_NAME", "PHONE_NUMBER", "CREDIT_CARD_NUMBER", "LOCATION", "IBAN_CODE", "PASSPORT"]
 
@@ -407,7 +407,8 @@ class CallProcessingPipeline:
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
         stop=stop_after_attempt(API_MAX_RETRIES),
-        retry=retry_if_exception_type(httpx.HTTPError)
+        retry=retry_if_exception(lambda e: (isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429) or
+                                           (isinstance(e, errors.ClientError) and e.code == 429))
     )
     def diarize_transcript(self, transcript: str) -> str:
         """
