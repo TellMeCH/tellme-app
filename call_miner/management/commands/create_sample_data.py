@@ -753,7 +753,7 @@ class Command(BaseCommand):
 
         try:
             self.stdout.write('Setting the last 2 Sample Topics as Inactive')
-            time.sleep(10)
+            time.sleep(1)
             for i in range(8, 10):
                 topic = Topic.objects.get(name=TOPIC_DATA[i]['name'], organization=org)
                 topic.is_active = False

@@ -95,6 +95,11 @@ set +a
 # Exporting RUN_DB_SETUP
 export RUN_DB_SETUP
 
+# If re-setting the DB, delete all previous volumes
+if [[ "$RUN_DB_SETUP" == "true" ]]; then
+  docker compose down -v
+fi
+
 # Run docker-compose up --build
 docker-compose up --build
 
