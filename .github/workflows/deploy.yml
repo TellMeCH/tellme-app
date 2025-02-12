@@ -136,11 +136,11 @@ jobs:
           entry_point: export_from_langfuse
           memory: 1024M
           service_timeout: 300s
-          service_account: "${{ vars.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com"
-          build_service_account: "projects/${{ env.GOOGLE_CLOUD_PROJECT }}/serviceAccounts/${{ secrets.CICD_SERVICE_ACCOUNT }}"
+          service_account: "${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          build_service_account: "projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/${{ secrets.CICD_SERVICE_ACCOUNT }}"
           environment_variables: |-
             SETTINGS_NAME=${{ vars.SETTINGS_NAME }}
-            GOOGLE_CLOUD_PROJECT=${{ env.GOOGLE_CLOUD_PROJECT }}
+            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
             MONITORING_BUCKET=${{ vars.MONITORING_BUCKET }}
 
       - name: Give Run Invoker access to the Cloud Function Service Account
@@ -148,30 +148,30 @@ jobs:
         run: |
           gcloud functions add-iam-policy-binding ${{ vars.MONITORING_FUNCTION }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --member "serviceAccount:${{ vars.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+            --member "serviceAccount:${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
             --role "roles/cloudfunctions.invoker"
 
       - name: Configure a Cloud Scheduler to hit this function daily
         if: env.TELLME_ENV == 'staging'
         run: |
-          EXISTING_JOB=$(gcloud scheduler jobs describe ${{ env.MONITORING_FUNCTION }} --location="${{ secrets.GCP_PROJECT_REGION }}" --format="value(name)" 2>/dev/null || true)
+          EXISTING_JOB=$(gcloud scheduler jobs describe ${{ vars.MONITORING_FUNCTION }} --location="${{ secrets.GCP_PROJECT_REGION }}" --format="value(name)" 2>/dev/null || true)
           if [ -n "$EXISTING_JOB" ]; then
-            gcloud scheduler jobs update http ${{ env.MONITORING_FUNCTION }} \
+            gcloud scheduler jobs update http ${{ vars.MONITORING_FUNCTION }} \
               --location="${{ secrets.GCP_PROJECT_REGION }}" \
               --schedule="0 0 * * *" \
               --time-zone="Etc/UTC" \
               --uri="${{ steps.deploy_monitoring.outputs.url }}" \
               --http-method=GET \
-              --oidc-service-account-email=${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+              --oidc-service-account-email=${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
               --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
           else
-            gcloud scheduler jobs create http ${{ env.MONITORING_FUNCTION }} \
+            gcloud scheduler jobs create http ${{ vars.MONITORING_FUNCTION }} \
               --location="${{ secrets.GCP_PROJECT_REGION }}" \
               --schedule="0 0 * * *" \
               --time-zone="Etc/UTC" \
               --uri="${{ steps.deploy_monitoring.outputs.url }}" \
               --http-method=GET \
-              --oidc-service-account-email=${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+              --oidc-service-account-email=${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
               --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
           fi
 
