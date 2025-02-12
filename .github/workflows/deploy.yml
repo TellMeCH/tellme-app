@@ -148,7 +148,7 @@ jobs:
         run: |
           gcloud functions add-iam-policy-binding ${{ vars.MONITORING_FUNCTION }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --member "serviceAccount:${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+            --member "serviceAccount:${{ vars.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
             --role "roles/cloudfunctions.invoker"
 
       - name: Configure a Cloud Scheduler to hit this function daily
