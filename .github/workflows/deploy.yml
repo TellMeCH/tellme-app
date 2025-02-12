@@ -146,10 +146,10 @@ jobs:
       - name: Give Run Invoker access to the Cloud Function Service Account
         if: env.TELLME_ENV == 'staging'
         run: |
-          gcloud functions add-iam-policy-binding ${MONITORING_FUNCTION} \
-            --region=${{ secrets.GCP_PROJECT_REGION }} \
-            --member="serviceAccount:${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
-            --role="roles/cloudfunctions.invoker"
+          gcloud functions add-iam-policy-binding ${{ vars.MONITORING_FUNCTION }} \
+            --region ${{ secrets.GCP_PROJECT_REGION }} \
+            --member "serviceAccount:${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+            --role "roles/cloudfunctions.invoker"
 
       - name: Configure a Cloud Scheduler to hit this function daily
         if: env.TELLME_ENV == 'staging'
