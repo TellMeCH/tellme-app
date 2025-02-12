@@ -63,6 +63,10 @@ jobs:
             migrations:
               - 'call_miner/migrations/**'
 
+      - name: Print TELLME_ENV
+        run: |
+          echo "TELLME_ENV=$TELLME_ENV"
+
       - name: Start Cloud SQL Proxy
         if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
@@ -155,6 +159,7 @@ jobs:
         if: env.TELLME_ENV == 'staging'
         run: |
           EXISTING_JOB=$(gcloud scheduler jobs describe ${{ vars.MONITORING_FUNCTION }} --location="${{ secrets.GCP_PROJECT_REGION }}" --format="value(name)" 2>/dev/null || true)
+          echo "EXISTING_JOB=$EXISTING_JOB"
           if [ -n "$EXISTING_JOB" ]; then
             gcloud scheduler jobs update http ${{ vars.MONITORING_FUNCTION }} \
               --location="${{ secrets.GCP_PROJECT_REGION }}" \
@@ -162,7 +167,7 @@ jobs:
               --time-zone="Etc/UTC" \
               --uri="${{ steps.deploy_monitoring.outputs.url }}" \
               --http-method=GET \
-              --oidc-service-account-email=${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+              --oidc-service-account-email="${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
               --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
           else
             gcloud scheduler jobs create http ${{ vars.MONITORING_FUNCTION }} \
@@ -171,7 +176,7 @@ jobs:
               --time-zone="Etc/UTC" \
               --uri="${{ steps.deploy_monitoring.outputs.url }}" \
               --http-method=GET \
-              --oidc-service-account-email=${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+              --oidc-service-account-email="${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
               --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
           fi
 
