@@ -124,6 +124,61 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
           registry: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev
 
+      - name: Generate requirements.txt from Poetry for Monitoring Cloud Function
+        if: env.TELLME_ENV == 'staging'
+        run: |
+          poetry export --without-hashes -f requirements.txt -o monitoring_functions/langfuse_exporter/requirements.txt --with=monitoring
+
+      - name: Deploy Monitoring Cloud Function
+        id: deploy_monitoring
+        if: env.TELLME_ENV == 'staging'
+        uses: google-github-actions/deploy-cloud-functions@v3
+        with:
+          name: ${{ vars.MONITORING_FUNCTION }}
+          runtime: python312
+          region: ${{ secrets.GCP_PROJECT_REGION }}
+          source_dir: ./monitoring_functions/langfuse_exporter
+          entry_point: export_from_langfuse
+          memory: 1024M
+          service_timeout: 300s
+          service_account: "${{ vars.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com"
+          environment_variables: |-
+            SETTINGS_NAME=${{ vars.SETTINGS_NAME }}
+            GOOGLE_CLOUD_PROJECT=${{ env.GOOGLE_CLOUD_PROJECT }}
+            MONITORING_BUCKET=${{ vars.MONITORING_BUCKET }}
+
+      - name: Give Run Invoker access to the Cloud Function Service Account
+        if: env.TELLME_ENV == 'staging'
+        run: |
+          gcloud functions add-iam-policy-binding ${MONITORING_FUNCTION} \
+            --region=${{ secrets.GCP_PROJECT_REGION }} \
+            --member="serviceAccount:${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+            --role="roles/cloudfunctions.invoker"
+
+      - name: Configure a Cloud Scheduler to hit this function daily
+        if: env.TELLME_ENV == 'staging'
+        run: |
+          EXISTING_JOB=$(gcloud scheduler jobs describe ${{ env.MONITORING_FUNCTION }} --location="${{ secrets.GCP_PROJECT_REGION }}" --format="value(name)" 2>/dev/null || true)
+          if [ -n "$EXISTING_JOB" ]; then
+            gcloud scheduler jobs update http ${{ env.MONITORING_FUNCTION }} \
+              --location="${{ secrets.GCP_PROJECT_REGION }}" \
+              --schedule="0 0 * * *" \
+              --time-zone="Etc/UTC" \
+              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
+              --http-method=GET \
+              --oidc-service-account-email=${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
+          else
+            gcloud scheduler jobs create http ${{ env.MONITORING_FUNCTION }} \
+              --location="${{ secrets.GCP_PROJECT_REGION }}" \
+              --schedule="0 0 * * *" \
+              --time-zone="Etc/UTC" \
+              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
+              --http-method=GET \
+              --oidc-service-account-email=${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
+              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
+          fi
+
       - name: Build, tag and push container
         id: build-image
         uses: docker/build-push-action@v5
@@ -180,61 +235,6 @@ jobs:
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
             --update-env-vars CALL_PROCESSING_ENDPOINT="${{ steps.extract_urls.outputs.base_url }}${{ vars.CALL_PROCESSING_ADDRESS }}"
-
-      - name: Generate requirements.txt from Poetry for Monitoring Cloud Function
-        if: env.TELLME_ENV == 'staging'
-        run: |
-          poetry export --without-hashes -f requirements.txt -o monitoring_functions/langfuse_exporter/requirements.txt --with=monitoring
-
-      - name: Deploy Monitoring Cloud Function
-        id: deploy_monitoring
-        if: env.TELLME_ENV == 'staging'
-        uses: google-github-actions/deploy-cloud-functions@v3
-        with:
-          name: ${{ env.MONITORING_FUNCTION }}
-          runtime: python312
-          region: ${{ secrets.GCP_PROJECT_REGION }}
-          source_dir: ./monitoring_functions/langfuse_exporter
-          entry_point: export_from_langfuse
-          memory: 1024M
-          service_timeout: 300s
-          service_account: "${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com"
-          environment_variables: |-
-            SETTINGS_NAME=${{ env.SETTINGS_NAME }}
-            GOOGLE_CLOUD_PROJECT=${{ env.GOOGLE_CLOUD_PROJECT }}
-            MONITORING_BUCKET=${{ env.MONITORING_BUCKET }}
-
-      - name: Give Run Invoker access to the Cloud Function Service Account
-        if: env.TELLME_ENV == 'staging'
-        run: |
-          gcloud functions add-iam-policy-binding ${MONITORING_FUNCTION} \
-            --region=${{ secrets.GCP_PROJECT_REGION }} \
-            --member="serviceAccount:${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
-            --role="roles/cloudfunctions.invoker"
-
-      - name: Configure a Cloud Scheduler to hit this function daily
-        if: env.TELLME_ENV == 'staging'
-        run: |
-          EXISTING_JOB=$(gcloud scheduler jobs describe ${{ env.MONITORING_FUNCTION }} --location="${{ secrets.GCP_PROJECT_REGION }}" --format="value(name)" 2>/dev/null || true)
-          if [ -n "$EXISTING_JOB" ]; then
-            gcloud scheduler jobs update http ${{ env.MONITORING_FUNCTION }} \
-              --location="${{ secrets.GCP_PROJECT_REGION }}" \
-              --schedule="0 0 * * *" \
-              --time-zone="Etc/UTC" \
-              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
-              --http-method=GET \
-              --oidc-service-account-email=${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
-              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
-          else
-            gcloud scheduler jobs create http ${{ env.MONITORING_FUNCTION }} \
-              --location="${{ secrets.GCP_PROJECT_REGION }}" \
-              --schedule="0 0 * * *" \
-              --time-zone="Etc/UTC" \
-              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
-              --http-method=GET \
-              --oidc-service-account-email=${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com" \
-              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
-          fi
 
   smoke_test:
     environment:
