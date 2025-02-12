@@ -100,7 +100,7 @@ def get_most_recent_timestamp_from_gcs(bucket_name: str, file_prefix: str) -> da
 
 
 @http
-def export_from_lanfuse(request) -> (str, int):
+def export_from_langfuse(request) -> (str, int):
     """
     Cloud Function to export data from Langfuse, process it, and upload it to Google Cloud Storage.
 

@@ -83,7 +83,7 @@ jobs:
       - name: Install Poetry
         if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
-          curl -sSL https://install.python-poetry.org | python3 -
+          curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.8.4 python3 -
           echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
 
       - name: Install Dependencies
@@ -195,7 +195,7 @@ jobs:
           runtime: python312
           region: ${{ secrets.GCP_PROJECT_REGION }}
           source_dir: ./monitoring_functions/langfuse_exporter
-          entry_point: export_from_lanfuse
+          entry_point: export_from_langfuse
           memory: 1024M
           service_timeout: 300s
           service_account: "${{ env.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com"
