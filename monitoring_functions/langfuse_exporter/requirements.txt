@@ -2,5 +2,5 @@ google-cloud-storage
 google-cloud-secret-manager
 functions-framework
 pandas
-python-dotenv
+django-environ
 langfuse
