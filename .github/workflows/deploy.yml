@@ -142,7 +142,7 @@ jobs:
           memory: 1024M
           service_timeout: 300s
           service_account: "${{ vars.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com"
-          build_service_account: "${{ vars.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com"
+          build_service_account: "projects/${{ env.GOOGLE_CLOUD_PROJECT }}/serviceAccounts/${{ vars.MONITORING_FUNCTION }}-account@${{ env.GOOGLE_CLOUD_PROJECT }}.iam.gserviceaccount.com"
           environment_variables: |-
             SETTINGS_NAME=${{ vars.SETTINGS_NAME }}
             GOOGLE_CLOUD_PROJECT=${{ env.GOOGLE_CLOUD_PROJECT }}
