@@ -83,7 +83,7 @@ jobs:
       - name: Install Poetry
         if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
-          curl -sSL https://install.python-poetry.org | POETRY_VERSION=1.8.4 python3 -
+          curl -sSL https://install.python-poetry.org | python3 -
           echo 'export PATH="$HOME/.local/bin:$PATH"' >> $GITHUB_ENV
 
       - name: Install Dependencies
@@ -123,11 +123,6 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
           registry: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev
-
-      - name: Generate requirements.txt from Poetry for Monitoring Cloud Function
-        if: env.TELLME_ENV == 'staging'
-        run: |
-          poetry export --without-hashes -f requirements.txt -o monitoring_functions/langfuse_exporter/requirements.txt --with=monitoring
 
       - name: Deploy Monitoring Cloud Function
         id: deploy_monitoring
