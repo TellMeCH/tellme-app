@@ -40,10 +40,6 @@ google-cloud-logging = "^3.11.3"
 pytest-asyncio = "^0.25.2"
 
 
-[tool.poetry.group.monitoring.dependencies]
-pandas = "^2.2.3"
-functions-framework = "^3.8.2"
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
