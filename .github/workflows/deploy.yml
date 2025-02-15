@@ -63,6 +63,10 @@ jobs:
             migrations:
               - 'call_miner/migrations/**'
 
+      - name: Print TELLME_ENV
+        run: |
+          echo "TELLME_ENV=$TELLME_ENV"
+
       - name: Start Cloud SQL Proxy
         if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
         run: |
@@ -180,6 +184,58 @@ jobs:
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
             --update-env-vars CALL_PROCESSING_ENDPOINT="${{ steps.extract_urls.outputs.base_url }}${{ vars.CALL_PROCESSING_ADDRESS }}"
+
+      - name: Deploy Monitoring Cloud Function
+        id: deploy_monitoring
+        if: env.TELLME_ENV == 'staging'
+        uses: google-github-actions/deploy-cloud-functions@v3
+        with:
+          name: ${{ vars.MONITORING_FUNCTION }}
+          runtime: python312
+          region: ${{ secrets.GCP_PROJECT_REGION }}
+          source_dir: ./monitoring_functions/langfuse_exporter
+          entry_point: export_from_langfuse
+          memory: 1024M
+          service_timeout: 300s
+          service_account: "${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          build_service_account: "projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/${{ secrets.CICD_SERVICE_ACCOUNT }}"
+          environment_variables: |-
+            SETTINGS_NAME=${{ vars.SETTINGS_NAME }}
+            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
+            MONITORING_BUCKET=${{ vars.MONITORING_BUCKET }}
+
+      - name: Give Run Invoker access to the Cloud Function Service Account
+        if: env.TELLME_ENV == 'staging'
+        run: |
+          gcloud functions add-iam-policy-binding ${{ vars.MONITORING_FUNCTION }} \
+            --region ${{ secrets.GCP_PROJECT_REGION }} \
+            --member "serviceAccount:${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --role "roles/cloudfunctions.invoker"
+
+      - name: Configure a Cloud Scheduler to hit this function daily
+        if: env.TELLME_ENV == 'staging'
+        run: |
+          EXISTING_JOB=$(gcloud scheduler jobs describe ${{ vars.MONITORING_FUNCTION }} --location="${{ secrets.GCP_PROJECT_REGION }}" --format="value(name)" 2>/dev/null || true)
+          echo "EXISTING_JOB=$EXISTING_JOB"
+          if [ -n "$EXISTING_JOB" ]; then
+            gcloud scheduler jobs update http ${{ vars.MONITORING_FUNCTION }} \
+              --location="${{ secrets.GCP_PROJECT_REGION }}" \
+              --schedule="0 0 * * *" \
+              --time-zone="Etc/UTC" \
+              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
+              --http-method=GET \
+              --oidc-service-account-email="${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
+          else
+            gcloud scheduler jobs create http ${{ vars.MONITORING_FUNCTION }} \
+              --location="${{ secrets.GCP_PROJECT_REGION }}" \
+              --schedule="0 0 * * *" \
+              --time-zone="Etc/UTC" \
+              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
+              --http-method=GET \
+              --oidc-service-account-email="${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
+          fi
 
   smoke_test:
     environment:

@@ -118,6 +118,68 @@ def mock_deepgram():
 
 
 @pytest.fixture
+def mock_groq():
+    """
+    Mocks out the Groq transcription calls (Groq).
+    """
+    with patch("groq.Groq") as mock_groq_class:
+        mock_groq_instance = MagicMock()
+        mock_groq_class.return_value = mock_groq_instance
+
+        # Define a mock response similar to what Groq would return
+        mock_groq_response = MagicMock()
+        # The mock "segments" array is analogous to the "verbose_json" format from Groq
+        mock_groq_response.segments = [
+            {"text": "Hello from Groq chunk 1."},
+            {"text": "This is second phrase from chunk 1."}
+        ]
+        # Groq also returns a .language and .duration attribute
+        mock_groq_response.language = "en"
+        mock_groq_response.duration = 10.0
+
+        # So groq.audio.transcriptions.create(...) will return `mock_groq_response`
+        mock_groq_instance.audio.transcriptions.create.return_value = mock_groq_response
+
+        yield mock_groq_instance
+
+
+@pytest.fixture
+def mock_vertexai():
+    """
+    Mocks out the google.genai.Client used in CallProcessingPipeline.
+    Specifically, it mocks the .models.generate_content call.
+    """
+    with patch("google.genai.Client") as mock_genai_client_class:
+        # Create a mock client instance returned by the constructor
+        mock_client_instance = MagicMock()
+        mock_genai_client_class.return_value = mock_client_instance
+
+        # Now mock the .models.generate_content(...) call
+        mock_gen_content = MagicMock()
+        # The structure we return should mimic the real Vertex AI (Gemini) response
+        mock_response = MagicMock()
+        mock_response.candidates = [
+            MagicMock(
+                content=MagicMock(
+                    parts=[MagicMock(text="Speaker 0: Diarized from Gemini\nSpeaker 1: Yes, indeed.")]
+                )
+            )
+        ]
+        mock_response.usage_metadata = MagicMock(
+            prompt_token_count=10,
+            candidates_token_count=5,
+            total_token_count=15
+        )
+        # When generate_content is called, return the mock_response
+        mock_gen_content.return_value = mock_response
+
+        # Attach the mock to the `.models.generate_content` on the client
+        mock_client_instance.models.generate_content = mock_gen_content
+
+        yield mock_gen_content
+
+
+@pytest.fixture
 def mock_openai():
     """
     Mocks out the OpenAI chat completion call.
@@ -204,6 +266,7 @@ def mock_langfuse():
 
         mock_prompt = MagicMock()
         mock_prompt.is_fallback = False
+        mock_prompt.config = {'model': None, 'temperature': 0}
         mock_lf_instance.get_prompt.return_value = mock_prompt
 
         yield mock_lf_instance

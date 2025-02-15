@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from call_processing.utils.call_processing import CallProcessingPipeline
 
@@ -5,7 +6,7 @@ from call_processing.utils.call_processing import CallProcessingPipeline
 @pytest.mark.django_db
 class TestCallProcessingPipeline:
     @pytest.fixture
-    def pipeline(self, mock_deepgram, mock_openai, mock_langfuse, mock_dlp):
+    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai):
         return CallProcessingPipeline()
 
     def test_pipeline_missing_metadata_field(self, pipeline):
@@ -146,3 +147,71 @@ class TestCallProcessingPipeline:
         assert "topics" in result
         assert "transcript" in result
         assert "<agent>:" in result["transcript"] or "<customer>:" in result["transcript"]
+
+    def test_fallback_transcription_if_deepgram_fails(
+        self, pipeline, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_pydub, mock_dlp, mock_vertexai
+    ):
+        """
+        Ensure that if Deepgram fails on any chunk, the pipeline falls back to Groq
+        for ALL chunks, and then applies diarization via OpenAI.
+        """
+
+        # Make Deepgram fail on the first chunk call
+        def deepgram_failure_side_effect(*args, **kwargs):
+            raise httpx.TimeoutException("Simulated Deepgram failure")
+
+        mock_deepgram.listen.rest.v("1").transcribe_file.side_effect = deepgram_failure_side_effect
+
+        # Prepare standard metadata
+        metadata = {
+            "file_name": "test_fallback.wav",
+            "organization_id": 1,
+            "customer_id": "CUST123",
+            "agent_id": 123,
+            "timestamp": "2024-01-01T12:00:00"
+        }
+
+        # Run the pipeline
+        result = pipeline(b"fake audio", metadata)
+
+        # Deepgram was called at least once, but it failed
+        assert mock_deepgram.listen.rest.v("1").transcribe_file.called
+
+        # Groq was called (fallback should have triggered)
+        assert mock_groq.audio.transcriptions.create.called
+        assert mock_groq.audio.transcriptions.create.call_count > 0
+
+        # We expect 2 calls total: 1 for diarization, 1 for enrichment.
+        assert mock_openai.chat.completions.create.call_count == 1
+        assert mock_vertexai.call_count == 1
+
+        # Basic checks on the final enriched data
+        assert "title" in result
+        assert "summary" in result
+        assert "agent_speaker_labels" in result
+        assert "customer_speaker_labels" in result
+        assert result["transcript"]
+
+    def test_fallback_fails_groq_raises(
+            self, pipeline, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_pydub, mock_dlp
+    ):
+        """
+        If Deepgram fails and we attempt to use Groq but Groq also fails,
+        we expect the pipeline to raise an exception.
+        """
+        # Simulate Deepgram and Groq always failing
+        mock_deepgram.listen.rest.v("1").transcribe_file.side_effect = ValueError("Deepgram fail")
+        mock_groq.audio.transcriptions.create.side_effect = Exception("Groq meltdown")
+
+        metadata = {
+            "file_name": "test_fallback2.wav",
+            "organization_id": 1,
+            "customer_id": "CUST123",
+            "agent_id": 123,
+            "timestamp": "2024-01-01T12:00:00"
+        }
+
+        with pytest.raises(Exception) as exc:
+            pipeline(b"fake audio", metadata)
+
+        assert "Could not proceed with fallback transcription method" in str(exc.value)

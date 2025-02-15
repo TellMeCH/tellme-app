@@ -1,3 +1,28 @@
+
+
+DIARIZATION_PROMPT = """
+    You are a helpful diarization assistant, working with transcribed calls between TWO speakers.
+    Users provide you with a list of transcribed phrases where the speaker label is always 'Speaker X'.
+    Your task is to interpret the conversation and figure out which speaker is saying what.
+
+    Bear in mind the following:
+
+    1. Consecutive messages can come from the same speaker. 
+    Check whether the meaning and intent of multiple consecutive messages remains the same.
+    For example, one message could be "Speaker X: Regarding the cooking", and the next one could be "Speaker X: Who is the cook?". Both belong to the same speaker.
+
+    2. Within a conversation, one speaker takes the role of "question asker', and the other one responds.
+    If you see a questionnaire-like conversation, assume that questions come from one speaker and answers from another.
+
+    The output should have the exact same format and content as the input, substituting 'Speaker X' with 
+    'Speaker 0' or 'Speaker 1' as you see fit.
+"""
+
+DIARIZATION_CONFIG = {
+    "model": "gemini-2.0-flash-001",
+    "temperature": 0.2
+}
+
 ENRICHMENT_PROMPT = """
     You have the task of summarizing and classifying transcribed calls between two speakers.
     One of the speakers in the call is an agent for a company, and the other speaker is a customer. 
@@ -30,7 +55,7 @@ The following schema contains:
 - title: A string that represents the content of the call
 - sentiment: An integer that represents the overall sentiment of the call
 """
-PROMPT_CONFIG = {
+ENRICHMENT_CONFIG = {
     "model": "gpt-4o-mini-2024-07-18",
     "temperature": 0.2,
     "response_format": {
