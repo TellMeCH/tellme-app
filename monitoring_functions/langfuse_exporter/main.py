@@ -135,16 +135,18 @@ def extend_dataframe_with_schema(df: pd.DataFrame, schema: dict[str, str]) -> pd
     """
     for col, dtype in schema.items():
         if col not in df.columns:
-            df[col] = None
-
             try:  # Try to set the correct dtype
                 if dtype == 'object':
+                    df[col] = None
                     df[col] = df[col].astype(str)
                 elif dtype == 'int64':
+                    df[col] = 0
                     df[col] = df[col].astype(int)
                 elif dtype == 'float64':
+                    df[col] = 0
                     df[col] = df[col].astype(float)
                 elif dtype == 'bool':
+                    df[col] = None
                     df[col] = df[col].astype(bool)
 
             except Exception as e:
@@ -152,15 +154,18 @@ def extend_dataframe_with_schema(df: pd.DataFrame, schema: dict[str, str]) -> pd
     return df
 
 
-def backfill_missing_columns(bucket_name: str, file_prefix: str, latest_schema: dict[str, str]):
+def backfill_missing_columns(bucket_name: str, file_prefix: str, latest_schema: dict[str, str], col_order: list[str]):
     """
     Iterates through all CSV files in a GCS bucket with a given prefix and adds missing columns
     from the latest schema, filling the new columns with None/NaN.
+    Also, enforce an expected column ordering
 
     Args:
         bucket_name (str): The name of the Google Cloud Storage bucket.
         file_prefix (str): The prefix of the CSV files to process.
-        latest_schema (dict[str, str]): The schema to use for backfilling, a dict where keys are column names and values are pandas data types.
+        latest_schema (dict[str, str]): The schema to use for backfilling, a dict where keys are column names and values
+            are pandas data types.
+        col_order (list[str]): The expected column order for the resulting DF
     """
 
     storage_client = storage.Client()
@@ -178,6 +183,9 @@ def backfill_missing_columns(bucket_name: str, file_prefix: str, latest_schema: 
 
             # Extend the DataFrame with missing columns
             df = extend_dataframe_with_schema(df, latest_schema)
+
+            # Enforce the Column order
+            df = df[col_order]
 
             # Save the updated DataFrame back to CSV
             updated_csv_data = df.to_csv(index=False)
@@ -233,7 +241,7 @@ def export_from_langfuse(request) -> (str, int):
 
     # Focusing on Generations - Process only if observations are present
     if not obs.empty:
-        gen = obs.loc[obs['type'] == 'GENERATION'].copy()  # Avoid SettingWithCopyWarning
+        gen = obs.loc[obs['type'] == 'GENERATION'].copy()
         gen.loc[:, 'failed'] = gen['statusMessage'].notna()
 
         # Reformatting the 'name' column
@@ -291,16 +299,37 @@ def export_from_langfuse(request) -> (str, int):
             lambda x: x.get('total_duration_minutes') if isinstance(x, dict) and 'total_duration_minutes' in x else None
         )
 
+        # Some totals
+        for dimension in ['count', 'failed_count', 'cost', 'latency']:
+            tra[f'{dimension}_total'] = tra[[col for col in tra.columns if col.startswith(dimension)]].sum(axis=1)
+
+        # Lastly, some type enforcement
+        tra['sessionId'] = tra['sessionId'].astype(str)
+        for col in tra.columns:
+            if 'count' in col:
+                tra[col] = tra[col].fillna(0).astype(int)
+            elif 'cost' in col or 'latency' in col:
+                tra[col] = tra[col].fillna(0).astype(float)
+
         if latest_schema:
             # If current file does not contain some columns that the old one does, extend the current schema
+            current_schema = dict(tra.dtypes)
+            forgotten_columns = [c for c in latest_schema.keys() if c not in current_schema.keys()]
+            print(f'Adding latest schema columns ({', '.join(forgotten_columns[:5])}...) to fetched data.')
             tra = extend_dataframe_with_schema(tra, latest_schema)
 
-            # If necessary, iterate over all previous tables in the bucket and add them as null
+            # Identify columns that only appear in the current fetch
             current_schema = dict(tra.dtypes)
-            new_columns = set(current_schema.keys()) - set(latest_schema.keys())
+            new_columns = [c for c in current_schema.keys() if c not in latest_schema.keys()]
+
+            # Enforce the expected column order
+            column_order = list(latest_schema.keys()) + new_columns
+            tra = tra[column_order]
+
+            # If necessary, iterate over all previous tables in the bucket and add them as null
             if new_columns:
-                print(f"New columns {', '.join(list(new_columns)[:5])} detected in latest schema. Backfilling...")
-                backfill_missing_columns(MONITORING_BUCKET, FILE_PREFIX, current_schema)
+                print(f"New columns ({', '.join(list(new_columns)[:5])}...) detected in latest schema. Backfilling...")
+                backfill_missing_columns(MONITORING_BUCKET, FILE_PREFIX, current_schema, column_order)
 
         # Define Filename
         timestamp_str = current_time.strftime("%Y%m%d_%H%M%S")
