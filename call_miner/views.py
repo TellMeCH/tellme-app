@@ -17,10 +17,11 @@ from call_miner.utils.paginators import CustomListViewPaginator
 from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA,
-    CONVERSATIONS_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA,
-    SEARCH_QUERY_PARAMETER_SCHEMA, REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA,
-    TRANSCRIPT_RESPONSE_SCHEMA, LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA,
-    ERROR_RESPONSE_SCHEMA, NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
+    CONVERSATIONS_RESPONSE_SCHEMA, ORGANIZATION_TREND_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA,
+    TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
+    REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
+    LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
+    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
 )
 
 
@@ -261,6 +262,28 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
         if self.request.user.employee.organization:
             return Organization.objects.filter(pk=self.request.user.employee.organization.pk)
         return Organization.objects.none()
+
+    @extend_schema(
+        description=ConversationTrendsSerializer.get_trend.__doc__,
+        parameters=[TREND_PERIOD_PARAMETER_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA],
+        responses={
+            200: ORGANIZATION_TREND_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=False, methods=['get'])
+    def trend(self, request):
+        queryset = self.get_queryset()
+        try:
+            trends = {}
+            for obj in queryset:
+                serializer = self.get_serializer(obj)
+                trends[obj.id] = serializer.get_trend(obj)
+            return response.Response(trends)
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class OrganizationAPIKeyViewSet(

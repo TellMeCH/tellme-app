@@ -198,6 +198,89 @@ CONVERSATIONS_RESPONSE_SCHEMA = OpenApiResponse(
     }
 )
 
+ORGANIZATION_TREND_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'additionalProperties': {
+            'type': 'object',
+            'properties': {
+                'results': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'count': {
+                                'type': 'integer',
+                                'description': 'Number of conversations.',
+                                'nullable': True
+                            },
+                            'date': {
+                                'type': 'string',
+                                'format': 'date',
+                                'description': 'Date for the trend period.'
+                            },
+                            'topic_name': {
+                                'type': 'string',
+                                'description': 'Name of the topic.',
+                                'nullable': True
+                            },
+                            'topic_id': {
+                                'type': 'integer',
+                                'description': 'ID of the topic.',
+                                'nullable': True
+                            },
+                            'avg_duration': {
+                                'type': 'number',
+                                'format': 'float',
+                                'description': 'Average duration in seconds.',
+                                'nullable': True
+                            },
+                            'avg_sentiment': {
+                                'type': 'number',
+                                'format': 'float',
+                                'description': 'Average sentiment.',
+                                'nullable': True
+                            }
+                        }
+                    }
+                },
+                'next': {
+                    'type': 'string',
+                    'format': 'uri',
+                    'nullable': True,
+                    'description': 'URL to the next page.'
+                },
+                'previous': {
+                    'type': 'string',
+                    'format': 'uri',
+                    'nullable': True,
+                    'description': 'URL to the previous page.'
+                },
+            }
+        },
+        'example': {
+            '1': {
+                'results': [
+                    {'count': 5, 'date': '2023-10-01', 'topic_name': None, 'topic_id': None,
+                     'avg_duration': None, 'avg_sentiment': None},
+                    {'count': 8, 'date': '2023-11-01', 'topic_name': None, 'topic_id': None,
+                     'avg_duration': None, 'avg_sentiment': None}
+                ],
+                'next': 'https://example.com/trend/?page=2',
+                'previous': None
+            },
+            '2': {
+                'results': [
+                    {'count': 10, 'date': '2023-10-01', 'topic_name': None, 'topic_id': None,
+                     'avg_duration': 120.5, 'avg_sentiment': 0.7}
+                ],
+                'next': None,
+                'previous': None
+            }
+        }
+    }
+)
+
 TREND_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',

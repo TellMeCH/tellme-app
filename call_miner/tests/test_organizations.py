@@ -312,37 +312,26 @@ class TestOrganizationActions:
                                                                   another_organization):
         """Test that a superuser can access the trend actions of any organization."""
         client.force_authenticate(user=superuser)
-        for org in [organization, another_organization]:
-            url = reverse(f'organization-trend', args=[org.id])
-            response = client.get(url)
-            assert response.status_code == status.HTTP_200_OK
-
-    def test_analyst_can_access_own_organization_trends_actions(self, client, analyst_user, organization):
-        """Test that an analyst can access the trend actions of their own organization."""
-        client.force_authenticate(user=analyst_user)
-        url = reverse(f'organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
+        for org in [organization, another_organization]:
+            assert org.id in response.data
 
-    def test_analyst_cannot_access_other_organization_trends_actions(self, client, analyst_user,
-                                                                     another_organization):
-        """Test that an analyst cannot access the trend actions of another organization."""
+    def test_analyst_can_access_own_organization_trends_actions(self, client, analyst_user, organization,
+                                                                another_organization):
+        """Test that an analyst can access the trend actions of their own organization."""
         client.force_authenticate(user=analyst_user)
-        url = reverse(f'organization-trend', args=[another_organization.id])
+        url = reverse('organization-trend')
         response = client.get(url)
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_200_OK
+        assert organization.id in response.data
+        assert another_organization.id not in response.data
 
     def test_agent_cannot_access_own_organization_trends_actions(self, client, agent_user, organization):
         """Test that an agent cannot access the trend actions of their own organization."""
         client.force_authenticate(user=agent_user)
-        url = reverse(f'organization-trend', args=[organization.id])
-        response = client.get(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_agent_cannot_access_other_organization_trends_actions(self, client, agent_user, another_organization):
-        """Test that an agent cannot access the trend actions of another organization."""
-        client.force_authenticate(user=agent_user)
-        url = reverse(f'organization-trend', args=[another_organization.id])
+        url = reverse('organization-trend')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -356,13 +345,13 @@ class TestOrganizationActions:
         Test that an analyst from another organization cannot access the trend actions of a different organization.
         """
         client.force_authenticate(user=another_organization_analyst_user)
-        url = reverse(f'organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url)
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert organization.id not in response.data
 
     def test_unauthenticated_user_cannot_access_trends_actions(self, client, organization):
         """Test that an unauthenticated user cannot access an organization's trend actions."""
-        url = reverse(f'organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -426,10 +415,10 @@ class TestOrganizationActions:
                 output_tokens=50 + i
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         assert 'results' in data
         results = data['results']
         assert len(results) == 5  # One entry per day
@@ -465,10 +454,10 @@ class TestOrganizationActions:
             else:
                 conv.topics.add(topic2)
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'daily', 'per_topic': 'true'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         assert 'results' in data
         results = data['results']
         assert len(results) == 5  # One entry per day per topic
@@ -499,10 +488,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         assert 'results' in data
         results = data['results']
         assert len(results) == 5
@@ -530,10 +519,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'daily', 'field': 'sentiment'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         assert 'results' in data
         results = data['results']
         assert len(results) == 5
@@ -544,7 +533,7 @@ class TestOrganizationActions:
     def test_trend_actions_invalid_trend_period(self, client, analyst_user, organization):
         """Test that an error is raised whenever an incorrect trend period is specified."""
         client.force_authenticate(user=analyst_user)
-        url = reverse(f'organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'invalid_period'})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -567,10 +556,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'weekly'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         results = data['results']
         assert len(results) == 3  # Three weeks
         for entry in results:
@@ -596,10 +585,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         results = data['results']
         assert len(results) == 3
         for entry in results:
@@ -625,10 +614,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'weekly', 'field': 'duration'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         results = data['results']
         assert len(results) == 3
         for entry in results:
@@ -654,10 +643,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         results = data['results']
         assert len(results) == 3  # Three months
         for entry in results:
@@ -683,10 +672,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'weekly', 'field': 'sentiment'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         results = data['results']
         assert len(results) == 3
         for entry in results:
@@ -712,10 +701,10 @@ class TestOrganizationActions:
                 output_tokens=50
             )
         client.force_authenticate(user=analyst_user)
-        url = reverse('organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'monthly'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         results = data['results']
         assert len(results) == 3  # Three months
         for entry in results:
@@ -735,9 +724,9 @@ class TestOrganizationActions:
     def test_trends_actions_no_data(self, client, analyst_user, organization):
         """Test that the conversation trend actions can return an empty result when no conversations are present."""
         client.force_authenticate(user=analyst_user)
-        url = reverse(f'organization-trend', args=[organization.id])
+        url = reverse('organization-trend')
         response = client.get(url, {'trend_period': 'daily'})
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
+        data = response.json().get(str(organization.id))
         assert 'results' in data
         assert data['results'] == []
