@@ -198,6 +198,42 @@ CONVERSATIONS_RESPONSE_SCHEMA = OpenApiResponse(
     }
 )
 
+TREND_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'results': {
+                'type': 'array',
+                'items': {
+                    'type': 'object',
+                    'properties': {
+                        'count': {'type': 'integer', 'description': 'Number of conversations.', 'nullable': True},
+                        'date': {'type': 'string', 'format': 'date', 'description': 'Date for the trend period.'},
+                        'topic_name': {'type': 'string', 'description': 'Name of the topic.', 'nullable': True},
+                        'topic_id': {'type': 'integer', 'description': 'ID of the topic.', 'nullable': True},
+                        'avg_duration': {'type': 'number', 'format': 'float',
+                                         'description': 'Average duration in seconds.', 'nullable': True},
+                        'avg_sentiment': {'type': 'number', 'format': 'float',
+                                         'description': 'Average sentiment.', 'nullable': True}
+
+                    }
+                }
+            },
+            'next': {'type': 'string', 'format': 'uri', 'nullable': True, 'description': 'URL to the next page.'},
+            'previous': {'type': 'string', 'format': 'uri', 'nullable': True,
+                         'description': 'URL to the previous page.'},
+        },
+        'example': {
+            'results': [
+                {'count': 5, 'date': '2023-10-01'},
+                {'count': 8, 'date': '2023-11-01'}
+            ],
+            'next': 'https://example.com/trend/?page=2',
+            'previous': None
+        }
+    }
+)
+
 ORGANIZATION_TREND_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',
@@ -281,38 +317,239 @@ ORGANIZATION_TREND_RESPONSE_SCHEMA = OpenApiResponse(
     }
 )
 
-TREND_RESPONSE_SCHEMA = OpenApiResponse(
+OVERVIEW_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',
-        'properties': {
-            'results': {
-                'type': 'array',
-                'items': {
+        'description': (
+            "When `per_topic=False`, the top-level object has a single key 'general', and "
+            "includes a 'most_popular_topic' entry. When `per_topic=True`, the top-level "
+            "object has multiple keys (one for each topic name) without 'most_popular_topic'.\n\n"
+            "Each sub-object (topic or 'general') contains metrics: 'count', 'avg_sentiment', "
+            "'avg_duration', each of which has keys for the two relevant months plus a 'change' key."
+        ),
+        'example': {
+            # Example if per_topic=False:
+            'general': {
+                'avg_sentiment': {
+                    '2024-01-01T00:00:00Z': 0.65,
+                    '2024-02-01T00:00:00Z': 0.72,
+                    'change': 10.77
+                },
+                'avg_duration': {
+                    '2024-01-01T00:00:00Z': 42.1,
+                    '2024-02-01T00:00:00Z': 46.3,
+                    'change': 10.0
+                },
+                'count': {
+                    '2024-01-01T00:00:00Z': 10,
+                    '2024-02-01T00:00:00Z': 11,
+                    'change': 10.0
+                },
+                'most_popular_topic': {
+                    '2024-01-01T00:00:00Z': 'Topic A',
+                    '2024-02-01T00:00:00Z': 'Topic B'
+                }
+            }
+            # Example if per_topic=True (multiple keys, no "most_popular_topic"):
+            # "Topic A": {
+            #     "avg_sentiment": {
+            #         "2024-01-01T00:00:00Z": 0.65,
+            #         "2024-02-01T00:00:00Z": 0.72,
+            #         "change": 10.77
+            #     },
+            #     "avg_duration": { ... },
+            #     "count": { ... }
+            # },
+            # "Topic B": { ... }
+        },
+        'additionalProperties': {
+            'type': 'object',
+            'description': (
+                "Either 'general' (when per_topic=False) or a topic name "
+                "(when per_topic=True)."
+            ),
+            'properties': {
+                'avg_sentiment': {
                     'type': 'object',
+                    'description': "Overview of average sentiment for the last two months.",
                     'properties': {
-                        'count': {'type': 'integer', 'description': 'Number of conversations.', 'nullable': True},
-                        'date': {'type': 'string', 'format': 'date', 'description': 'Date for the trend period.'},
-                        'topic_name': {'type': 'string', 'description': 'Name of the topic.', 'nullable': True},
-                        'topic_id': {'type': 'integer', 'description': 'ID of the topic.', 'nullable': True},
-                        'avg_duration': {'type': 'number', 'format': 'float',
-                                         'description': 'Average duration in seconds.', 'nullable': True},
-                        'avg_sentiment': {'type': 'number', 'format': 'float',
-                                         'description': 'Average sentiment.', 'nullable': True}
+                        'change': {
+                            'type': ['number', 'null'],
+                            'format': 'float',
+                            'description': "Percentage change between the two months, or null if no prior data."
+                        }
+                    },
+                    # We allow other month-based keys like "2024-01-01T00:00:00Z"
+                    # to be floats, so we use additionalProperties
+                    'additionalProperties': {
+                        'type': ['number', 'null'],
+                        'format': 'float'
+                    }
+                },
+                'avg_duration': {
+                    'type': 'object',
+                    'description': "Overview of average duration (seconds) for the last two months.",
+                    'properties': {
+                        'change': {
+                            'type': ['number', 'null'],
+                            'format': 'float'
+                        }
+                    },
+                    'additionalProperties': {
+                        'type': ['number', 'null'],
+                        'format': 'float'
+                    }
+                },
+                'count': {
+                    'type': 'object',
+                    'description': "Overview of conversation count for the last two months.",
+                    'properties': {
+                        'change': {
+                            'type': ['number', 'null'],
+                            'format': 'float'
+                        }
+                    },
+                    'additionalProperties': {
+                        'type': ['number', 'null'],
+                        'format': 'float'
+                    }
+                },
+                'most_popular_topic': {
+                    'type': 'object',
+                    'description': (
+                        "Only present when per_topic=False. Maps each relevant month-start to the most "
+                        "popular topic name (string), or null if no data."
+                    ),
+                    'nullable': True,
+                    'additionalProperties': {
+                        'type': ['string', 'null']
+                    }
+                }
+            }
+        }
+    }
+)
 
+ORGANIZATION_OVERVIEW_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'description': (
+            "A mapping of organization IDs to their conversation overview data. Each value "
+            "in this mapping is the same structure as a single organization's overview:\n\n"
+            "- If `per_topic=False`, the key in each sub-dictionary is `'general'` plus a "
+            "`'most_popular_topic'` field.\n"
+            "- If `per_topic=True`, each sub-dictionary has multiple topic-name keys and no "
+            "`'most_popular_topic'`."
+        ),
+        # We don't know in advance which org IDs might appear, so use additionalProperties
+        'additionalProperties': {
+            'type': 'object',
+            'description': (
+                "The same shape as the single-organization OVERVIEW_RESPONSE_SCHEMA. "
+                "Either `'general'` or topic names as keys."
+            ),
+            'additionalProperties': {
+                'type': 'object',
+                'description': (
+                    "Either a metric object (e.g. `avg_sentiment`, `avg_duration`, `count`) "
+                    "or the `'most_popular_topic'` key (which only appears for `per_topic=False`)."
+                ),
+                'properties': {
+                    'most_popular_topic': {
+                        'type': 'object',
+                        'nullable': True,
+                        'description': (
+                            "Maps each month-start datetime to the name of the most popular topic "
+                            "for that month. Present only if `per_topic=False`."
+                        ),
+                        'additionalProperties': {
+                            'type': ['string', 'null']
+                        }
+                    }
+                },
+                'additionalProperties': {
+                    'type': 'object',
+                    'description': (
+                        "For metric objects (like 'avg_sentiment', 'avg_duration', or 'count'), "
+                        "keys are month-start datetimes in ISO8601 string form, and the 'change' "
+                        "key contains the percentage change. Example:\n"
+                        "`{'2024-01-01T00:00:00Z': 10, '2024-02-01T00:00:00Z': 12, 'change': 20.0}`"
+                    ),
+                    'properties': {
+                        'change': {
+                            'type': ['number', 'null'],
+                            'description': "Percentage change from the prior month, or null if not applicable."
+                        }
+                    },
+                    'additionalProperties': {
+                        'type': ['number', 'null']
+                    }
+                }
+            }
+        },
+        'example': {
+            # In this example, we're returning overviews for org ID=1 and org ID=2
+            '1': {
+                # If per_topic=False => "general" + "most_popular_topic"
+                'general': {
+                    'avg_sentiment': {
+                        '2024-01-01T00:00:00Z': 0.5,
+                        '2024-02-01T00:00:00Z': 0.6,
+                        'change': 20.0
+                    },
+                    'avg_duration': {
+                        '2024-01-01T00:00:00Z': 35.3,
+                        '2024-02-01T00:00:00Z': 42.0,
+                        'change': 19.07
+                    },
+                    'count': {
+                        '2024-01-01T00:00:00Z': 10,
+                        '2024-02-01T00:00:00Z': 12,
+                        'change': 20.0
+                    },
+                    'most_popular_topic': {
+                        '2024-01-01T00:00:00Z': 'Billing Issues',
+                        '2024-02-01T00:00:00Z': 'Technical Problems'
                     }
                 }
             },
-            'next': {'type': 'string', 'format': 'uri', 'nullable': True, 'description': 'URL to the next page.'},
-            'previous': {'type': 'string', 'format': 'uri', 'nullable': True,
-                         'description': 'URL to the previous page.'},
-        },
-        'example': {
-            'results': [
-                {'count': 5, 'date': '2023-10-01'},
-                {'count': 8, 'date': '2023-11-01'}
-            ],
-            'next': 'https://example.com/trend/?page=2',
-            'previous': None
+            '2': {
+                # If per_topic=True => multiple topics instead of "general", no "most_popular_topic"
+                'Topic A': {
+                    'avg_sentiment': {
+                        '2024-01-01T00:00:00Z': 0.7,
+                        '2024-02-01T00:00:00Z': 0.65,
+                        'change': -7.14
+                    },
+                    'avg_duration': {
+                        '2024-01-01T00:00:00Z': 38.0,
+                        '2024-02-01T00:00:00Z': 40.0,
+                        'change': 5.26
+                    },
+                    'count': {
+                        '2024-01-01T00:00:00Z': 8,
+                        '2024-02-01T00:00:00Z': 9,
+                        'change': 12.5
+                    }
+                },
+                'Topic B': {
+                    'avg_sentiment': {
+                        '2024-01-01T00:00:00Z': 0.5,
+                        '2024-02-01T00:00:00Z': 0.55,
+                        'change': 10.0
+                    },
+                    'avg_duration': {
+                        '2024-01-01T00:00:00Z': 45.1,
+                        '2024-02-01T00:00:00Z': 45.1,
+                        'change': 0
+                    },
+                    'count': {
+                        '2024-01-01T00:00:00Z': 10,
+                        '2024-02-01T00:00:00Z': 10,
+                        'change': 0
+                    }
+                }
+            }
         }
     }
 )

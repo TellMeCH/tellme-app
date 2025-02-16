@@ -127,6 +127,29 @@ class ConversationTrendsSerializer(serializers.Serializer):
             'previous': paginator.get_previous_link()
         }
 
+    def get_overview(self, obj):
+        """
+        Retrieve an overview of the conversation metrics for the past two months.
+
+        This method reads the 'per_topic' parameter from the request's query parameters to decide whether
+        to present aggregated data across all conversations ('general'), or broken down by each topic.
+        It then calls the object's `get_overview(per_topic)` method, which returns a nested dictionary
+        containing metrics for 'count', 'avg_sentiment', and 'avg_duration' over the last two months, as
+        well as the percentage change between those months.
+
+        Args:
+            obj: The object whose conversation data we want to summarize (e.g., Organization or Agent).
+
+        Returns:
+            dict: A nested dictionary showing last month's and prior month's values for each metric,
+                  plus the percentage change between them. Keys are either "general" or the topic names
+                  (if per_topic=True).
+        """
+        request = self.context.get('request')
+        per_topic = request.query_params.get('per_topic', 'false').lower() == 'true'
+        overview = obj.get_overview(per_topic)
+        return overview
+
 
 class MetaSummarySerializer(serializers.Serializer):
     """

@@ -4,6 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from call_miner.models import Organization, Conversation, Topic
 from datetime import datetime, timedelta
+import zoneinfo
 
 
 @pytest.mark.django_db
@@ -352,6 +353,53 @@ class TestOrganizationActions:
     def test_unauthenticated_user_cannot_access_trends_actions(self, client, organization):
         """Test that an unauthenticated user cannot access an organization's trend actions."""
         url = reverse('organization-trend')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_superuser_can_access_any_organization_overview_actions(self, client, superuser, organization,
+                                                                  another_organization):
+        """Test that a superuser can access the overview actions of any organization."""
+        client.force_authenticate(user=superuser)
+        url = reverse('organization-overview')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        for org in [organization, another_organization]:
+            assert org.id in response.data
+
+    def test_analyst_can_access_own_organization_overview_actions(self, client, analyst_user, organization,
+                                                                another_organization):
+        """Test that an analyst can access the overview actions of their own organization."""
+        client.force_authenticate(user=analyst_user)
+        url = reverse('organization-overview')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert organization.id in response.data
+        assert another_organization.id not in response.data
+
+    def test_agent_cannot_access_own_organization_overview_actions(self, client, agent_user, organization):
+        """Test that an agent cannot access the overview actions of their own organization."""
+        client.force_authenticate(user=agent_user)
+        url = reverse('organization-overview')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_another_organization_analyst_cannot_access_other_organization_overview_actions(
+            self,
+            client,
+            another_organization_analyst_user,
+            organization
+    ):
+        """
+        Test that an analyst from another organization cannot access the overview actions of a different organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        url = reverse('organization-overview')
+        response = client.get(url)
+        assert organization.id not in response.data
+
+    def test_unauthenticated_user_cannot_access_overview_actions(self, client, organization):
+        """Test that an unauthenticated user cannot access an organization's overview actions."""
+        url = reverse('organization-overview')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -710,6 +758,75 @@ class TestOrganizationActions:
         for entry in results:
             assert 'date' in entry
             assert 'avg_sentiment' in entry
+
+    def test_overview_action_returns_correct_data(self, client, analyst_user, organization,
+                                                            agent,
+                                                            customer):
+        """Check that the overview action responds as expected."""
+        # Create conversations on different days
+        utc = zoneinfo.ZoneInfo("UTC")
+        topic1 = Topic.objects.create(name='Topic 1', description='Description 1', organization=organization)
+        for i in range(5):
+            conv = Conversation.objects.create(
+                path=f'path/to/conversation_{i}',
+                date=datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i),
+                duration=100 + i,
+                title=f'Test title {i}',
+                summary=f'Test summary {i}',
+                transcript=f'Test transcript {i}',
+                sentiment=1.5 + i * 0.1,
+                agent=agent,
+                customer=customer,
+                input_tokens=100 + i,
+                output_tokens=50 + i
+            )
+            conv.topics.add(topic1)
+        client.force_authenticate(user=analyst_user)
+        url = reverse('organization-overview')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json().get(str(organization.id)).get('general')
+        for kpi in ['avg_sentiment', 'avg_duration', 'count', 'most_popular_topic']:
+            assert kpi in data
+        assert 'Topic 1' in data['most_popular_topic'].values()
+
+    def test_overview_action_per_topic_returns_correct_data(self, client, analyst_user, organization,
+                                                                  agent,
+                                                                  customer):
+        """Check that the organization's overview action returns as expected."""
+        # Create topics
+        topic1 = Topic.objects.create(name='Topic 1', description='Description 1', organization=organization)
+        topic2 = Topic.objects.create(name='Topic 2', description='Description 2', organization=organization)
+        # Create conversations with topics
+        utc = zoneinfo.ZoneInfo("UTC")
+        for i in range(5):
+            conv = Conversation.objects.create(
+                path=f'path/to/conversation_{i}',
+                date=datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i),
+                duration=100 + i,
+                title=f'Test title {i}',
+                summary=f'Test summary {i}',
+                transcript=f'Test transcript {i}',
+                sentiment=1.5 + i * 0.1,
+                agent=agent,
+                customer=customer,
+                input_tokens=100 + i,
+                output_tokens=50 + i
+            )
+            if i % 2 == 0:
+                conv.topics.add(topic1)
+            else:
+                conv.topics.add(topic2)
+        client.force_authenticate(user=analyst_user)
+        url = reverse('organization-overview')
+        response = client.get(url, {'per_topic': True})
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json().get(str(organization.id))
+        assert len(data) == 2  # One entry per topic
+        for topic_name, entry in data.items():
+            for kpi in ['avg_sentiment', 'avg_duration', 'count']:
+                assert kpi in entry
+            assert topic_name in ['Topic 1', 'Topic 2']
 
     def test_conversations_action_no_data(self, client, analyst_user, organization):
         """Test that the conversations action can return an empty result when no conversations are present."""
