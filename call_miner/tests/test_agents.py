@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from call_miner.models import Agent, User
 
-TREND_ACTIONS = ['conversations', 'trend']
+TREND_ACTIONS = ['conversations', 'trend', 'overview']
 
 
 @pytest.fixture
@@ -610,6 +610,32 @@ class TestAgentTrendActions:
         assert results[0]['avg_sentiment'] == conversation.sentiment
         assert results[0]['topic_name'] == str(conversation.topics.all()[0])
         assert 'topic_id' in results[0]
+
+    def test_agent_overview_action_returns_expected_content(self, client, agent, conversation):
+        """
+        Test that the 'overview' action for an agent retrieves the expected conversation count data.
+        """
+        client.force_authenticate(user=agent.user)
+        url = reverse('agent-overview', args=[agent.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'general' in response.data
+        results = response.data['general']
+        for kpi in ['avg_sentiment', 'avg_duration', 'count', 'most_popular_topic']:
+            assert kpi in results
+
+    def test_agent_overview_per_topic_action_returns_expected_content(self, client, agent, conversation):
+        """
+        Test that the 'trend' action for an agent retrieves the expected conversation count data per topic.
+        """
+        client.force_authenticate(user=agent.user)
+        url = reverse('agent-overview', args=[agent.id])
+        response = client.get(url, {'per_topic': 'true'})
+        assert response.status_code == status.HTTP_200_OK
+        assert str(conversation.topics.all()[0]) in response.data
+        results = response.data[str(conversation.topics.all()[0])]
+        for kpi in ['avg_sentiment', 'avg_duration', 'count']:
+            assert kpi in results
 
 
 @pytest.mark.django_db

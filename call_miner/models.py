@@ -2,6 +2,7 @@ import re
 import secrets
 import hashlib
 import datetime
+import zoneinfo
 from django.utils import timezone
 from django.db import models
 from django.conf import settings
@@ -156,7 +157,19 @@ class ConversationTrendMixin:
             # Assume the object has a direct relationship with conversations
             return self.conversations.all()
 
-    def get_trend(self, period: str, per_topic: bool = False, field: str = None):
+    @property
+    def topics_scope(self):
+        """
+        Retrieves the topics associated to the object.
+        If the object is an Organization, fetches with a direct filter
+        If the object is not an Organization, fetches all topics of the associated organization
+        """
+        if isinstance(self, Organization):
+            return Topic.objects.filter(organization=self)
+        else:
+            return Topic.objects.filter(organization=self.organization)
+
+    def get_trend(self, period: str, per_topic: bool = False, field: str = None, start_date: datetime.datetime = None):
         """
         Obtain the evolution of a field over a time period. If specified, will return the evolution at a topic level.
 
@@ -165,6 +178,7 @@ class ConversationTrendMixin:
             per_topic (bool): Indicates whether to group by the time period AND the topic, or just by the time period
             field (str): Specifies what field to examine. If none is specified, the call count, average sentiment and
                 average duration will be used.
+            start_date (datetime): If provided, only include conversations on or after this date.
 
         Returns:
             QuerySet: Trend of the specified fields
@@ -198,8 +212,12 @@ class ConversationTrendMixin:
             if col != 'count':
                 aggregations[f'avg_{col}'] = aggregations.pop(col)
 
+        qs = self.conversations_scope
+        if start_date:
+            qs = qs.filter(date__gte=start_date)
+
         trend = (
-            self.conversations_scope
+            qs
             .annotate(period=self.period_truncations[period])
             .values(*group_by_cols)
             .annotate(**aggregations)
@@ -207,6 +225,97 @@ class ConversationTrendMixin:
             .order_by()
         )
         return trend
+
+    def get_overview(self, per_topic: bool = False):
+        """
+        Summarizes conversation metrics for the last two months (count, average sentiment, average duration).
+        If per_topic=True, results are grouped by each topic found in ``self.topics_scope``; otherwise,
+        a single "general" grouping is returned.
+
+        Args:
+            per_topic (bool): If True, group results by topic. Otherwise, return a single "general" entry.
+
+        Returns:
+            dict: A nested dictionary of the form:
+                {
+                    <topic or 'general'>: {
+                        'avg_sentiment': {
+                            '2023-01-01T00:00:00Z': X,
+                            '2023-02-01T00:00:00Z': Y,
+                            'change': Z
+                        },
+                        'avg_duration': ...,
+                        'count': ...
+                    },
+                    ...
+                }
+        """
+        # Determine the relevant months for the overview
+        utc = zoneinfo.ZoneInfo("UTC")
+        this_month_start = datetime.datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_month_start = (this_month_start - datetime.timedelta(days=1)).replace(day=1)
+        prior_month_start = (last_month_start - datetime.timedelta(days=1)).replace(day=1)
+        last_month = last_month_start.strftime('%Y-%m')
+        prior_month = prior_month_start.strftime('%Y-%m')
+
+        # Get trend data, aggregated by month
+        trend_data = list(self.get_trend(
+            period='monthly', field=None, per_topic=per_topic, start_date=prior_month_start
+        ))
+
+        # Relevant KPIs
+        relevant_metrics = [f'avg_{name}' for name in self.field_aggregations.keys() if name != 'count']
+        relevant_metrics.append('count')
+
+        overview_data = {}
+        if per_topic:
+            topic_list = [topic.name for topic in self.topics_scope]
+        else:
+            topic_list = ['general']
+
+        for topic in topic_list:
+            this_data = {metric: {} for metric in relevant_metrics}
+
+            # Iterate over the trend, extract relevant items
+            for item in trend_data:
+                if per_topic:
+                    name_match = item['topic_name'] == topic
+                else:
+                    name_match = True
+                item_month = item['date'].strftime('%Y-%m')
+                if item_month in (last_month, prior_month) and name_match:
+                    for metric in relevant_metrics:
+                        this_data[metric][item_month] = item[metric]
+
+            # Populate missing months and calculate percentage change
+            for metric in relevant_metrics:
+                for month in (last_month, prior_month):
+                    if month not in this_data[metric]:
+                        this_data[metric][month] = 0
+
+                previous = this_data[metric][prior_month]
+                latest = this_data[metric][last_month]
+                if previous != 0:
+                    this_data[metric]['change'] = (latest - previous) * 100 / previous
+                else:
+                    this_data[metric]['change'] = None
+
+            # Retrieve trends for determining the month's most popular topic
+            if not per_topic:
+                topic_popularities = list(self.get_trend(
+                    period='monthly', field='count', per_topic=True, start_date=prior_month_start
+                ))
+                this_data['most_popular_topic'] = {last_month: None, prior_month: None}
+                max_counts = {last_month: 0, prior_month: 0}
+                for item in topic_popularities:
+                    item_month = item['date'].strftime('%Y-%m')
+                    if item_month in max_counts.keys():
+                        if item['count'] > max_counts[item_month]:
+                            max_counts[item_month] = item['count']
+                            this_data['most_popular_topic'][item_month] = item['topic_name']
+
+            overview_data[topic] = this_data
+        return overview_data
 
 
 class Organization(models.Model, ConversationTrendMixin):
