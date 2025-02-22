@@ -775,7 +775,9 @@ class Command(BaseCommand):
             self.stdout.write('Creating Superuser')
             user = User.objects.create_superuser(
                 email='altogi@tellme.ch',
-                password=COMMON_PASSWORD
+                password=COMMON_PASSWORD,
+                first_name='Alvaro',
+                last_name='Tomas Gil'
             )
             auth.update_user(
                 user.id,
@@ -788,7 +790,9 @@ class Command(BaseCommand):
             self.stdout.write('Creating Superuser Account for Invoking Processing Pipeline')
             user = User.objects.create_superuser(
                 email=settings.PROCESSING_PIPELINE_USER,
-                password=COMMON_PASSWORD
+                password=COMMON_PASSWORD,
+                first_name='Processing',
+                last_name=settings.TELLME_ENV
             )
             auth.update_user(
                 user.id,
