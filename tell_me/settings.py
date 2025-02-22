@@ -154,6 +154,7 @@ PROCESSING_PIPELINE_KEY = env('PROCESSING_PIPELINE_KEY')
 DEEPGRAM_API_KEY = env('DEEPGRAM_API_KEY')
 GROQ_API_KEY = env('GROQ_API_KEY')
 OPENAI_API_KEY = env('OPENAI_API_KEY')
+MAILER_API_KEY = env('MAILER_API_KEY')
 
 # CORS Settings
 if env('FRONTEND_PATH') == '*':
@@ -249,6 +250,12 @@ SPECTACULAR_SETTINGS = {
 
 # User model for authentication
 AUTH_USER_MODEL = 'call_miner.User'
+
+# Firebase Web API Key
+FIREBASE_WEB_API_KEY = env('FIREBASE_WEB_API_KEY')
+
+# Authentication Backends (especially for Admin Login)
+AUTHENTICATION_BACKENDS = ['call_miner.backends.FirebaseEmailPasswordBackend']
 
 # Logging
 if TELLME_ENV != 'dev':
