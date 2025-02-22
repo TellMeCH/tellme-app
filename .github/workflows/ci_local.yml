@@ -68,6 +68,7 @@ jobs:
           echo "DEEPGRAM_API_KEY=fake_key" >> .env
           echo "GROQ_API_KEY=fake_key" >> .env
           echo "OPENAI_API_KEY=fake_key" >> .env
+          echo "MAILER_API_KEY=fake_key" >> .env
           echo "FRONTEND_PATH='*'" >> .env
 
       - name: Make Migrations
