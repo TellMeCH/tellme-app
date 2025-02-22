@@ -192,7 +192,7 @@ def conversation(agent, customer, topic):
         title='Test Conversation',
         summary='Test summary',
         transcript=f"""
-        <agent>: Hello, {agent.user.username}, how can I assist you today?
+        <agent>: Hello, how can I assist you today?
         <customer>: Hi, I have an issue with my product. It's acting weird.
         <agent>: Could you describe the problem?
         <customer>: Yes, it keeps making a strange noise and flashing red lights.

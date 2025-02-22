@@ -233,7 +233,7 @@ def setup_db(db):
     Set up test database with some records. Yield them if you need to retrieve them in your tests.
     """
     org = Organization.objects.create(id=1, name="Test Org")
-    user = User.objects.create_user('agent', 'agent@example.com', 'password')
+    user = User.objects.create_user('agent@example.com', 'password', 'example', 'agent')
     agent = Agent.objects.create(id=123, organization=org, user=user)
     topic = Topic.objects.create(name="Sales", description="Sales topic", organization=org, is_active=True)
     customer = Customer.objects.create(organization=org, external_id='customer_id')
