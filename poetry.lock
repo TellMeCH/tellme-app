@@ -1759,6 +1759,20 @@ llama-index = ["llama-index (>=0.10.12,<2.0.0)"]
 openai = ["openai (>=0.27.8)"]
 
 [[package]]
+name = "mailersend"
+version = "0.5.8"
+description = "The official MailerSend Python SDK"
+optional = false
+python-versions = "<4.0,>=3.8"
+files = [
+    {file = "mailersend-0.5.8-py3-none-any.whl", hash = "sha256:24292c10ad180570ed76e90b4e7daede5d9cd98713860206a540f1ff900258fe"},
+    {file = "mailersend-0.5.8.tar.gz", hash = "sha256:c96d196278d5771346563d56b54b83b9290ca32768a451aed8f3dabd6b0ae1b8"},
+]
+
+[package.dependencies]
+requests = ">=2.25.0,<3.0.0"
+
+[[package]]
 name = "marshmallow"
 version = "3.26.1"
 description = "A lightweight library for converting complex datatypes to and from native Python datatypes."
@@ -3588,4 +3602,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">3.10,<4.0"
-content-hash = "7fb478882ef94825cc25ae0ed8cff2da68942b95318dbd9ed2e83db4c9b26a37"
+content-hash = "2ed9afad70cf42693400dcaeb6461fed09b95d41e0af45221ac4c5ce901cccc7"

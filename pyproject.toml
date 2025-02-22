@@ -30,6 +30,7 @@ daphne = "^4.1.2"
 django-cors-headers = "^4.6.0"
 groq = "^0.16.0"
 google-genai = "^1.0.0"
+mailersend = "^0.5.8"
 
 
 [tool.poetry.group.dev.dependencies]
