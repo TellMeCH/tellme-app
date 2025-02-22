@@ -470,21 +470,21 @@ class AgentListSerializer(serializers.HyperlinkedModelSerializer):
     """
     This serializer simply lists all existing Agents in an organization, as well as their managers and call count.
     """
-    username = serializers.CharField(source='user.username', read_only=True, help_text='Agent username')
+    email = serializers.CharField(source='user.email', read_only=True, help_text='Agent email')
     manager = serializers.HyperlinkedRelatedField(
         view_name='agent-detail',
         read_only=True,
         help_text="Link to the agent's manager"
     )
-    manager_username = serializers.CharField(
-        source='manager.user.username',
+    manager_email = serializers.CharField(
+        source='manager.user.email',
         read_only=True,
-        help_text="Username of the agent's manager"
+        help_text="Email of the agent's manager"
     )
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count', 'first_conversation_date',
+        fields = ['url', 'email', 'manager', 'manager_email', 'conversation_count', 'first_conversation_date',
                   'last_conversation_date', 'created', 'updated']
 
 
@@ -492,21 +492,21 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
     """
     This serializer shows the detail of a given agent, including all its meta-summary data and trend statistics
     """
-    username = serializers.CharField(source='user.username', read_only=True, help_text='Agent username')
+    email = serializers.CharField(source='user.email', read_only=True, help_text='Agent email')
     manager = serializers.HyperlinkedRelatedField(
         view_name='agent-detail',
         read_only=True,
         help_text="Link to the agent's manager"
     )
-    manager_username = serializers.CharField(
-        source='manager.user.username',
+    manager_email = serializers.CharField(
+        source='manager.user.email',
         read_only=True,
-        help_text="Username of the agent's manager"
+        help_text="Email of the agent's manager"
     )
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count',
+        fields = ['url', 'email', 'manager', 'manager_email', 'conversation_count',
                   'first_conversation_date', 'last_conversation_date', 'created', 'updated']
 
     def get_agent_data(self, obj):
@@ -519,7 +519,7 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
             agent_data.append(
                 {
                     'id': i,
-                    'name': agent.user.username,
+                    'email': agent.user.email,
                     'url': self.context['request'].build_absolute_uri(
                         reverse('agent-detail', args=[agent.id])
                     ),

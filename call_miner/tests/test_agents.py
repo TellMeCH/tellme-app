@@ -10,7 +10,7 @@ TREND_ACTIONS = ['conversations', 'trend', 'overview']
 @pytest.fixture
 def agent_manager(organization):
     """Create and return an agent who is a manager in the organization."""
-    user = User.objects.create_user('agent_manager', 'manager@example.com', 'password')
+    user = User.objects.create_user('manager@example.com', 'password', 'agent', 'manager')
     agent = Agent.objects.create(user=user, organization=organization, role='AGENT')
     return agent
 
@@ -18,7 +18,7 @@ def agent_manager(organization):
 @pytest.fixture
 def agent_managed_by_manager(organization, agent_manager):
     """Create and return an agent managed by agent_manager."""
-    user = User.objects.create_user('managed_agent', 'managed_agent@example.com', 'password')
+    user = User.objects.create_user('managed_agent@example.com', 'password', 'managed', 'agent')
     agent = Agent.objects.create(user=user, organization=organization, role='AGENT', manager=agent_manager)
     return agent
 
@@ -26,7 +26,7 @@ def agent_managed_by_manager(organization, agent_manager):
 @pytest.fixture
 def another_agent_in_same_org(organization):
     """Create and return another agent in the same organization."""
-    user = User.objects.create_user('another_agent_in_same_org', 'another_agent_in_same_org@example.com', 'password')
+    user = User.objects.create_user('another_agent_in_same_org@example.com', 'password', 'another', 'agent')
     agent = Agent.objects.create(user=user, organization=organization, role='AGENT')
     return agent
 
@@ -104,12 +104,12 @@ class TestAgentRetrieve:
         url = reverse('agent-detail', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['username'] == agent.user.username
+        assert response.data['email'] == agent.user.email
 
         url = reverse('agent-detail', args=[another_organization_agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['username'] == another_organization_agent.user.username
+        assert response.data['email'] == another_organization_agent.user.email
 
     def test_organization_admin_can_retrieve_other_agent_details(self, client, organization_admin_user, agent):
         """
@@ -119,7 +119,7 @@ class TestAgentRetrieve:
         url = reverse('agent-detail', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['username'] == agent.user.username
+        assert response.data['email'] == agent.user.email
 
     def test_organization_admin_cannot_retrieve_another_organization_agent_details(self, client,
                                                                                    organization_admin_user,
@@ -149,7 +149,7 @@ class TestAgentRetrieve:
         url = reverse('agent-detail', args=[agent_managed_by_manager.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['username'] == agent_managed_by_manager.user.username
+        assert response.data['email'] == agent_managed_by_manager.user.email
 
     def test_agent_manager_cannot_retrieve_non_managed_agent(self, client, agent_manager, agent):
         """
@@ -168,7 +168,7 @@ class TestAgentRetrieve:
         url = reverse('agent-detail', args=[agent.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['username'] == agent.user.username
+        assert response.data['email'] == agent.user.email
 
     def test_agent_cannot_retrieve_other_agent_details(self, client, agent_user, another_agent_in_same_org):
         """
@@ -763,7 +763,7 @@ class TestAgentManagedAgents:
         assert response.status_code == status.HTTP_200_OK
         managed_agents = response.data['results']
         assert len(managed_agents) == 1
-        assert managed_agents[0]['name'] == agent_managed_by_manager.user.username
+        assert managed_agents[0]['email'] == agent_managed_by_manager.user.email
 
     def test_organization_admin_can_access_agent_managed_agents(self, client, organization_admin_user, agent_manager,
                                                                 agent_managed_by_manager):
@@ -776,7 +776,7 @@ class TestAgentManagedAgents:
         assert response.status_code == status.HTTP_200_OK
         managed_agents = response.data['results']
         assert len(managed_agents) == 1
-        assert managed_agents[0]['name'] == agent_managed_by_manager.user.username
+        assert managed_agents[0]['email'] == agent_managed_by_manager.user.email
 
     def test_organization_admin_cannot_access_another_organization_agent_managed_agents(self, client,
                                                                                         organization_admin_user,
@@ -809,7 +809,7 @@ class TestAgentManagedAgents:
         assert response.status_code == status.HTTP_200_OK
         managed_agents = response.data['results']
         assert len(managed_agents) == 1
-        assert managed_agents[0]['name'] == agent_managed_by_manager.user.username
+        assert managed_agents[0]['email'] == agent_managed_by_manager.user.email
 
     def test_agent_cannot_access_other_agents_managed_agents(self, client, agent_user, agent_manager):
         """
