@@ -4,7 +4,8 @@ from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm
 
 
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ['username', 'email', 'is_staff']
+    list_display = ['email', 'first_name', 'last_name', 'is_staff', 'auth_type']
+    search_fields = ['first_name', 'email']
 
 
 class OrganizationAdmin(admin.ModelAdmin):

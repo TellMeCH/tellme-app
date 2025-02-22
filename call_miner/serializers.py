@@ -567,32 +567,37 @@ class UserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = User
-        fields = ('username', 'password', 'email')
-        extra_kwargs = {'password': {'write_only': True}}
+        fields = ('email', 'auth_type', 'first_name', 'last_name')
 
     def validate(self, data):
         if data.get('email') == settings.PROCESSING_PIPELINE_USER:
-            raise serializers.ValidationError({
-                "email": "Provided user email is protected."
-            })
+            raise serializers.ValidationError({"email": "Provided user email is protected."})
         return data
 
     def create(self, validated_data):
         user = User.objects.create_user(
             email=validated_data['email'],
-            username=validated_data['username'],
-            password=validated_data['password']
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
+            auth_type=validated_data['auth_type']
         )
+        if validated_data['auth_type'] == 'password':
+            user.send_password_reset_email()
         return user
 
     def update(self, instance, validated_data):
-        instance.email = validated_data.get('email', instance.email)
-        instance.username = validated_data.get('username', instance.username)
-        password = validated_data.get('password', None)
-        if password:
-            instance.set_password(password)
+        auth_type = validated_data.get('auth_type')
+        if auth_type is not None and auth_type != instance.auth_type and auth_type == 'password':
+            instance.send_password_reset_email()
+
+        email = validated_data.get('email')
+        if email is not None and email != instance.email:
+            raise serializers.ValidationError({"email": "Can't change user email"})
+
+        # Update instance fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         instance.save()
-        return instance
 
 
 class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):

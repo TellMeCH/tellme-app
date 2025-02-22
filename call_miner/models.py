@@ -3,6 +3,7 @@ import secrets
 import hashlib
 import datetime
 import zoneinfo
+import threading
 from django.utils import timezone
 from django.db import models
 from django.conf import settings
@@ -11,6 +12,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from firebase_admin import auth
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
+from call_miner.utils.email_utils import send_email_with_link
 from django.db.models.signals import post_save, post_delete
 
 
@@ -419,36 +421,49 @@ class CustomUserManager(BaseUserManager):
     """
     This Model Manager is aimed at making sure that whenever a user is created, a Firebase User is associated to it
     """
-    def create_user(self, username, email, password, **extra_fields):
+    VALID_AUTH_TYPES = ['password', 'google', 'microsoft']
+
+    def create_user(self, email, auth_type, password=None, is_superuser=False, **extra_fields):
         if not email:
             raise ValueError('The Email must be set.')
         email = self.normalize_email(email)
 
-        if not password:
-            raise ValueError('The password must be set.')
+        # Check the valid authentication type
+        if auth_type not in self.VALID_AUTH_TYPES:
+            valid_auth_types_str = '", "'.join(self.VALID_AUTH_TYPES)
+            raise ValueError(f'The authentication type must be one of "{valid_auth_types_str}"')
+
+        # Check that superuser accounts can only work with password authentication
+        if is_superuser:
+            if auth_type != 'password':
+                raise ValueError('Superusers can only be created with auth_type set to "password"')
+            if not password:
+                raise ValueError('The password must be set for creating superuser accounts')
+        else:  # Check that the password is not specified for non-superuser accounts
+            if auth_type == 'password' and password:
+                raise ValueError('User passwords are only set after sending and processing the password reset link')
 
         # Create the Firebase user first
         firebase_user = auth.create_user(
             email=email,
             password=password,
-            display_name=username
+            display_name=email
         )
         uid = firebase_user.uid
 
+        # Try creating a user with the Firebase UID as ID. If this fails, delete the Firebase User
         try:
-            # Try creating a user with the Firebase UID as ID. If this fails, delete the Firebase User
-            user = self.model(id=uid, username=username, email=email, **extra_fields)
-            user.set_password(password)
+            user = self.model(id=uid, email=email, is_superuser=is_superuser, **extra_fields)
             user.save(using=self._db)
             return user
         except Exception as e:
             auth.delete_user(uid)
             raise e
 
-    def create_superuser(self, username, email, password=None, **extra_fields):
+    def create_superuser(self, email, password, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
-        return self.create_user(username, email, password, **extra_fields)
+        return self.create_user(email=email, auth_type='password', password=password, **extra_fields)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -456,18 +471,23 @@ class User(AbstractBaseUser, PermissionsMixin):
     Custom user class, making use of the CustomUserManager and defining the email as main field
     """
     id = models.CharField(primary_key=True, max_length=128)
-    username = models.CharField(max_length=150, unique=True)
     email = models.EmailField(unique=True)
+    first_name = models.CharField(max_length=100, default='John')
+    last_name = models.CharField(max_length=100, default='Doe')
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    auth_type = models.CharField(
+        max_length=20,
+        choices=[(name, name.capitalize()) for name in CustomUserManager.VALID_AUTH_TYPES],
+        default='password'
+    )
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username']
 
     objects = CustomUserManager()
 
     def __str__(self):
-        return self.username
+        return self.email
 
     def delete(self, using=None, keep_parents=False):
         """
@@ -480,6 +500,22 @@ class User(AbstractBaseUser, PermissionsMixin):
         except auth.UserNotFoundError:
             pass
         return super().delete(using=using, keep_parents=keep_parents)
+
+    @staticmethod
+    def _send_email_in_background(target_name, target_email, link):
+        try:
+            send_email_with_link(target_name, target_email, link)
+        except Exception as e:
+            print(f"Failed to send verification email to {target_email}: {e}")
+
+    def send_password_reset_email(self):
+        """
+        Simple method to send a reset-password email to the user. This will be triggered if the serializer create/update
+        methods are called.
+        """
+        link = auth.generate_password_reset_link(self.email)
+        full_name = self.first_name + ' ' + self.last_name
+        threading.Thread(target=self._send_email_in_background, args=(full_name, self.email, link)).start()
 
 
 class Employee(models.Model):
@@ -503,7 +539,7 @@ class Employee(models.Model):
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.organization.name} - {self.get_role_display()}"
+        return f"{self.user.email} - {self.organization.name} - {self.get_role_display()}"
 
     class Meta:
         unique_together = ('user', 'organization')
