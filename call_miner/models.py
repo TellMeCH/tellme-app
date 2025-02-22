@@ -423,7 +423,7 @@ class CustomUserManager(BaseUserManager):
     """
     VALID_AUTH_TYPES = ['password', 'google', 'microsoft']
 
-    def create_user(self, email, auth_type, password=None, is_superuser=False, **extra_fields):
+    def create_user(self, email, auth_type, first_name, last_name, password=None, is_superuser=False, **extra_fields):
         if not email:
             raise ValueError('The Email must be set.')
         email = self.normalize_email(email)
@@ -453,17 +453,31 @@ class CustomUserManager(BaseUserManager):
 
         # Try creating a user with the Firebase UID as ID. If this fails, delete the Firebase User
         try:
-            user = self.model(id=uid, email=email, is_superuser=is_superuser, **extra_fields)
+            user = self.model(
+                id=uid,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                is_superuser=is_superuser,
+                **extra_fields
+            )
             user.save(using=self._db)
             return user
         except Exception as e:
             auth.delete_user(uid)
             raise e
 
-    def create_superuser(self, email, password, **extra_fields):
+    def create_superuser(self, email, password, first_name, last_name, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
-        return self.create_user(email=email, auth_type='password', password=password, **extra_fields)
+        return self.create_user(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            auth_type='password',
+            password=password,
+            **extra_fields
+        )
 
 
 class User(AbstractBaseUser, PermissionsMixin):

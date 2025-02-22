@@ -1,13 +1,13 @@
 from django import forms
 from django.contrib.auth.models import User
-from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from call_miner.models import Employee, Analyst, Agent
 
 
 class EmployeeCreationForm(forms.ModelForm):
-    user_username = forms.CharField(label='Username', required=False)
-    user_password = forms.CharField(widget=forms.PasswordInput, label='Password', required=False)
+    user_first_name = forms.CharField(label='First Name')
+    user_last_name = forms.CharField(label='Last Name')
+    user_auth_type = forms.CharField(label='Authentication Method')
     user_email = forms.EmailField(label='Email')
 
     class Meta:
@@ -17,40 +17,24 @@ class EmployeeCreationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance.pk:  # If editing an existing employee
-            self.fields['user_username'].widget.attrs['readonly'] = True
-            self.fields['user_password'].required = False  # Don't require password when editing
-            self.fields['user_email'].required = False  # Don't require password when editing
-        else:  # For new employees
-            self.fields['user_password'].required = True
-
-    def clean_user_username(self):
-        if self.instance.pk:  # When editing an existing instance
-            return self.instance.user.username  # Prevent changes to the username
-        else:
-            return self.cleaned_data['user_username']
-
-    def clean_user_password(self):
-        password = self.cleaned_data['user_password']
-        if not self.instance.pk and not password:  # If creating a new employee, password is required
-            raise ValidationError('Password is required when creating a new employee.')
-        if password:
-            try:
-                validate_password(password)
-            except ValidationError as e:
-                raise ValidationError({'user_password': e.messages})
-        return password
+            for field in ['user_first_name', 'user_last_name', 'user_auth_type', 'user_email']:
+                self.fields[field].required = False
 
     def save(self, commit=True):
         if not self.instance.pk:  # Only create user if this is a new employee
             user = User.objects.create_user(
-                username=self.cleaned_data['user_username'],
-                password=self.cleaned_data['user_password'],
                 email=self.cleaned_data['user_email'],
+                auth_type=self.cleaned_data['user_auth_type'],
+                first_name=self.cleaned_data['user_first_name'],
+                last_name=self.cleaned_data['user_last_name'],
             )
             employee = super().save(commit=False)
             employee.user = user
         else:
-            employee = super().save(commit=False)
+            employee = Employee.objects.get(pk=self.instance.pk)
+            for attr, value in self.cleaned_data.items():
+                setattr(employee.user, attr, value)
+            employee.user.save()
         if commit:
             employee.save()
         return employee

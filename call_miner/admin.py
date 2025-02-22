@@ -22,8 +22,8 @@ class TopicAdmin(admin.ModelAdmin):
 
 class EmployeeAdmin(admin.ModelAdmin):
     form = EmployeeCreationForm
-    list_display = ['user', 'organization']
-    search_fields = ['user__username', 'organization__name']
+    list_display = ['user', 'user__first_name', 'user__last_name', 'organization']
+    search_fields = ['user__email', 'organization__name']
     list_filter = ['organization']
 
     def get_readonly_fields(self, request, obj=None):
