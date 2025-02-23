@@ -11,9 +11,8 @@ from firebase_admin import auth
 from io import BytesIO
 from urllib.parse import urlparse
 from google.cloud import storage
-from google.cloud import secretmanager
 from google.cloud import logging_v2, tasks_v2
-from django.utils import timezone, crypto
+from django.utils import timezone
 from django.conf import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +26,6 @@ class TestSmokeTestCloudRunWithLogs:
     """
     org_name = "TestOrg-Suite"
     api_key_name = "TestAPIKey-Suite"
-    agent_name = "testagent-smoke"
     agent_email = "testagent-smoke@example.com"
     customer_id = "smoke_customer_123"
     uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
@@ -297,7 +295,7 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         conversations = resp.json()["results"]
         assert len(conversations) == 1, f"Expected 1 conversation, found {len(conversations)}."
-        assert conversations[0]['agent_name'] == self.agent_name
+        assert conversations[0]['agent_email'] == self.agent_email
 
         # Check corresponding customer
         resp = requests.get(conversations[0]['customer'], headers=self.superuser_headers)
@@ -389,7 +387,7 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         conversations = resp.json()["results"]
         assert len(conversations) == 1, f"Expected 1 conversation, found {len(conversations)}."
-        assert conversations[0]['agent_name'] == self.agent_name
+        assert conversations[0]['agent_email'] == self.agent_email
         self.uploaded_gcs_uri = f"gs://{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}/{conversations[0]['path']}"
 
         # Check corresponding customer
