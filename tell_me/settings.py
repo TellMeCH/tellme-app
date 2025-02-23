@@ -157,10 +157,11 @@ OPENAI_API_KEY = env('OPENAI_API_KEY')
 MAILER_API_KEY = env('MAILER_API_KEY')
 
 # CORS Settings
-if env('FRONTEND_PATH') == '*':
+FRONTEND_PATH = env('FRONTEND_PATH')
+if FRONTEND_PATH == '*':
     CORS_ALLOW_ALL_ORIGINS = True
 else:
-    CORS_ALLOWED_ORIGINS = [env('FRONTEND_PATH')]
+    CORS_ALLOWED_ORIGINS = [FRONTEND_PATH]
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
