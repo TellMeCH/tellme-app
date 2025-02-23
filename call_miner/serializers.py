@@ -592,14 +592,14 @@ class UserSerializer(serializers.ModelSerializer):
             last_name=validated_data['last_name'],
             auth_type=validated_data['auth_type']
         )
-        if validated_data['auth_type'] == 'password':
-            user.send_password_reset_email()
         return user
 
     def update(self, instance, validated_data):
         auth_type = validated_data.get('auth_type')
+
+        # If changing the authentication type to 'password', send onboarding email
         if auth_type is not None and auth_type != instance.auth_type and auth_type == 'password':
-            instance.send_password_reset_email()
+            instance.send_onboarding_email()
 
         email = validated_data.get('email')
         if email is not None and email != instance.email:
@@ -735,6 +735,9 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
             manager = validated_data.pop('manager', None)
             if role == 'ANALYST':
                 employee = Analyst.objects.create(**validated_data)
+
+                # Only onboard analyst users
+                user.send_onboarding_email()
             elif role in ['AGENT', 'MANAGER']:
                 employee = Agent.objects.create(manager=manager, **validated_data)
             else:
