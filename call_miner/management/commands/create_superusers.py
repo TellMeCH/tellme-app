@@ -46,11 +46,11 @@ class Command(BaseCommand):
             raise CommandError(f'Failed to load superuser account passwords: {e}')
 
         # Helper function to delete a user both locally and from Firebase
-        def delete_user(username):
+        def delete_user(email):
             try:
-                existing_user = User.objects.filter(username=username).first()
+                existing_user = User.objects.filter(email=email).first()
                 if existing_user:
-                    self.stdout.write(f'Deleting existing user: {username}')
+                    self.stdout.write(f'Deleting existing user: {email}')
                     # Delete user from Firebase if exists
                     try:
                         auth.delete_user(existing_user.id)
@@ -59,9 +59,9 @@ class Command(BaseCommand):
                         self.stdout.write(f'No Firebase user found for: {existing_user.id}')
                     # Delete the user from Django
                     existing_user.delete()
-                    self.stdout.write(f'Deleted Django user: {username}')
+                    self.stdout.write(f'Deleted Django user: {email}')
             except Exception as e:
-                raise CommandError(f'Failed to delete user {username}: {e}')
+                raise CommandError(f'Failed to delete user {email}: {e}')
 
         # Delete existing accounts if found
         delete_user('app_admin')
@@ -70,9 +70,10 @@ class Command(BaseCommand):
         try:
             self.stdout.write('Creating Superuser Account for Application Management')
             user = User.objects.create_superuser(
-                username='app_admin',
                 password=app_admin_pwd,
-                email=f'app.admin.{settings.TELLME_ENV}@tell-me.ch'
+                email=f'app.admin.{settings.TELLME_ENV}@tell-me.ch',
+                first_name="App Admin",
+                last_name=settings.TELLME_ENV
             )
             auth.update_user(
                 user.id,
@@ -87,9 +88,10 @@ class Command(BaseCommand):
         try:
             self.stdout.write('Creating Superuser Account for Processing Pipeline')
             user = User.objects.create_superuser(
-                username='processing_pipeline',
                 password=processing_pwd,
-                email=settings.PROCESSING_PIPELINE_USER
+                email=settings.PROCESSING_PIPELINE_USER,
+                first_name="Processing Pipeline",
+                last_name=settings.TELLME_ENV
             )
             self.stdout.write(
                 self.style.SUCCESS(f'Successfully created superuser account for processing pipeline.')

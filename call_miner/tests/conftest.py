@@ -65,25 +65,35 @@ def another_organization():
 
 @pytest.fixture
 def user():
-    return User.objects.create_user(username="testuser", email="testuser@acme.org", password="testpass")
+    return User.objects.create_user(
+        first_name="test",
+        last_name="user",
+        email="testuser@acme.org",
+        auth_type="password"
+    )
 
 
 @pytest.fixture
 def another_user():
-    return User.objects.create_user(username="anotheruser", email="anotheruser@acme.org", password="anotherpass")
+    return User.objects.create_user(
+        first_name="another",
+        last_name="user",
+        email="anotheruser@acme.org",
+        auth_type="password"
+    )
 
 
 @pytest.fixture
 def superuser():
     """Create and return a superuser for testing."""
-    user = User.objects.create_superuser('superuser', 'superuser@example.com', 'superpassword')
+    user = User.objects.create_superuser('superuser@example.com', 'superpassword', 'super', 'user')
     return user
 
 
 @pytest.fixture
 def organization_admin_user(organization):
     """Create and return an organization admin user associated with the given organization."""
-    user = User.objects.create_user('orgadmin', 'orgadmin@example.com', 'password')
+    user = User.objects.create_user('orgadmin@example.com', 'password', 'organization', 'admin')
     Analyst.objects.create(user=user, organization=organization, is_organization_admin=True)
     return user
 
@@ -91,7 +101,7 @@ def organization_admin_user(organization):
 @pytest.fixture
 def another_organization_admin_user(another_organization):
     """Create and return an organization admin in another organization."""
-    user = User.objects.create_user('another_orgadmin', 'another_orgadmin@example.com', 'password')
+    user = User.objects.create_user('another_orgadmin@example.com', 'password', 'another', 'orgadmin')
     Employee.objects.create(user=user, organization=another_organization, is_organization_admin=True)
     return user
 
@@ -99,7 +109,7 @@ def another_organization_admin_user(another_organization):
 @pytest.fixture
 def analyst_user(organization):
     """Create and return an analyst user associated with the given organization."""
-    user = User.objects.create_user('analyst', 'analyst@example.com', 'password')
+    user = User.objects.create_user('analyst@example.com', 'password', 'analyst', 'example')
     Analyst.objects.create(user=user, organization=organization, is_organization_admin=False)
     return user
 
@@ -107,7 +117,7 @@ def analyst_user(organization):
 @pytest.fixture
 def another_organization_analyst_user(another_organization):
     """Create and return an analyst user associated with another organization."""
-    user = User.objects.create_user('another_analyst', 'another_analyst@example.com', 'password')
+    user = User.objects.create_user('another_analyst@example.com', 'password', 'another', 'analyst')
     Analyst.objects.create(user=user, organization=another_organization, is_organization_admin=False)
     return user
 
@@ -115,7 +125,7 @@ def another_organization_analyst_user(another_organization):
 @pytest.fixture
 def agent(organization):
     """Create and return an agent associated with the given organization."""
-    user = User.objects.create_user('agent', 'agent@example.com', 'password')
+    user = User.objects.create_user('agent@example.com', 'password', 'agent', 'example')
     agent = Agent.objects.create(user=user, organization=organization)
     return agent
 
@@ -123,7 +133,7 @@ def agent(organization):
 @pytest.fixture
 def agent_user(organization):
     """Create and return an agent associated with the given organization."""
-    user = User.objects.create_user('agent_user', 'agent_user@example.com', 'password')
+    user = User.objects.create_user('agent_user@example.com', 'password', 'agent', 'user')
     Agent.objects.create(user=user, organization=organization)
     return user
 
@@ -131,9 +141,9 @@ def agent_user(organization):
 @pytest.fixture
 def agent_manager_user(organization):
     """Create and return an agent manager and an agent managed by them."""
-    manager_user = User.objects.create_user('manager', 'manager@example.com', 'password')
+    manager_user = User.objects.create_user('manager@example.com', 'password', 'manager', 'example')
     manager = Agent.objects.create(user=manager_user, organization=organization, is_organization_admin=False)
-    agent_user = User.objects.create_user('agent2', 'agent2@example.com', 'password')
+    agent_user = User.objects.create_user('agent2@example.com', 'password', 'agent2', 'example')
     Agent.objects.create(user=agent_user, organization=organization, is_organization_admin=False, manager=manager)
     return manager_user
 
@@ -141,7 +151,7 @@ def agent_manager_user(organization):
 @pytest.fixture
 def another_organization_agent(another_organization):
     """Create and return an agent associated with another organization."""
-    user = User.objects.create_user('another_agent', 'another_agent@example.com', 'password')
+    user = User.objects.create_user('another_agent@example.com', 'password', 'another', 'agent')
     agent = Agent.objects.create(user=user, organization=another_organization)
     return agent
 
@@ -149,7 +159,7 @@ def another_organization_agent(another_organization):
 @pytest.fixture
 def another_organization_agent_user(another_organization):
     """Create and return an agent in another organization."""
-    user = User.objects.create_user('another_org_employee', 'another_org_employee@example.com', 'password')
+    user = User.objects.create_user('another_org_employee@example.com', 'password', 'another', 'employee')
     Employee.objects.create(user=user, organization=another_organization, is_organization_admin=False, role='AGENT')
     return user
 
@@ -182,7 +192,7 @@ def conversation(agent, customer, topic):
         title='Test Conversation',
         summary='Test summary',
         transcript=f"""
-        <agent>: Hello, {agent.user.username}, how can I assist you today?
+        <agent>: Hello, {agent.user.first_name} here. How can I assist you today?
         <customer>: Hi, I have an issue with my product. It's acting weird.
         <agent>: Could you describe the problem?
         <customer>: Yes, it keeps making a strange noise and flashing red lights.
