@@ -470,21 +470,21 @@ class AgentListSerializer(serializers.HyperlinkedModelSerializer):
     """
     This serializer simply lists all existing Agents in an organization, as well as their managers and call count.
     """
-    username = serializers.CharField(source='user.username', read_only=True, help_text='Agent username')
+    email = serializers.CharField(source='user.email', read_only=True, help_text='Agent email')
     manager = serializers.HyperlinkedRelatedField(
         view_name='agent-detail',
         read_only=True,
         help_text="Link to the agent's manager"
     )
-    manager_username = serializers.CharField(
-        source='manager.user.username',
+    manager_email = serializers.CharField(
+        source='manager.user.email',
         read_only=True,
-        help_text="Username of the agent's manager"
+        help_text="Email of the agent's manager"
     )
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count', 'first_conversation_date',
+        fields = ['url', 'email', 'manager', 'manager_email', 'conversation_count', 'first_conversation_date',
                   'last_conversation_date', 'created', 'updated']
 
 
@@ -492,21 +492,21 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
     """
     This serializer shows the detail of a given agent, including all its meta-summary data and trend statistics
     """
-    username = serializers.CharField(source='user.username', read_only=True, help_text='Agent username')
+    email = serializers.CharField(source='user.email', read_only=True, help_text='Agent email')
     manager = serializers.HyperlinkedRelatedField(
         view_name='agent-detail',
         read_only=True,
         help_text="Link to the agent's manager"
     )
-    manager_username = serializers.CharField(
-        source='manager.user.username',
+    manager_email = serializers.CharField(
+        source='manager.user.email',
         read_only=True,
-        help_text="Username of the agent's manager"
+        help_text="Email of the agent's manager"
     )
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count',
+        fields = ['url', 'email', 'manager', 'manager_email', 'conversation_count',
                   'first_conversation_date', 'last_conversation_date', 'created', 'updated']
 
     def get_agent_data(self, obj):
@@ -519,7 +519,7 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
             agent_data.append(
                 {
                     'id': i,
-                    'name': agent.user.username,
+                    'email': agent.user.email,
                     'url': self.context['request'].build_absolute_uri(
                         reverse('agent-detail', args=[agent.id])
                     ),
@@ -567,32 +567,37 @@ class UserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = User
-        fields = ('username', 'password', 'email')
-        extra_kwargs = {'password': {'write_only': True}}
+        fields = ('email', 'auth_type', 'first_name', 'last_name')
 
     def validate(self, data):
         if data.get('email') == settings.PROCESSING_PIPELINE_USER:
-            raise serializers.ValidationError({
-                "email": "Provided user email is protected."
-            })
+            raise serializers.ValidationError({"email": "Provided user email is protected."})
         return data
 
     def create(self, validated_data):
         user = User.objects.create_user(
             email=validated_data['email'],
-            username=validated_data['username'],
-            password=validated_data['password']
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
+            auth_type=validated_data['auth_type']
         )
+        if validated_data['auth_type'] == 'password':
+            user.send_password_reset_email()
         return user
 
     def update(self, instance, validated_data):
-        instance.email = validated_data.get('email', instance.email)
-        instance.username = validated_data.get('username', instance.username)
-        password = validated_data.get('password', None)
-        if password:
-            instance.set_password(password)
+        auth_type = validated_data.get('auth_type')
+        if auth_type is not None and auth_type != instance.auth_type and auth_type == 'password':
+            instance.send_password_reset_email()
+
+        email = validated_data.get('email')
+        if email is not None and email != instance.email:
+            raise serializers.ValidationError({"email": "Can't change user email"})
+
+        # Update instance fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         instance.save()
-        return instance
 
 
 class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):

@@ -152,12 +152,7 @@ class TestSmokeTestCloudRunWithLogs:
             raise EnvironmentError("SERVICE_NAME environment variable not set")
 
         # Firebase API Key
-        self.firebase_api_key = os.getenv("FIREBASE_WEB_API_KEY")
-        if not self.firebase_api_key:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_path = f"projects/{settings.GOOGLE_CLOUD_PROJECT}/secrets/firebase_api_key/versions/latest"
-            response = client.access_secret_version(name=secret_path)
-            self.firebase_api_key = response.payload.data.decode("UTF-8")
+        self.firebase_api_key = settings.FIREBASE_WEB_API_KEY
 
         # Authorization header for setup and teardown
         superuser_id_token = self.user_id_token(f'app.admin.{settings.TELLME_ENV}@tell-me.ch')
@@ -215,9 +210,10 @@ class TestSmokeTestCloudRunWithLogs:
             "organization": self.org_id,
             "is_organization_admin": False,
             "user": {
-                "username": self.agent_name,
                 "email": self.agent_email,
-                "password": crypto.get_random_string(20)
+                "first_name": "John",
+                "last_name": "Doe",
+                "auth_type": "google"
             }
         }
         resp = requests.post(
