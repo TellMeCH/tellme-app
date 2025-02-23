@@ -64,8 +64,8 @@ class Command(BaseCommand):
                 raise CommandError(f'Failed to delete user {email}: {e}')
 
         # Delete existing accounts if found
-        delete_user('app_admin')
-        delete_user('processing_pipeline')
+        delete_user(f'app.admin.{settings.TELLME_ENV}@tell-me.ch')
+        delete_user(settings.PROCESSING_PIPELINE_USER)
 
         try:
             self.stdout.write('Creating Superuser Account for Application Management')
