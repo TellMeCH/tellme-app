@@ -517,9 +517,9 @@ class User(AbstractBaseUser, PermissionsMixin):
         return super().delete(using=using, keep_parents=keep_parents)
 
     @staticmethod
-    def _send_email_in_background(target_name, target_email, link):
+    def _send_email_in_background(target_name, target_email, link, method):
         try:
-            send_email_with_link(target_name, target_email, link)
+            send_email_with_link(target_name, target_email, link, method)
         except Exception as e:
             print(f"Failed to send verification email to {target_email}: {e}")
 
