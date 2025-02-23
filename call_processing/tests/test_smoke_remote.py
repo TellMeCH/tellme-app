@@ -74,7 +74,7 @@ class TestSmokeTestCloudRunWithLogs:
         )
         agent_list = agent_response.json()["results"]
         for agent in agent_list:
-            if agent['username'] == self.agent_name:
+            if agent['email'] == self.agent_email:
                 # Iterate over all related conversations and delete them
                 conversation_response = requests.get(
                     f"{agent['url']}conversations/",
@@ -91,7 +91,7 @@ class TestSmokeTestCloudRunWithLogs:
                     agent['url'].replace('agents', 'employees'),
                     headers=self.superuser_headers
                 )
-                logger.info(f"Deleted test agent {agent['username']}")
+                logger.info(f"Deleted test agent {agent['email']}")
 
         # Finally, delete the test organization
         requests.delete(org_url, headers=self.superuser_headers)
@@ -224,7 +224,7 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         employee_json = resp.json()
         self.agent_id = employee_json['id']
-        logger.info(f"Created employee (Agent) with Username {employee_json['user']['username']}")
+        logger.info(f"Created employee (Agent) with Email {employee_json['user']['email']}")
 
         # Prepare the logging client
         self.logging_client = logging_v2.Client()

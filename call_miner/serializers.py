@@ -226,13 +226,13 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
         read_only=True,
         help_text='Link to the conversation customer'
     )
-    agent_name = serializers.CharField(
-        source='agent.user.username',
+    agent_email = serializers.CharField(
+        source='agent.user.email',
         read_only=True,
-        help_text='Username of the related agent'
+        help_text='Email of the related agent'
     )
-    customer_name = serializers.CharField(
-        source='customer.name',
+    customer_id = serializers.CharField(
+        source='customer.external_id',
         read_only=True,
         help_text='Name of the related customer'
     )
@@ -242,8 +242,8 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'agent', 'agent_name',
-                  'customer', 'customer_name', 'input_tokens', 'output_tokens', 'created']
+        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'agent', 'agent_email',
+                  'customer', 'customer_id', 'input_tokens', 'output_tokens', 'created']
 
     @extend_schema_field(TOPIC_DATA_RESPONSE_SCHEMA)
     def get_topic_data(self, obj):
@@ -272,11 +272,22 @@ class ConversationDetailSerializer(ConversationListSerializer):
     However, it also presents the processed transcripts on top.
     """
     pagination_class = ListCursorPagination()
+    agent_first_name = serializers.CharField(
+        source='agent.user.first_name',
+        read_only=True,
+        help_text='First name of the related agent'
+    )
+    agent_last_name = serializers.CharField(
+        source='agent.user.last_name',
+        read_only=True,
+        help_text='Last name of the related agent'
+    )
 
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data', 'agent',
-                  'agent_name', 'customer', 'customer_name', 'input_tokens', 'output_tokens', 'created']
+                  'agent_email', 'agent_first_name', 'agent_last_name', 'customer', 'customer_id', 'input_tokens',
+                  'output_tokens', 'created']
 
     def get_processed_transcript(self, obj):
         """
@@ -511,7 +522,7 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
 
     def get_agent_data(self, obj):
         """
-        Obtain a paginated list of all the associated agents under a manager. For each agent, shows the id, username,
+        Obtain a paginated list of all the associated agents under a manager. For each agent, shows the id, email,
         link, conversation count, and first and last conversation dates.
         """
         agent_data = []
