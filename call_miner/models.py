@@ -459,6 +459,7 @@ class CustomUserManager(BaseUserManager):
                 first_name=first_name,
                 last_name=last_name,
                 is_superuser=is_superuser,
+                auth_type=auth_type,
                 **extra_fields
             )
             user.save(using=self._db)
@@ -522,14 +523,20 @@ class User(AbstractBaseUser, PermissionsMixin):
         except Exception as e:
             print(f"Failed to send verification email to {target_email}: {e}")
 
-    def send_password_reset_email(self):
+    def send_onboarding_email(self):
         """
-        Simple method to send a reset-password email to the user. This will be triggered if the serializer create/update
+        Simple method to onboard a user by verifying its email. This will be triggered if the serializer create/update
         methods are called.
         """
-        link = auth.generate_password_reset_link(self.email)
+        if self.auth_type == 'password':
+            link = auth.generate_password_reset_link(self.email)
+            method = 'email and password'
+        else:
+            link = settings.FRONTEND_PATH
+            method = self.auth_type.capitalize() + ' account'
+
         full_name = self.first_name + ' ' + self.last_name
-        threading.Thread(target=self._send_email_in_background, args=(full_name, self.email, link)).start()
+        threading.Thread(target=self._send_email_in_background, args=(full_name, self.email, link, method)).start()
 
 
 class Employee(models.Model):

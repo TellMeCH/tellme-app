@@ -2,7 +2,7 @@ from django.conf import settings
 from mailersend import emails
 
 
-def send_email_with_link(target_name: str, target_email: str, link: str):
+def send_email_with_link(target_name: str, target_email: str, link: str, method: str):
     mailer = emails.NewEmail(settings.MAILER_API_KEY)
 
     mail_body = {}
@@ -16,7 +16,8 @@ def send_email_with_link(target_name: str, target_email: str, link: str):
                 "link": link,
                 "first_name": target_name,
                 "account_name": "tellme",
-                "support_email": "support@tell-me.ch"
+                "support_email": "support@tell-me.ch",
+                "method": method
             }
         }
     ]
