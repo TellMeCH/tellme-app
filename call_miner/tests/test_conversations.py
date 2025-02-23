@@ -621,12 +621,12 @@ class TestConversationSearch:
         assert len(results) >= 1
         assert str(conversation.id) in conversation_ids
 
-    def test_search_no_duplicates_in_results(self, client, analyst_user, conversation):
+    def test_search_no_duplicates_in_results(self, client, analyst_user, conversation, agent):
         """
         Test that conversations resulting from a query do not contain duplicates.
         """
         client.force_authenticate(user=analyst_user)
-        search_query = "agent"
+        search_query = agent.user.first_name
         results = self.response_from_search_url(client, search_query)
         conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
 

@@ -23,7 +23,7 @@ class TestProcessRecordingView:
         settings.PROCESSING_PIPELINE_USER = "pipeline@example.com"
 
         # Create the user expected by the authentication class
-        User.objects.create_user("pipeline", "pipeline@example.com", "password")
+        User.objects.create_user("pipeline@example.com", "password", 'pipeline', 'executor')
 
         # Set the authorization header
         url = reverse("process")

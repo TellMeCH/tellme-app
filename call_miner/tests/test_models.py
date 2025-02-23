@@ -513,7 +513,7 @@ class TestAnalyst:
         """
         assert analyst.organization == organization
         assert analyst.user == user
-        assert str(analyst) == f"{user.username} - {organization.name} - Analyst"
+        assert str(analyst) == f"{user.email} - {organization.name} - Analyst"
 
     def test_analyst_unique_together(self, analyst, organization):
         """
