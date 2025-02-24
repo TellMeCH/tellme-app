@@ -144,7 +144,8 @@ jobs:
           timeout: 30m
           flags: |
             --allow-unauthenticated
-            --min-instances=0 
+            --min-instances=0
+            --max-instances=10
             --execution-environment=gen2
             --service-account=${{ vars.SERVICE_NAME }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
             --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }}
