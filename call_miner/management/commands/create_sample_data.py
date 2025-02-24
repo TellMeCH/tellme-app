@@ -609,13 +609,15 @@ class Command(BaseCommand):
         try:
             self.stdout.write('Creating Organization Admin')
             user = User.objects.create_user(
-                username='org_admin',
-                password=COMMON_PASSWORD,
                 email='org_admin@acme.org',
+                auth_type='password',
+                first_name='Org Admin',
+                last_name='Acme'
             )
             auth.update_user(
                 user.id,
-                email_verified=True
+                email_verified=True,
+                password=COMMON_PASSWORD,
             )
 
             analyst = Analyst(
@@ -631,13 +633,15 @@ class Command(BaseCommand):
         try:
             self.stdout.write('Creating Sample Analysts')
             user = User.objects.create_user(
-                username='analyst_01',
-                password=COMMON_PASSWORD,
-                email='analyst_01@acme.org'
+                email='analyst_01@acme.org',
+                auth_type='password',
+                first_name='Analyst 1',
+                last_name='Acme'
             )
             auth.update_user(
                 user.id,
-                email_verified=True
+                email_verified=True,
+                password=COMMON_PASSWORD
             )
 
             analyst = Analyst(
@@ -648,13 +652,15 @@ class Command(BaseCommand):
             analyst.save()
 
             user = User.objects.create_user(
-                username='competitor_analyst_01',
-                password=COMMON_PASSWORD,
-                email='analyst_01@competitors.inc'
+                email='analyst_01@competitors.inc',
+                auth_type='password',
+                first_name='Analyst 1',
+                last_name='Competitors'
             )
             auth.update_user(
                 user.id,
-                email_verified=True
+                email_verified=True,
+                password=COMMON_PASSWORD
             )
 
             competitor_analyst = Analyst(
@@ -668,13 +674,15 @@ class Command(BaseCommand):
         try:
             self.stdout.write('Creating 15 Sample Agents under manager_01')
             user = User.objects.create_user(
-                username='manager_01',
-                password=COMMON_PASSWORD,
-                email='manager_01@acme.org'
+                email='manager_01@acme.org',
+                auth_type='password',
+                first_name='Manager 1',
+                last_name='Acme'
             )
             auth.update_user(
                 user.id,
-                email_verified=True
+                email_verified=True,
+                password=COMMON_PASSWORD
             )
 
             manager = Agent(
@@ -687,13 +695,15 @@ class Command(BaseCommand):
             agents = []
             for i in range(1, 17):  # Creating agent_02 to agent_16
                 user = User.objects.create_user(
-                    username=f'agent_{i:02d}',
-                    password=COMMON_PASSWORD,
-                    email=f'agent_{i:02d}@acme.org'
+                    email=f'agent_{i:02d}@acme.org',
+                    auth_type='password',
+                    first_name=f'Agent {i}',
+                    last_name='Acme'
                 )
                 auth.update_user(
                     user.id,
-                    email_verified=True
+                    email_verified=True,
+                    password=COMMON_PASSWORD
                 )
 
                 agent = Agent(
@@ -736,7 +746,7 @@ class Command(BaseCommand):
                     duration=duration,
                     transcript=data['transcript'],
                     sentiment=sentiment,
-                    title=f"Conversation {i + 1} - {agent.user.username} assists {customer.external_id}",
+                    title=f"Conversation {i + 1} - {agent.user.email} assists {customer.external_id}",
                     summary=data['summary'],
                     input_tokens=random.randint(50, 200),
                     output_tokens=random.randint(20, 100),
@@ -764,9 +774,10 @@ class Command(BaseCommand):
         try:
             self.stdout.write('Creating Superuser')
             user = User.objects.create_superuser(
-                username='altogi',
+                email='altogi@tellme.ch',
                 password=COMMON_PASSWORD,
-                email='altogi@tellme.ch'
+                first_name='Alvaro',
+                last_name='Tomas Gil'
             )
             auth.update_user(
                 user.id,
@@ -778,9 +789,10 @@ class Command(BaseCommand):
         try:
             self.stdout.write('Creating Superuser Account for Invoking Processing Pipeline')
             user = User.objects.create_superuser(
-                username=f'processing.{settings.TELLME_ENV}',
+                email=settings.PROCESSING_PIPELINE_USER,
                 password=COMMON_PASSWORD,
-                email=settings.PROCESSING_PIPELINE_USER
+                first_name='Processing',
+                last_name=settings.TELLME_ENV
             )
             auth.update_user(
                 user.id,

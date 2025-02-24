@@ -70,13 +70,13 @@ class TestEmployeeRetrieve:
         url = reverse('employee-detail', args=[employee.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['user']['username'] == analyst_user.username
+        assert response.data['user']['email'] == analyst_user.email
 
         another_employee = Employee.objects.get(user=another_organization_agent_user)
         url = reverse('employee-detail', args=[another_employee.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['user']['username'] == another_organization_agent_user.username
+        assert response.data['user']['email'] == another_organization_agent_user.email
 
     def test_organization_admin_can_retrieve_employee_in_organization(self, client, organization_admin_user,
                                                                       analyst_user):
@@ -86,7 +86,7 @@ class TestEmployeeRetrieve:
         url = reverse('employee-detail', args=[employee.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['user']['username'] == analyst_user.username
+        assert response.data['user']['email'] == analyst_user.email
 
     def test_organization_admin_cannot_retrieve_employee_in_another_organization(self, client, organization_admin_user,
                                                                                  another_organization_agent_user):
@@ -104,7 +104,7 @@ class TestEmployeeRetrieve:
         url = reverse('employee-detail', args=[employee.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['user']['username'] == analyst_user.username
+        assert response.data['user']['email'] == analyst_user.email
 
     def test_analyst_cannot_retrieve_other_employee(self, client, analyst_user, agent_user):
         """Test that an analyst cannot retrieve another employee's record."""
@@ -121,7 +121,7 @@ class TestEmployeeRetrieve:
         url = reverse('employee-detail', args=[employee.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['user']['username'] == agent_manager_user.username
+        assert response.data['user']['email'] == agent_manager_user.email
 
     def test_agent_manager_cannot_retrieve_other_employee(self, client, agent_manager_user, agent_user):
         """Test that an agent manager cannot retrieve another employee's record."""
@@ -138,7 +138,7 @@ class TestEmployeeRetrieve:
         url = reverse('employee-detail', args=[employee.id])
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data['user']['username'] == agent_user.username
+        assert response.data['user']['email'] == agent_user.email
 
     def test_unauthenticated_user_cannot_retrieve_employee(self, client, analyst_user):
         """Test that an unauthenticated user cannot retrieve any employee record."""
@@ -158,8 +158,9 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'new_user',
-                'password': 'password',
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': 'new_user@example.com'
             },
             'role': 'ANALYST',
@@ -171,7 +172,7 @@ class TestEmployeeCreate:
         assert response.status_code == status.HTTP_201_CREATED
         new_user = User.objects.get(email=response.data['user']['email'])
         new_employee = new_user.employee
-        assert new_user.username == 'new_user'
+        assert new_user.first_name == 'new'
         assert new_user.email == 'new_user@example.com'
         assert new_employee.role == 'ANALYST'
         assert hasattr(new_employee, 'analyst')
@@ -182,8 +183,9 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'new_user',
-                'password': 'password',
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': 'new_user@example.com'
             },
             'role': 'ANALYST',
@@ -201,8 +203,9 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'new_employee',
-                'password': 'password',
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': 'new_employee@example.com'
             },
             'role': 'AGENT',
@@ -213,7 +216,7 @@ class TestEmployeeCreate:
         assert response.status_code == status.HTTP_201_CREATED
         new_user = User.objects.get(email=response.data['user']['email'])
         new_employee = new_user.employee
-        assert new_user.username == 'new_employee'
+        assert new_user.first_name == 'new'
         assert new_user.email == 'new_employee@example.com'
         assert new_employee.role == 'AGENT'
         assert hasattr(new_employee, 'agent')
@@ -225,9 +228,10 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'new_employee',
-                'password': 'password',
-                'email': 'new_employee@example.com'
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
+                'email': 'new_user@example.com'
             },
             'role': 'AGENT',
             'is_organization_admin': False,
@@ -243,9 +247,10 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'invalid_role_user',
-                'password': 'password',
-                'email': 'invalid@example.com'
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
+                'email': 'new_user@example.com'
             },
             'role': 'INVALID',
             'is_organization_admin': False
@@ -261,8 +266,9 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'agent_with_manager',
-                'password': 'password',
+                'first_name': 'agent_with_manager',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': 'agent_with_manager@example.com'
             },
             'role': 'AGENT',
@@ -273,7 +279,7 @@ class TestEmployeeCreate:
         assert response.status_code == status.HTTP_201_CREATED
         new_user = User.objects.get(email=response.data['user']['email'])
         new_employee = new_user.employee
-        assert new_user.username == 'agent_with_manager'
+        assert new_user.first_name == 'agent_with_manager'
         assert new_user.email == 'agent_with_manager@example.com'
         assert new_employee.role == 'AGENT'
         assert hasattr(new_employee, 'agent')
@@ -287,9 +293,10 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'agent_with_manager',
-                'password': 'password',
-                'email': 'agent_with_manager@example.com'
+                'first_name': 'agent_with_manager',
+                'last_name': 'user',
+                'auth_type': 'google',
+                'email': 'new_user@example.com'
             },
             'role': 'ANALYST',
             'manager': agent_manager_agent.id,
@@ -305,9 +312,10 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'new_employee',
-                'password': 'password',
-                'email': 'new_employee@example.com'
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
+                'email': 'new_user@example.com'
             },
             'role': 'AGENT',
             'is_organization_admin': False
@@ -321,9 +329,10 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'new_employee',
-                'password': 'password',
-                'email': 'new_employee@example.com'
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
+                'email': 'new_user@example.com'
             },
             'role': 'AGENT',
             'is_organization_admin': False
@@ -336,9 +345,10 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': 'new_employee',
-                'password': 'password',
-                'email': 'new_employee@example.com'
+                'first_name': 'new',
+                'last_name': 'user',
+                'auth_type': 'google',
+                'email': 'new_user@example.com'
             },
             'role': 'AGENT',
             'is_organization_admin': False
@@ -357,8 +367,9 @@ class TestEmployeeCreate:
             url = reverse('employee-list')
             data = {
                 'user': {
-                    'username': f'superuser_employee_{i}',
-                    'password': 'password',
+                    'first_name': f'superuser_employee_{i}',
+                    'last_name': 'user',
+                    'auth_type': 'google',
                     'email': f'superuser_employee_{i}@example.com'
                 },
                 'role': 'ANALYST',
@@ -372,8 +383,9 @@ class TestEmployeeCreate:
         # Attempt to create one more employee beyond the max count
         data = {
             'user': {
-                'username': 'excess_superuser_employee',
-                'password': 'password',
+                'first_name': 'excess_superuser_employee',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': 'excess_superuser_employee@example.com'
             },
             'role': 'ANALYST',
@@ -396,8 +408,9 @@ class TestEmployeeCreate:
         for i in range(employees_to_create):
             data = {
                 'user': {
-                    'username': f'employee_{i}',
-                    'password': 'password',
+                    'first_name': f'employee_{i}',
+                    'last_name': 'user',
+                    'auth_type': 'google',
                     'email': f'employee_{i}@example.com'
                 },
                 'role': 'AGENT',
@@ -409,8 +422,9 @@ class TestEmployeeCreate:
         # Attempt to create one more employee beyond the max count
         data = {
             'user': {
-                'username': 'excess_employee',
-                'password': 'password',
+                'first_name': 'excess_employee',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': 'excess_employee@example.com'
             },
             'role': 'AGENT',
@@ -426,8 +440,9 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': f'protected_employee',
-                'password': 'password',
+                'first_name': f'protected_employee',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': settings.PROCESSING_PIPELINE_USER
             },
             'role': 'AGENT',
@@ -444,8 +459,9 @@ class TestEmployeeCreate:
         url = reverse('employee-list')
         data = {
             'user': {
-                'username': f'protected_employee',
-                'password': 'password',
+                'first_name': f'protected_employee',
+                'last_name': 'user',
+                'auth_type': 'google',
                 'email': settings.PROCESSING_PIPELINE_USER
             },
             'role': 'AGENT',
@@ -591,7 +607,7 @@ class TestEmployeeUpdate:
         """Test that an organization admin cannot assign a manager from another organization."""
         client.force_authenticate(user=organization_admin_user)
         employee = Employee.objects.get(user=agent_user)
-        other_agent_user = User.objects.create_user('other_agent', 'other_agent@example.com', 'password')
+        other_agent_user = User.objects.create_user('other_agent@example.com', 'password', 'other', 'agent')
         other_agent = Agent.objects.create(user=other_agent_user, organization=another_organization)
         url = reverse('employee-detail', args=[employee.id])
         data = {'manager': other_agent.id}

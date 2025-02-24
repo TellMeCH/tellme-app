@@ -4,7 +4,8 @@ from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm
 
 
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ['username', 'email', 'is_staff']
+    list_display = ['email', 'first_name', 'last_name', 'is_staff', 'auth_type']
+    search_fields = ['first_name', 'email']
 
 
 class OrganizationAdmin(admin.ModelAdmin):
@@ -21,8 +22,8 @@ class TopicAdmin(admin.ModelAdmin):
 
 class EmployeeAdmin(admin.ModelAdmin):
     form = EmployeeCreationForm
-    list_display = ['user', 'organization']
-    search_fields = ['user__username', 'organization__name']
+    list_display = ['user', 'user__first_name', 'user__last_name', 'organization']
+    search_fields = ['user__email', 'organization__name']
     list_filter = ['organization']
 
     def get_readonly_fields(self, request, obj=None):

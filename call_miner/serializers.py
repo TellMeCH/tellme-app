@@ -226,13 +226,13 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
         read_only=True,
         help_text='Link to the conversation customer'
     )
-    agent_name = serializers.CharField(
-        source='agent.user.username',
+    agent_email = serializers.CharField(
+        source='agent.user.email',
         read_only=True,
-        help_text='Username of the related agent'
+        help_text='Email of the related agent'
     )
-    customer_name = serializers.CharField(
-        source='customer.name',
+    customer_id = serializers.CharField(
+        source='customer.external_id',
         read_only=True,
         help_text='Name of the related customer'
     )
@@ -242,8 +242,8 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'agent', 'agent_name',
-                  'customer', 'customer_name', 'input_tokens', 'output_tokens', 'created']
+        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'agent', 'agent_email',
+                  'customer', 'customer_id', 'input_tokens', 'output_tokens', 'created']
 
     @extend_schema_field(TOPIC_DATA_RESPONSE_SCHEMA)
     def get_topic_data(self, obj):
@@ -272,11 +272,22 @@ class ConversationDetailSerializer(ConversationListSerializer):
     However, it also presents the processed transcripts on top.
     """
     pagination_class = ListCursorPagination()
+    agent_first_name = serializers.CharField(
+        source='agent.user.first_name',
+        read_only=True,
+        help_text='First name of the related agent'
+    )
+    agent_last_name = serializers.CharField(
+        source='agent.user.last_name',
+        read_only=True,
+        help_text='Last name of the related agent'
+    )
 
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data', 'agent',
-                  'agent_name', 'customer', 'customer_name', 'input_tokens', 'output_tokens', 'created']
+                  'agent_email', 'agent_first_name', 'agent_last_name', 'customer', 'customer_id', 'input_tokens',
+                  'output_tokens', 'created']
 
     def get_processed_transcript(self, obj):
         """
@@ -470,21 +481,21 @@ class AgentListSerializer(serializers.HyperlinkedModelSerializer):
     """
     This serializer simply lists all existing Agents in an organization, as well as their managers and call count.
     """
-    username = serializers.CharField(source='user.username', read_only=True, help_text='Agent username')
+    email = serializers.CharField(source='user.email', read_only=True, help_text='Agent email')
     manager = serializers.HyperlinkedRelatedField(
         view_name='agent-detail',
         read_only=True,
         help_text="Link to the agent's manager"
     )
-    manager_username = serializers.CharField(
-        source='manager.user.username',
+    manager_email = serializers.CharField(
+        source='manager.user.email',
         read_only=True,
-        help_text="Username of the agent's manager"
+        help_text="Email of the agent's manager"
     )
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count', 'first_conversation_date',
+        fields = ['url', 'email', 'manager', 'manager_email', 'conversation_count', 'first_conversation_date',
                   'last_conversation_date', 'created', 'updated']
 
 
@@ -492,26 +503,26 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
     """
     This serializer shows the detail of a given agent, including all its meta-summary data and trend statistics
     """
-    username = serializers.CharField(source='user.username', read_only=True, help_text='Agent username')
+    email = serializers.CharField(source='user.email', read_only=True, help_text='Agent email')
     manager = serializers.HyperlinkedRelatedField(
         view_name='agent-detail',
         read_only=True,
         help_text="Link to the agent's manager"
     )
-    manager_username = serializers.CharField(
-        source='manager.user.username',
+    manager_email = serializers.CharField(
+        source='manager.user.email',
         read_only=True,
-        help_text="Username of the agent's manager"
+        help_text="Email of the agent's manager"
     )
 
     class Meta:
         model = Agent
-        fields = ['url', 'username', 'manager', 'manager_username', 'conversation_count',
+        fields = ['url', 'email', 'manager', 'manager_email', 'conversation_count',
                   'first_conversation_date', 'last_conversation_date', 'created', 'updated']
 
     def get_agent_data(self, obj):
         """
-        Obtain a paginated list of all the associated agents under a manager. For each agent, shows the id, username,
+        Obtain a paginated list of all the associated agents under a manager. For each agent, shows the id, email,
         link, conversation count, and first and last conversation dates.
         """
         agent_data = []
@@ -519,7 +530,7 @@ class AgentDetailSerializer(serializers.HyperlinkedModelSerializer):
             agent_data.append(
                 {
                     'id': i,
-                    'name': agent.user.username,
+                    'email': agent.user.email,
                     'url': self.context['request'].build_absolute_uri(
                         reverse('agent-detail', args=[agent.id])
                     ),
@@ -567,32 +578,37 @@ class UserSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = User
-        fields = ('username', 'password', 'email')
-        extra_kwargs = {'password': {'write_only': True}}
+        fields = ('email', 'auth_type', 'first_name', 'last_name')
 
     def validate(self, data):
         if data.get('email') == settings.PROCESSING_PIPELINE_USER:
-            raise serializers.ValidationError({
-                "email": "Provided user email is protected."
-            })
+            raise serializers.ValidationError({"email": "Provided user email is protected."})
         return data
 
     def create(self, validated_data):
         user = User.objects.create_user(
             email=validated_data['email'],
-            username=validated_data['username'],
-            password=validated_data['password']
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
+            auth_type=validated_data['auth_type']
         )
         return user
 
     def update(self, instance, validated_data):
-        instance.email = validated_data.get('email', instance.email)
-        instance.username = validated_data.get('username', instance.username)
-        password = validated_data.get('password', None)
-        if password:
-            instance.set_password(password)
+        auth_type = validated_data.get('auth_type')
+
+        # If changing the authentication type to 'password', send onboarding email
+        if auth_type is not None and auth_type != instance.auth_type and auth_type == 'password':
+            instance.send_onboarding_email()
+
+        email = validated_data.get('email')
+        if email is not None and email != instance.email:
+            raise serializers.ValidationError({"email": "Can't change user email"})
+
+        # Update instance fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         instance.save()
-        return instance
 
 
 class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):
@@ -719,6 +735,9 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
             manager = validated_data.pop('manager', None)
             if role == 'ANALYST':
                 employee = Analyst.objects.create(**validated_data)
+
+                # Only onboard analyst users
+                user.send_onboarding_email()
             elif role in ['AGENT', 'MANAGER']:
                 employee = Agent.objects.create(manager=manager, **validated_data)
             else:

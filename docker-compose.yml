@@ -63,6 +63,7 @@ services:
         curl -H 'Authorization: Bearer owner' -X DELETE http://firebase:9099/emulator/v1/projects/${GOOGLE_CLOUD_PROJECT}/accounts;
         if [ \"${RUN_DB_SETUP}\" = \"true\" ]; then
           echo 'Running migrations...'
+          python manage.py collectstatic --noinput
           python manage.py makemigrations
           python manage.py migrate
           python manage.py create_sample_data

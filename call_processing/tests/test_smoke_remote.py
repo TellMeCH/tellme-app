@@ -11,9 +11,8 @@ from firebase_admin import auth
 from io import BytesIO
 from urllib.parse import urlparse
 from google.cloud import storage
-from google.cloud import secretmanager
 from google.cloud import logging_v2, tasks_v2
-from django.utils import timezone, crypto
+from django.utils import timezone
 from django.conf import settings
 
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +26,6 @@ class TestSmokeTestCloudRunWithLogs:
     """
     org_name = "TestOrg-Suite"
     api_key_name = "TestAPIKey-Suite"
-    agent_name = "testagent-smoke"
     agent_email = "testagent-smoke@example.com"
     customer_id = "smoke_customer_123"
     uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
@@ -74,7 +72,7 @@ class TestSmokeTestCloudRunWithLogs:
         )
         agent_list = agent_response.json()["results"]
         for agent in agent_list:
-            if agent['username'] == self.agent_name:
+            if agent['email'] == self.agent_email:
                 # Iterate over all related conversations and delete them
                 conversation_response = requests.get(
                     f"{agent['url']}conversations/",
@@ -91,7 +89,7 @@ class TestSmokeTestCloudRunWithLogs:
                     agent['url'].replace('agents', 'employees'),
                     headers=self.superuser_headers
                 )
-                logger.info(f"Deleted test agent {agent['username']}")
+                logger.info(f"Deleted test agent {agent['email']}")
 
         # Finally, delete the test organization
         requests.delete(org_url, headers=self.superuser_headers)
@@ -152,12 +150,7 @@ class TestSmokeTestCloudRunWithLogs:
             raise EnvironmentError("SERVICE_NAME environment variable not set")
 
         # Firebase API Key
-        self.firebase_api_key = os.getenv("FIREBASE_WEB_API_KEY")
-        if not self.firebase_api_key:
-            client = secretmanager.SecretManagerServiceClient()
-            secret_path = f"projects/{settings.GOOGLE_CLOUD_PROJECT}/secrets/firebase_api_key/versions/latest"
-            response = client.access_secret_version(name=secret_path)
-            self.firebase_api_key = response.payload.data.decode("UTF-8")
+        self.firebase_api_key = settings.FIREBASE_WEB_API_KEY
 
         # Authorization header for setup and teardown
         superuser_id_token = self.user_id_token(f'app.admin.{settings.TELLME_ENV}@tell-me.ch')
@@ -215,9 +208,10 @@ class TestSmokeTestCloudRunWithLogs:
             "organization": self.org_id,
             "is_organization_admin": False,
             "user": {
-                "username": self.agent_name,
                 "email": self.agent_email,
-                "password": crypto.get_random_string(20)
+                "first_name": "John",
+                "last_name": "Doe",
+                "auth_type": "google"
             }
         }
         resp = requests.post(
@@ -228,7 +222,7 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         employee_json = resp.json()
         self.agent_id = employee_json['id']
-        logger.info(f"Created employee (Agent) with Username {employee_json['user']['username']}")
+        logger.info(f"Created employee (Agent) with Email {employee_json['user']['email']}")
 
         # Prepare the logging client
         self.logging_client = logging_v2.Client()
@@ -301,7 +295,7 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         conversations = resp.json()["results"]
         assert len(conversations) == 1, f"Expected 1 conversation, found {len(conversations)}."
-        assert conversations[0]['agent_name'] == self.agent_name
+        assert conversations[0]['agent_email'] == self.agent_email
 
         # Check corresponding customer
         resp = requests.get(conversations[0]['customer'], headers=self.superuser_headers)
@@ -393,7 +387,7 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         conversations = resp.json()["results"]
         assert len(conversations) == 1, f"Expected 1 conversation, found {len(conversations)}."
-        assert conversations[0]['agent_name'] == self.agent_name
+        assert conversations[0]['agent_email'] == self.agent_email
         self.uploaded_gcs_uri = f"gs://{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}/{conversations[0]['path']}"
 
         # Check corresponding customer
