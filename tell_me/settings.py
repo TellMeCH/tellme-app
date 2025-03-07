@@ -161,7 +161,7 @@ FRONTEND_PATH = env('FRONTEND_PATH')
 if FRONTEND_PATH == '*':
     CORS_ALLOW_ALL_ORIGINS = True
 else:
-    CORS_ALLOWED_ORIGINS = [FRONTEND_PATH]
+    CORS_ALLOWED_ORIGINS = FRONTEND_PATH.split(',')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
