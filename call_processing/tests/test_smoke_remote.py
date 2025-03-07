@@ -224,6 +224,12 @@ class TestSmokeTestCloudRunWithLogs:
         self.agent_id = employee_json['id']
         logger.info(f"Created employee (Agent) with Email {employee_json['user']['email']}")
 
+        # Authorization with the Agent Email
+        agent_id_token = self.user_id_token(employee_json['user']['email'])
+        self.agent_headers = {
+            "Authorization": f"Bearer {agent_id_token}"
+        }
+
         # Prepare the logging client
         self.logging_client = logging_v2.Client()
         self.unique_log_identifier = f"smoke_test_{int(time.time())}"
@@ -290,7 +296,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Verify conversation creation with a GET call
         resp = requests.get(
             f"{self.cloud_run_host}/api/v1/conversations/",
-            headers=self.superuser_headers
+            headers=self.agent_headers
         )
         resp.raise_for_status()
         conversations = resp.json()["results"]
@@ -382,7 +388,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Verify conversation creation with a GET call
         resp = requests.get(
             f"{self.cloud_run_host}/api/v1/conversations/",
-            headers=self.superuser_headers
+            headers=self.agent_headers
         )
         resp.raise_for_status()
         conversations = resp.json()["results"]
