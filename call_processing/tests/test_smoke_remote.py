@@ -224,7 +224,11 @@ class TestSmokeTestCloudRunWithLogs:
         self.agent_id = employee_json['id']
         logger.info(f"Created employee (Agent) with Email {employee_json['user']['email']}")
 
-        # Authorization with the Agent Email
+        # Email-Verification of the Agent User
+        agent_user = auth.get_user_by_email(employee_json['user']['email'])
+        agent_user = auth.update_user(agent_user.uid, email_verified=True)
+
+        # Obtaining the Auth Token for the Agent User
         agent_id_token = self.user_id_token(employee_json['user']['email'])
         self.agent_headers = {
             "Authorization": f"Bearer {agent_id_token}"
