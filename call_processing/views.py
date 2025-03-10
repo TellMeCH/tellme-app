@@ -3,14 +3,13 @@ import datetime
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.conf import settings
 from rest_framework.permissions import IsAuthenticated
 from call_processing.serializers import QueueRecordingSerializer, ProcessRecordingSerializer
 from call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
 from call_processing.permissions import IsAuthenticatedOrganization
-from call_processing.utils import gcs_utils, tasks_utils
+from call_processing.utils import gcs_utils, queue_utils
 from call_processing.utils.call_processing import CallProcessingPipeline
-from call_processing.utils.db_handler import check_agent_validity, create_conversation
+from call_processing.utils.db_handler import create_conversation
 
 logger = logging.getLogger('django')
 
@@ -41,24 +40,10 @@ class QueueRecordingView(APIView):
             logger.info(f"Organization: {organization_id}")
             logger.info(f"File: {file_name}")
 
-            # Check Validity of Request
-            agent_valid, validity_message = check_agent_validity(agent_id, organization_id, timestamp)
-
-            if agent_valid:
-                # Upload to GCS
-                gcs_uri = gcs_utils.upload_to_gcs(file_obj, file_name)
-
-                # Create a task to process this recording
-                process_url = settings.CALL_PROCESSING_ENDPOINT
-                logger.info(f'Creating an HTTP Task Targeting: {process_url}')
-                tasks_utils.create_task(
-                    process_url, file_name, organization_id, customer_id, agent_id, timestamp, logger
-                )
-                return Response(
-                    {"message": "File queued for processing.", "gcs_uri": gcs_uri}, status=status.HTTP_202_ACCEPTED
-                )
-            else:
-                return Response({"message": f"Invalid agent. {validity_message}"}, status=status.HTTP_400_BAD_REQUEST)
+            message, status_code = queue_utils.upload_and_create_task(
+                file_name, file_obj, agent_id, customer_id, organization_id, timestamp, logger
+            )
+            return Response(message, status=status_code)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
