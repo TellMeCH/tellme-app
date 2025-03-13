@@ -4,20 +4,81 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from call_processing.serializers import QueueRecordingSerializer, ProcessRecordingSerializer
+from call_processing.serializers import (WebhookProcessingSerializer, QueueRecordingSerializer,
+                                         ProcessRecordingSerializer)
 from call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
 from call_processing.permissions import IsAuthenticatedOrganization
-from call_processing.utils import gcs_utils, queue_utils
+from call_processing.utils import queue_utils
 from call_processing.utils.call_processing import CallProcessingPipeline
 from call_processing.utils.db_handler import create_conversation
+from call_processing.utils.webhook_processing import process_webhook_recordings
 
 logger = logging.getLogger('django')
 
 
+class WebhookProcessingView(APIView):
+    """
+    This view processes an incoming Webhook notification indicating a finalized call, and then calls the respecitve API
+    (f.e. the Avaya Communications API) to download the recordings of the call. Once the call recordings are downloaded,
+    they are uploaded to GCS and queued for processing.
+    """
+    authentication_classes = [OrganizationAPIKeyAuthentication]
+    permission_classes = [IsAuthenticatedOrganization]
+    serializer_class = WebhookProcessingSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        call_sid = data["call_sid"]
+        customer_id = data["customer_id"]
+        agent_id = data["agent_id"]
+        timestamp = data["timestamp"]
+        call_status = data.get("call_status", "").lower()
+
+        organization = request.user
+        logger.info(f"Received webhook. Organization: {organization.id}, CallSid: {call_sid}")
+
+        # Check call_status to ensure the call is indeed finalized
+        if call_status not in ("completed", "finalized"):
+            logger.info(f"Call {call_sid} not finalized yet (status={call_status}). Skipping.")
+            return Response({"message": f"Call not finalized (status={call_status})."},
+                            status=status.HTTP_200_OK)
+
+        # Delegate processing logic, passing the organization object
+        try:  # TODO: Consider whether parsing of validated_data should be provider-specific (and inside this method)
+            combined_wav_buffer, file_name = process_webhook_recordings(
+                call_sid=call_sid,
+                organization=organization,
+                customer_id=customer_id,
+                agent_id=agent_id,
+                timestamp=timestamp,
+                logger=logger
+            )
+        except RuntimeError as exc:
+            logger.error(f"process_webhook_recordings() failed: {str(exc)}")
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Now queue the final WAV with your existing utility
+        message, status_code = queue_utils.upload_and_create_task(
+            file_name,
+            combined_wav_buffer,
+            agent_id,
+            customer_id,
+            organization.id,
+            timestamp,
+            logger
+        )
+
+        return Response(message, status=status_code)
+
+
 class QueueRecordingView(APIView):
     """
-    This API view has the sole purpose of queueing a call processing task on a predefined Cloud Tasks Manager. Moreover,
-    it is designed to work in conjunction with a Cloud Tasks Emulator for local development.
+    This API view has the sole purpose of queueing a call processing task on a predefined Cloud Tasks Manager.
+    The view expects a recording in the provided data.
     Only API-token bearing requests should have permission to run this view.
     """
     serializer_class = QueueRecordingSerializer
@@ -72,29 +133,11 @@ class ProcessRecordingView(APIView):
         agent_id = serializer.validated_data.get("agent_id")
         timestamp = serializer.validated_data.get("timestamp")
 
-        # Download file from GCS
-        file_data = gcs_utils.download_from_gcs(file_name)
-
-        if not file_data:
-            return Response(
-                {"error": f"Specified file {file_name} is empty."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        logger.info(f"Processing file {file_name}, size {len(file_data)} bytes.")
+        logger.info(f"Processing file {file_name}")
         processing_start = datetime.datetime.now()
 
         # Enrich data using your pipeline
-        enriched_data = self.pipeline(
-            file_data,
-            {
-                "file_name": file_name,
-                "organization_id": organization_id,
-                "customer_id": customer_id,
-                "agent_id": agent_id,
-                "timestamp": timestamp
-            }
-        )
+        enriched_data = self.pipeline(file_name, organization_id, customer_id, agent_id, timestamp)
 
         elapsed_time = (datetime.datetime.now() - processing_start).seconds
         logger.info(f"Processed file {file_name}, required {elapsed_time} seconds")
