@@ -5,6 +5,10 @@ from call_processing.utils import gcs_utils, tasks_utils
 from call_processing.utils.db_handler import check_agent_validity
 
 
+def create_storage_path(organization_id: int, customer_id: str, agent_id: int, call_timestamp: datetime.datetime):
+    return f"{organization_id}/{customer_id}_{agent_id}_{call_timestamp.isoformat()}"
+
+
 def upload_and_create_task(
         file_name: str,
         file_obj,
