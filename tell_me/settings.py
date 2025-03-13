@@ -163,6 +163,19 @@ if FRONTEND_PATH == '*':
 else:
     CORS_ALLOWED_ORIGINS = FRONTEND_PATH.split(',')
 
+CORS_ALLOW_CREDENTIALS = True  # This enables authentication headers and cookies in cross-origin requests.
+
+CORS_ALLOW_HEADERS = [  # Ensure Authorization and necessary headers are allowed
+    'authorization',
+    'content-type',
+    'accept',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+]
+
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]  # Ensure preflight requests are supported
+
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
