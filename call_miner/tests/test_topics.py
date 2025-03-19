@@ -1,13 +1,13 @@
 import pytest
-from unittest.mock import patch
-from django.urls import reverse, exceptions
+from django.urls import reverse
 from rest_framework import status
 from call_miner.models import Topic
 
 TREND_ACTIONS = ['conversations', 'trend']
 
 ERROR_MESSAGES = {
-    'max_topic_count_reached': "Cannot add more topics to this organization; max topic count reached."
+    'max_topic_count_reached': "Cannot add more topics to this organization; max topic count reached.",
+    'duplicate_topic': 'A topic with this same name already exists in this Organization.'
 }
 
 
@@ -321,7 +321,38 @@ class TestTopicCreate:
         response = client.post(url, data, format='json')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert ERROR_MESSAGES['max_topic_count_reached'] in str(response.data['non_field_errors'])
+        
+    def test_superuser_cannot_create_topic_with_duplicate_name(self, client, superuser, organization, topic):
+        """Test that a superuser cannot create a topic with the same name as an existing topic."""
 
+        client.force_authenticate(user=superuser)
+        url = reverse('topic-list')
+
+        data = {
+            'name': 'Test topic',
+            'description': 'Should not be created',
+            'is_active': True,
+            'organization': organization.id,
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['duplicate_topic'] in str(response.data['name'])
+        
+    def test_analyst_cannot_create_topic_with_duplicate_name(self, client, analyst_user, organization, topic):
+        """Test that an analyst cannot create a topic with the same name as an existing topic."""
+
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-list')
+
+        data = {
+            'name': 'Test Topic',
+            'description': 'Should not be created',
+            'is_active': True,
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['duplicate_topic'] in str(response.data['name'])
+        
 
 @pytest.mark.django_db
 class TestTopicUpdate:
@@ -705,7 +736,7 @@ class TestTopicSummary:
         assert response.data[topic.id]['summary_call_count'] == 1
         assert response.data[topic.id]['summary_date'].date() == conversation.date.date()
         assert response.data[topic.id]['name'] == topic.name
-
+        
 
 @pytest.mark.django_db
 class TestTopicListActive:

@@ -456,12 +456,20 @@ class TopicModifySerializer(serializers.ModelSerializer):
             # Enforce the user's organization
             data['organization'] = current_user.employee.organization
 
-        # Check if creating a new topic would exceed the organization's max_topic_count
         if self.instance is None:
+            # Check if creating a new topic would exceed the organization's max_topic_count
             current_topic_count = Topic.objects.filter(organization=data['organization']).count()
             if current_topic_count >= data['organization'].max_topic_count:
                 raise serializers.ValidationError(
                     {"non_field_errors": ["Cannot add more topics to this organization; max topic count reached."]}
+                )
+
+            # Check whether a topic with the same name and organization already exists
+            # Note: If the request data contains an 'organization', the default UniqueTogetherValidator will raise error
+            existing_topic = Topic.objects.filter(organization=data['organization'], name__iexact=data['name'])
+            if existing_topic.exists():
+                raise serializers.ValidationError(
+                    {'name': ['A topic with this same name already exists in this Organization.']}
                 )
         return data
 
