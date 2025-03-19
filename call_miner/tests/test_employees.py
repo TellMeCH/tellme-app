@@ -10,7 +10,8 @@ ERROR_MESSAGES = {
     'analysts_managers': "Analysts can't have managers.",
     'superusers_organization': "Superusers must provide an organization when creating an Employee.",
     'max_user_count_reached': "Cannot add more users to this organization; max user count reached.",
-    'protected_user_email': 'Provided user email is protected.'
+    'protected_user_email': 'Provided user email is protected.',
+    'duplicate_user_email': 'user with this email already exists.'
 }
 
 
@@ -470,6 +471,45 @@ class TestEmployeeCreate:
         response = client.post(url, data, format='json')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert ERROR_MESSAGES['protected_user_email'] in str(response.data['user']['email'])
+
+    def test_superuser_cannot_create_employee_with_duplicate_email(self, client, superuser, organization, analyst_user):
+        """Test that even a superuser cannot create an employee with a duplicate email"""
+        client.force_authenticate(user=superuser)
+        url = reverse('employee-list')
+        data = {
+            'user': {
+                'first_name': 'Duplicate',
+                'last_name': 'Email',
+                'auth_type': 'google',
+                'email': 'analyst@example.com',
+            },
+            'role': 'AGENT',
+            'organization': organization.id,
+            'is_organization_admin': False
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['duplicate_user_email'] in str(response.data['user']['email'])
+        
+    def test_org_admin_cannot_create_employee_with_duplicate_email(
+            self, client, organization_admin_user, organization, analyst_user
+    ):
+        """Test that an organization admin cannot create an employee with a duplicate email"""
+        client.force_authenticate(user=organization_admin_user)
+        url = reverse('employee-list')
+        data = {
+            'user': {
+                'first_name': 'Duplicate',
+                'last_name': 'Email',
+                'auth_type': 'google',
+                'email': 'analyst@example.com',
+            },
+            'role': 'AGENT',
+            'is_organization_admin': False
+        }
+        response = client.post(url, data, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert ERROR_MESSAGES['duplicate_user_email'] in str(response.data['user']['email'])
 
 
 @pytest.mark.django_db
