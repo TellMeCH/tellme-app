@@ -30,20 +30,28 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
                 decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
                 logger.debug("Successfully decoded token")
 
-                # Handle unverified Emails
-                if not decoded_token.get('email_verified', False):
-                    logger.warning('Tokens with unverified emails are not allowed')
-                    return None
             except firebase_exceptions.FirebaseError as e:
                 raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
-            except firebase_auth.RevokedIdTokenError:
+            except firebase_auth.RevokedIdTokenError as e:
                 logger.warning("JWT token has been revoked", exc_info=True)
-                return None
+                raise exceptions.AuthenticationFailed(f'Revoked Firebase token - {e}')
             except Exception as e:
                 logger.warning("Unknown exception while verifying token", exc_info=True)
                 raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
 
-            user = get_user_model().objects.get(id=decoded_token['uid'])
+            User = get_user_model()
+            try:
+                user = User.objects.get(email=decoded_token['email'])
+            except User.DoesNotExist:
+                firebase_auth.delete_user(decoded_token['uid'])
+                raise exceptions.AuthenticationFailed(f"No user account exists for {decoded_token['email']}.")
+
+            # Handle unverified Emails
+            if not decoded_token.get('email_verified', False):
+                user.send_verification_email()
+                raise exceptions.AuthenticationFailed(
+                    f"Please verify your email and try again. Instructions have been sent to {decoded_token['email']}."
+                )
 
             if user.email == settings.PROCESSING_PIPELINE_USER:
                 raise exceptions.AuthenticationFailed(f'Processing Pipeline should only authenticate with API Token')
