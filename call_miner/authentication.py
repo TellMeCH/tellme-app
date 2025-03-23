@@ -45,13 +45,13 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
                 user = User.objects.get(email=decoded_token['email'])
             except User.DoesNotExist:
                 firebase_auth.delete_user(decoded_token['uid'])
-                logger.warning(f"No user account exists for {decoded_token['email']}.", exc_info=True)
+                logger.warning(f"No user account exists for {decoded_token['email']}.")
                 raise exceptions.AuthenticationFailed(f"No user account exists for {decoded_token['email']}.")
 
             # Handle unverified Emails
             if not decoded_token.get('email_verified', False):
                 user.send_verification_email()
-                logger.warning(f"Email verification required for {decoded_token['email']}.", exc_info=True)
+                logger.info(f"Email verification required for {decoded_token['email']}.")
                 raise exceptions.AuthenticationFailed(
                     f"Please verify your email and try again. Instructions have been sent to {decoded_token['email']}."
                 )
