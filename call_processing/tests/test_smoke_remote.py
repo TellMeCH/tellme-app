@@ -211,7 +211,7 @@ class TestSmokeTestCloudRunWithLogs:
                 "email": self.agent_email,
                 "first_name": "John",
                 "last_name": "Doe",
-                "auth_type": "google"
+                "auth_type": "password"
             }
         }
         resp = requests.post(

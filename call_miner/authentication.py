@@ -31,6 +31,7 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
                 logger.debug("Successfully decoded token")
 
             except firebase_exceptions.FirebaseError as e:
+                logger.warning("Invalid Firebase token", exc_info=True)
                 raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
             except firebase_auth.RevokedIdTokenError as e:
                 logger.warning("JWT token has been revoked", exc_info=True)
@@ -44,11 +45,13 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
                 user = User.objects.get(email=decoded_token['email'])
             except User.DoesNotExist:
                 firebase_auth.delete_user(decoded_token['uid'])
+                logger.warning(f"No user account exists for {decoded_token['email']}.", exc_info=True)
                 raise exceptions.AuthenticationFailed(f"No user account exists for {decoded_token['email']}.")
 
             # Handle unverified Emails
             if not decoded_token.get('email_verified', False):
                 user.send_verification_email()
+                logger.warning(f"Email verification required for {decoded_token['email']}.", exc_info=True)
                 raise exceptions.AuthenticationFailed(
                     f"Please verify your email and try again. Instructions have been sent to {decoded_token['email']}."
                 )
