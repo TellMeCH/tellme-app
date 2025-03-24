@@ -561,7 +561,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeModifySerializer
 
     def get_serializer_class(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'me']:
             return EmployeeListSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return EmployeeModifySerializer
@@ -576,3 +576,24 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         if self.request.user.employee.organization:
             return Employee.objects.filter(organization=self.request.user.employee.organization)
         return Employee.objects.none()
+
+    @extend_schema(
+        description="Return current employee details",
+        responses={
+            200: EmployeeListSerializer,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=False, methods=['get'])
+    def me(self, request):
+        """
+        Custom endpoint to return the current user's employee data.
+        """
+        employee = getattr(request.user, 'employee', None)
+        if not employee:
+            return response.Response({'detail': 'Employee not found.'}, status=404)
+
+        serializer = self.get_serializer(employee)
+        return response.Response(serializer.data)
