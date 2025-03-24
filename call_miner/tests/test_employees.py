@@ -148,6 +148,28 @@ class TestEmployeeRetrieve:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_me_action_analyst(self, client, analyst_user):
+        """Test that an analyst can retrieve its own overview"""
+        client.force_authenticate(user=analyst_user)
+        url = reverse('employee-me')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['user']['email'] == analyst_user.email
+
+    def test_me_action_agent(self, client, agent_user):
+        """Test that an agent can retrieve its own overview"""
+        client.force_authenticate(user=agent_user)
+        url = reverse('employee-me')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['user']['email'] == agent_user.email
+
+    def test_me_action_unauthenticated_user(self, client, agent_user):
+        """Test that an unauthenticated user can't retrieve its own overview"""
+        url = reverse('employee-me')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
 
 @pytest.mark.django_db
 class TestEmployeeCreate:
