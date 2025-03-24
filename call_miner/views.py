@@ -209,7 +209,7 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-date']
-    relationships_to_select = ['customer', 'agent']
+    relationships_to_select = ['customer', 'agent', 'agent__user']
     relationships_to_prefetch = ['topics']
     search_vector = (
         SearchVector('transcript', weight='A') +
@@ -231,10 +231,18 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
         Return conversations that belong to the user's organization
         """
         if self.request.user.is_superuser:
-            return Conversation.objects.all()
-        if self.request.user.employee.organization:
-            return Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
-        return Conversation.objects.none()
+            qs = Conversation.objects.all()
+        elif self.request.user.employee.organization:
+            qs = Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
+        else:
+            return Conversation.objects.none()
+
+        qs = (
+            qs
+            .select_related(*self.relationships_to_select)
+            .prefetch_related(*self.relationships_to_prefetch)
+        )
+        return qs
 
     @extend_schema(
         description=ConversationDetailSerializer.get_processed_transcript.__doc__,
