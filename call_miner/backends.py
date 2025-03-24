@@ -9,6 +9,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 logger = logging.getLogger('django')
 
+
 class FirebaseEmailPasswordBackend(BaseBackend):
     """
     Custom authentication backend to sign in users with email and password
@@ -60,12 +61,12 @@ class FirebaseEmailPasswordBackend(BaseBackend):
             logger.error('Could not verify token')
             return None
 
-        uid = decoded_token["uid"]
+        email = decoded_token["email"]
 
         # Get user in Django
         user_model = get_user_model()
         try:
-            user = user_model.objects.get(pk=uid)
+            user = user_model.objects.get(email=email)
         except ObjectDoesNotExist:
             logger.error('Could not find corresponding user')
             return None
