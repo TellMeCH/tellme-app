@@ -517,7 +517,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         No error will be raised in case user can't be found in Firebase
         """
         try:
-            auth.delete_user(self.pk)  # self.pk == self.id
+            firebase_user = auth.get_user_by_email(self.email)
+            auth.delete_user(firebase_user.uid)
         except auth.UserNotFoundError:
             pass
         return super().delete(using=using, keep_parents=keep_parents)
