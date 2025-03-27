@@ -17,3 +17,11 @@ def download_from_gcs(destination_blob_name):
     bucket = client.bucket(f"{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}")
     blob = bucket.blob(destination_blob_name)
     return blob.download_as_bytes()
+
+
+def list_files_in_gcs(directory_path: str, match_glob: str = None):
+    """List blobs with the specified directory path and the optionally specified glob pattern"""
+    client = storage.Client()
+    bucket = client.bucket(f"{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}")
+    blobs = bucket.list_blobs(prefix=directory_path, match_glob=match_glob)
+    return [blob.name for blob in blobs]

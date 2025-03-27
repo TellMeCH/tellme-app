@@ -20,7 +20,7 @@ class TestQueueView:
             )
         }
 
-    def test_queue_success(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks,
+    def test_queue_success(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
                            setup_db):
         """
         If the payload is valid, we should get a 202 response and a valid GCS URI in the response.
@@ -32,11 +32,11 @@ class TestQueueView:
         response = api_client.post(url, data=valid_payload, format="multipart")
 
         assert response.status_code == status.HTTP_202_ACCEPTED
-        assert "gcs_uri" in response.data
-        mock_gcs_upload_download[0].assert_called_once()
+        assert "file_name" in response.data
+        mock_gcs_utils[0].assert_called_once()
         mock_cloud_tasks.assert_called_once()
 
-    def test_unauthenticated_fails(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks,
+    def test_unauthenticated_fails(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
                                    setup_db):
         """
         If the caller is not authenticated with an API key, the call should be forbidden
@@ -47,7 +47,7 @@ class TestQueueView:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_queue_invalid_agent(self, api_client, valid_payload, mock_gcs_upload_download, mock_cloud_tasks, setup_db):
+    def test_queue_invalid_agent(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks, setup_db):
         """
         Agent does not exist in the DB, so the request is invalid.
         """
@@ -58,11 +58,11 @@ class TestQueueView:
         url = reverse("queue")
         response = api_client.post(url, data=current_payload, format="multipart")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        mock_gcs_upload_download[0].assert_not_called()
+        mock_gcs_utils[0].assert_not_called()
         mock_cloud_tasks.create_task.assert_not_called()
 
     def test_check_agent_validity_timestamp_overlap(
-        self, api_client, setup_db, valid_payload, mock_gcs_upload_download, mock_deepgram, mock_groq, mock_openai
+        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_deepgram, mock_groq, mock_openai
     ):
         """
         If the agent already has a conversation that hasn't ended by the time the new call starts,

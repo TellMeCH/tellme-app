@@ -6,26 +6,8 @@ from call_processing.utils.call_processing import CallProcessingPipeline
 @pytest.mark.django_db
 class TestCallProcessingPipeline:
     @pytest.fixture
-    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai):
+    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai, mock_gcs_utils):
         return CallProcessingPipeline()
-
-    def test_pipeline_missing_metadata_field(self, pipeline):
-        """
-        Ensure that if a required metadata field is missing, we raise a ValueError.
-        """
-        valid_metadata = {
-            "file_name": "test.wav",
-            "organization_id": 0,
-            'customer_id': "customer_id",
-            'agent_id': 0,
-            'timestamp': "2024-01-01T12:00:00"
-        }
-        for field in valid_metadata.keys():
-            current_metadata = valid_metadata.copy()
-            del current_metadata[field]
-            with pytest.raises(ValueError) as exc:
-                pipeline(b"fake audio", current_metadata)
-            assert "Missing field" in str(exc.value)
 
     def test_cut_into_chunks_single_chunk(self, pipeline, mock_pydub):
         """
@@ -69,15 +51,14 @@ class TestCallProcessingPipeline:
                 "duration": 10.0
             }
         }
-        metadata = {
-            "file_name": "test.wav",
-            "organization_id": 1,
-            "customer_id": "CUST123",
-            "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00"
-        }
         with pytest.raises(ValueError) as exc:
-            pipeline(b"fake audio", metadata)
+            pipeline(
+                file_name="test.wav",
+                organization_id=1,
+                customer_id="CUST123",
+                agent_id=123,
+                timestamp="2024-01-01T12:00:00"
+            )
         assert "Produced transcript is empty" in str(exc.value)
 
     def test_transcribe_language_change_warns(self, pipeline, mock_deepgram, mock_pydub, mock_langfuse):
@@ -116,16 +97,14 @@ class TestCallProcessingPipeline:
 
         mock_deepgram.listen.rest.v('1').transcribe_file.side_effect = mock_side_effect
 
-        metadata = {
-            "file_name": "test.wav",
-            "organization_id": 1,
-            "customer_id": "CUST123",
-            "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00"
-        }
-
         with pytest.raises(Warning) as exc:
-            pipeline(b"fake audio", metadata)
+            pipeline(
+                file_name="test.wav",
+                organization_id=1,
+                customer_id="CUST123",
+                agent_id=123,
+                timestamp="2024-01-01T12:00:00"
+            )
         assert "Detected language changed suddenly" in str(exc.value)
 
     def test_enrich_recording_structure(self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse):
@@ -133,14 +112,13 @@ class TestCallProcessingPipeline:
         If the transcript is not empty, we confirm we get back an enriched payload
         with the fields we expect (title, summary, topics, sentiment, etc.).
         """
-        metadata = {
-            "file_name": "test.wav",
-            "organization_id": 1,
-            "customer_id": "CUST123",
-            "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00"
-        }
-        result = pipeline(b"fake audio", metadata)
+        result = pipeline(
+                file_name="test.wav",
+                organization_id=1,
+                customer_id="CUST123",
+                agent_id=123,
+                timestamp="2024-01-01T12:00:00"
+        )
         assert "title" in result
         assert "summary" in result
         assert "sentiment" in result
@@ -162,17 +140,14 @@ class TestCallProcessingPipeline:
 
         mock_deepgram.listen.rest.v("1").transcribe_file.side_effect = deepgram_failure_side_effect
 
-        # Prepare standard metadata
-        metadata = {
-            "file_name": "test_fallback.wav",
-            "organization_id": 1,
-            "customer_id": "CUST123",
-            "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00"
-        }
-
         # Run the pipeline
-        result = pipeline(b"fake audio", metadata)
+        result = pipeline(
+            file_name="test_fallback.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
 
         # Deepgram was called at least once, but it failed
         assert mock_deepgram.listen.rest.v("1").transcribe_file.called
@@ -203,15 +178,101 @@ class TestCallProcessingPipeline:
         mock_deepgram.listen.rest.v("1").transcribe_file.side_effect = ValueError("Deepgram fail")
         mock_groq.audio.transcriptions.create.side_effect = Exception("Groq meltdown")
 
-        metadata = {
-            "file_name": "test_fallback2.wav",
-            "organization_id": 1,
-            "customer_id": "CUST123",
-            "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00"
-        }
-
         with pytest.raises(Exception) as exc:
-            pipeline(b"fake audio", metadata)
+            pipeline(
+                file_name="test_fallback2.wav",
+                organization_id=1,
+                customer_id="CUST123",
+                agent_id=123,
+                timestamp="2024-01-01T12:00:00"
+            )
 
         assert "Could not proceed with fallback transcription method" in str(exc.value)
+
+    def test_transcribe_directory_multiple_blobs(
+        self, pipeline, mock_deepgram, mock_gcs_utils, mock_pydub
+    ):
+        """
+        If a folder path is passed, and multiple `.wav` files exist,
+        the pipeline should download and transcribe each of them.
+        """
+        _, mock_download, mock_list = mock_gcs_utils
+
+        mock_list.return_value = [
+            "folder/part1.wav",
+            "folder/part2.wav"
+        ]
+
+        result = pipeline(
+            file_name="folder/",
+            organization_id=1,
+            customer_id="C123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
+
+        assert mock_download.call_count == 2
+        assert "transcript" in result
+        assert result["transcript"].strip() != ""
+
+    def test_transcribe_directory_empty_folder(
+        self, pipeline, mock_deepgram, mock_gcs_utils, mock_pydub
+    ):
+        """
+        If list_files_in_gcs returns an empty list (no `.wav` files),
+        the pipeline should raise a ValueError due to no transcript.
+        """
+        _, _, mock_list = mock_gcs_utils
+        mock_list.return_value = []
+
+        with pytest.raises(ValueError) as exc:
+            pipeline(
+                file_name="empty_folder/",
+                organization_id=1,
+                customer_id="C123",
+                agent_id=123,
+                timestamp="2024-01-01T12:00:00"
+            )
+        assert "Produced transcript is empty" in str(exc.value)
+
+    def test_transcribe_directory_fallback_partial_failure(
+        self, pipeline, mock_deepgram, mock_groq, mock_gcs_utils,
+        mock_pydub, mock_openai, mock_vertexai, mock_dlp
+    ):
+        """
+        If Deepgram fails on the first file but not the second,
+        the pipeline should fallback to Groq and complete transcription.
+        """
+        _, mock_download, mock_list = mock_gcs_utils
+        mock_list.return_value = ["folder/part1.wav", "folder/part2.wav"]
+
+        def deepgram_side_effect(*args, **kwargs):
+            if deepgram_side_effect.call_count == 0:
+                deepgram_side_effect.call_count += 1
+                raise httpx.TimeoutException("Simulated Deepgram failure")
+            return {
+                "results": {
+                    "channels": [
+                        {
+                            "alternatives": [{"paragraphs": {"transcript": "Second chunk text"}}],
+                            "detected_language": "en"
+                        }
+                    ]
+                },
+                "metadata": {"duration": 5.0}
+            }
+
+        deepgram_side_effect.call_count = 0
+        mock_deepgram.listen.rest.v("1").transcribe_file.side_effect = deepgram_side_effect
+
+        result = pipeline(
+            file_name="folder/",
+            organization_id=1,
+            customer_id="C123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
+
+        assert mock_groq.audio.transcriptions.create.called
+        assert "transcript" in result
+        assert result["transcript"].strip() != ""

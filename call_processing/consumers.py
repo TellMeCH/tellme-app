@@ -261,6 +261,7 @@ class AudioHookConsumer(WebsocketConsumer):
 
         if not self.error_close and size_bytes > 0:
             # Encode as WAV with linear PCM and proper headers
+            # Note to self: examine whether this takes too long/blocks the consumer
             wav_data = audio_utils.decode_mulaw_file_to_wav(
                 self.temp_file_path,
                 channels=self.AUDIOHOOK_CHANNELS,
@@ -270,8 +271,8 @@ class AudioHookConsumer(WebsocketConsumer):
             # Upload to GCS and create Task
             blob_name = f"{self.org.id}/{self.customer_id}_{self.agent_id}_{self.connection_timestamp.isoformat()}.wav"
             message, status_code = queue_utils.upload_and_create_task(
-                blob_name, wav_data, self.agent_id, self.customer_id, self.org.id, self.connection_timestamp, logger,
-                False  # Consider whether checking agent validity is reasonable
+                blob_name, self.agent_id, self.customer_id, self.org.id, self.connection_timestamp, logger,
+                False, wav_data  # Note to self: Consider whether checking agent validity is reasonable
             )
             logger.info(message['message'])
 

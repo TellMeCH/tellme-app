@@ -33,16 +33,18 @@ def api_client():
 
 
 @pytest.fixture
-def mock_gcs_upload_download():
+def mock_gcs_utils():
     """
     Mocks out the GCS upload_to_gcs and download_from_gcs functions.
     We'll patch them globally wherever they are imported.
     """
     with (patch("call_processing.utils.gcs_utils.upload_to_gcs") as mock_upload,
-          patch("call_processing.utils.gcs_utils.download_from_gcs") as mock_download):
+          patch("call_processing.utils.gcs_utils.download_from_gcs") as mock_download,
+          patch("call_processing.utils.gcs_utils.list_files_in_gcs") as mock_list):
         mock_upload.return_value = "gs://mocked_bucket/mocked_blob"
         mock_download.return_value = b"FakeAudioBytes"
-        yield mock_upload, mock_download
+        mock_list.return_value = ['/mocked_folder/mocked_blob.wav']
+        yield mock_upload, mock_download, mock_list
 
 
 @pytest.fixture

@@ -14,17 +14,20 @@ def parse_created_date(rec):
 
 def process_webhook_recordings(call_sid, organization, customer_id, agent_id, timestamp, logger):
     """
-    1. Uses the Organization's credentials to query the 'List Recordings' API.
-    2. Downloads each returned mp3 recording.
-    3. Concatenates them into a single WAV file (in-memory).
-    4. Returns a tuple: (output_buffer, file_name).
+    Uses the Organization's credentials to query the 'List Recordings' API. For each recording:
+    - Downloads the associated mp3 recording
+    - Converts it to a WAV file
+    - Uploads it to the common GCS folder
 
     Raises:
         RuntimeError: If something goes wrong (network error, no recordings, etc.).
+
+    Returns:
+        folder_prefix: Overarching directory in GCS containing all snippets
     """
 
     # Pull credentials from the Organization model
-    # TODO: Add account_id, auth_token, provider to the Organization Model
+    # Note to self: Add account_id, auth_token, provider to the Organization Model
     account_sid = organization.account_id
     auth_token = organization.auth_token
     base_url = settings.COMMUNICATIONS_API_URLS[organization.provider]
@@ -68,6 +71,7 @@ def process_webhook_recordings(call_sid, organization, customer_id, agent_id, ti
                 logger.warning(f"Recording {recording_sid} has no 'recording_url'; skipping.")
                 continue
 
+            # Download MP3
             try:
                 mp3_resp = requests.get(recording_url, timeout=30)
                 mp3_resp.raise_for_status()
@@ -75,11 +79,10 @@ def process_webhook_recordings(call_sid, organization, customer_id, agent_id, ti
                 logger.error(f"Error downloading MP3 from {recording_url}: {str(exc)}")
                 continue
 
+            # Convert MP3 to WAV buffer
             try:
-                # Convert MP3 bytes to a pydub AudioSegment
                 audio_segment = AudioSegment.from_file(io.BytesIO(mp3_resp.content), format="mp3")
 
-                # Export to WAV in-memory
                 wav_buffer = io.BytesIO()
                 audio_segment.export(wav_buffer, format="wav")
                 wav_buffer.seek(0)
@@ -90,6 +93,7 @@ def process_webhook_recordings(call_sid, organization, customer_id, agent_id, ti
             # Build the GCS destination path for this snippet
             destination_blob_name = f"{folder_prefix}/recording_{i}_{recording_sid}.wav"
 
+            # Upload to GCS
             try:
                 gcs_uri = upload_to_gcs(wav_buffer, destination_blob_name)
                 uploaded_uris.append(gcs_uri)
@@ -100,4 +104,4 @@ def process_webhook_recordings(call_sid, organization, customer_id, agent_id, ti
         if not uploaded_uris:
             raise RuntimeError("All WAV conversions or uploads failed.")
 
-        return uploaded_uris
+        return folder_prefix

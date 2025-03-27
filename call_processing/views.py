@@ -48,8 +48,8 @@ class WebhookProcessingView(APIView):
                             status=status.HTTP_200_OK)
 
         # Delegate processing logic, passing the organization object
-        try:  # TODO: Consider whether parsing of validated_data should be provider-specific (and inside this method)
-            combined_wav_buffer, file_name = process_webhook_recordings(
+        try:
+            recordings_folder = process_webhook_recordings(
                 call_sid=call_sid,
                 organization=organization,
                 customer_id=customer_id,
@@ -61,15 +61,14 @@ class WebhookProcessingView(APIView):
             logger.error(f"process_webhook_recordings() failed: {str(exc)}")
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Now queue the final WAV with your existing utility
+        # Queue processing with the downloaded data
         message, status_code = queue_utils.upload_and_create_task(
-            file_name,
-            combined_wav_buffer,
+            recordings_folder,
             agent_id,
             customer_id,
             organization.id,
             timestamp,
-            logger
+            logger,
         )
 
         return Response(message, status=status_code)
@@ -102,7 +101,7 @@ class QueueRecordingView(APIView):
             logger.info(f"File: {file_name}")
 
             message, status_code = queue_utils.upload_and_create_task(
-                file_name, file_obj, agent_id, customer_id, organization_id, timestamp, logger
+                file_name, agent_id, customer_id, organization_id, timestamp, logger, file_obj=file_obj
             )
             return Response(message, status=status_code)
         else:
@@ -137,7 +136,11 @@ class ProcessRecordingView(APIView):
         processing_start = datetime.datetime.now()
 
         # Enrich data using your pipeline
-        enriched_data = self.pipeline(file_name, organization_id, customer_id, agent_id, timestamp)
+        try:
+            enriched_data = self.pipeline(file_name, organization_id, customer_id, agent_id, timestamp)
+        except RuntimeError as exc:
+            logger.error(f"Processing Pipeline Failed: {str(exc)}")
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         elapsed_time = (datetime.datetime.now() - processing_start).seconds
         logger.info(f"Processed file {file_name}, required {elapsed_time} seconds")

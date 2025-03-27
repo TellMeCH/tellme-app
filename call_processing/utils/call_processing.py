@@ -19,6 +19,7 @@ from call_miner.models import Topic
 from call_processing.utils.fallback_prompt import (
     DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
 )
+from call_processing.utils import gcs_utils
 
 # Transcription costs in dollars per second
 DEEPGRAM_COSTS = {
@@ -42,7 +43,6 @@ class CallProcessingPipeline:
     4. Logs the entire process in Langfuse for observability.
 
     Attributes:
-        REQUIRED_METADATA_FIELDS (list of str): Required fields in recording metadata
         CHUNK_SIZE (float): Duration of each audio chunk in minutes.
         TRANSCRIPTION_MODEL_NAME_DEEPGRAM (str): The name of the transcription model to use when using the Deepgram API.
         TRANSCRIPTION_MODEL_NAME_GROQ (str): The name of the transcription model to use when using the Groq API.
@@ -51,7 +51,6 @@ class CallProcessingPipeline:
         API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with any API
         DLP_ENTITY_TYPES (list of str): List of entities to detect as sensitive information and redact
     """
-    REQUIRED_METADATA_FIELDS: list[str] = ['file_name', 'organization_id', 'customer_id', 'agent_id', 'timestamp']
     CHUNK_SIZE: float = 5
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
     TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
@@ -70,7 +69,7 @@ class CallProcessingPipeline:
         """
         # Deepgram
         if not hasattr(settings, 'DEEPGRAM_API_KEY') or not settings.DEEPGRAM_API_KEY:
-            raise ValueError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY setting value.")
+            raise RuntimeError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY setting value.")
         self.deepgram = deepgram.DeepgramClient(settings.DEEPGRAM_API_KEY)
         self.transcription_options = deepgram.PrerecordedOptions(
             model=self.TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
@@ -82,7 +81,7 @@ class CallProcessingPipeline:
 
         # Groq
         if not hasattr(settings, 'GROQ_API_KEY') or not settings.GROQ_API_KEY:
-            raise ValueError("Groq API key not found. Please set the OPENAI_API_KEY setting value.")
+            raise RuntimeError("Groq API key not found. Please set the OPENAI_API_KEY setting value.")
         self.groq = groq.Groq(api_key=settings.GROQ_API_KEY)
 
         # VertexAI
@@ -90,7 +89,7 @@ class CallProcessingPipeline:
 
         # OpenAI
         if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
-            raise ValueError("OpenAI API key not found. Please set the OPENAI_API_KEY setting value.")
+            raise RuntimeError("OpenAI API key not found. Please set the OPENAI_API_KEY setting value.")
         else:
             openai.api_key = settings.OPENAI_API_KEY
         self.openai = openai.OpenAI()
@@ -122,24 +121,56 @@ class CallProcessingPipeline:
         }
 
     @observe()
-    def __call__(self, file_data: bytes, file_metadata: dict[str, str]) -> dict:
+    def __call__(
+            self, file_name: str, organization_id: int, customer_id: str, agent_id: int, timestamp: datetime
+    ) -> dict:
         """
-        Processes the given audio data through the pipeline and returns the transcript and base language.
+        Executes the full call processing pipeline for a given audio file and call metadata.
 
-        This top-level method is decorated with @observe(), creating a top-level Langfuse trace.
+        This method orchestrates the end-to-end pipeline, including:
+          - Transcription of the audio file using Deepgram or Groq (as a fallback),
+          - Diarization of the transcript if not natively included,
+          - Redaction of sensitive information via Google DLP,
+          - Enrichment of the transcript with call summary, topics, sentiment, etc., using OpenAI,
+          - Replacement of speaker labels with standardized role markers,
+          - Logging and traceability through Langfuse.
+
+        Decorated with @observe(), it creates a top-level Langfuse trace.
 
         Args:
-            file_data (bytes): Raw binary data of the audio file.
-            file_metadata (dict[str, str]): Contains file metadata for Langfuse
+            file_name (str): GCS path to the audio file or folder containing call recordings.
+            organization_id (int): ID of the organization initiating the call.
+            customer_id (str): Unique identifier for the customer involved in the call.
+            agent_id (int): Unique identifier for the agent handling the call.
+            timestamp (datetime): The timestamp indicating when the call took place.
 
         Returns:
-            dict: The full results of the call enrichment, including the transcript, language, agent and
-                customer speaker labels, the detected topics, the summary, the call title, and the call sentiment.
-        """
-        for field in self.REQUIRED_METADATA_FIELDS:
-            if field not in file_metadata:
-                raise ValueError(f'Incorrect format for recording metadata. Missing field "{field}"')
+            dict: A dictionary containing the complete enriched result, including:
+                - 'transcript' (str): Final (redacted + diarized) call transcript.
+                - 'language' (str): Detected primary spoken language.
+                - 'duration' (float): Call duration in seconds.
+                - 'agent_speaker_labels' (list): Original speaker labels assigned to the agent.
+                - 'customer_speaker_labels' (list): Original speaker labels assigned to the customer.
+                - 'topics' (list): List of detected topics relevant to the call.
+                - 'summary' (str): AI-generated summary of the conversation.
+                - 'call_title' (str): AI-generated call title.
+                - 'sentiment' (str): Overall sentiment classification of the conversation.
+                - 'input_tokens' (int): Number of tokens used in the enrichment prompt.
+                - 'output_tokens' (int): Number of tokens generated by the enrichment model.
+                - Plus all original call metadata (file_name, organization_id, customer_id, agent_id, timestamp).
 
+        Raises:
+            ValueError: If the transcription output is empty or an API key is missing.
+            Warning: If detected language changes between audio chunks.
+            Exception: If fallback transcription also fails.
+        """
+        file_metadata = {
+            "file_name": file_name,
+            "organization_id": organization_id,
+            "customer_id": customer_id,
+            "agent_id": agent_id,
+            "timestamp": timestamp
+        }
         langfuse_context.update_current_trace(
             name="Call Processing",
             user_id='Cloud Task Manager',
@@ -149,10 +180,10 @@ class CallProcessingPipeline:
         )
 
         # Transcribe the audio file
-        transcript, language, total_duration = self.transcribe(file_data)
+        transcript, language, total_duration = self.transcribe(file_name)
 
         if len(transcript) == 0:
-            raise ValueError('Call Processing: Produced transcript is empty.')
+            raise RuntimeError('Call Processing: Produced transcript is empty.')
 
         # Redact sensitive information
         transcript = self.redact_transcript(transcript)
@@ -190,15 +221,17 @@ class CallProcessingPipeline:
         return hashlib.sha256(combined_string.encode()).hexdigest()
 
     @observe(capture_output=False)
-    def transcribe(self, file_data: bytes) -> (str, str, float):
+    def transcribe(self, file_name: str) -> (str, str, float):
         """
         Internal method to handle the full transcription process:
-        1. Cuts the audio into chunks.
+        1. Checks to see whether the provided location is a directory or a file
+        2. Creates a list of target paths of files to transcribe
+        3. Processes each file separately, splitting it into chunks
         2. Transcribes each chunk.
         3. Checks for consistent language detection.
 
         Args:
-            file_data (bytes): The raw audio data to transcribe.
+            file_name (str): The audio location in GCS
 
         Returns:
             Tuple[str, str, float]: The full transcript, the detected base language and the call duration in seconds.
@@ -206,40 +239,37 @@ class CallProcessingPipeline:
         Raises:
             Warning: If language changes across chunks.
         """
-        recording_chunks, total_duration = self.cut_into_chunks(file_data)
-        langfuse_context.update_current_trace(
-            metadata={
-                'chunk_count': len(recording_chunks),
-                'total_duration_minutes': round(total_duration / 60000, 2),
-                'total_size_mbs': round(len(file_data) / 1000000, 2)
-            }
-        )
+        # Hierarchy: file > chunk
+        if file_name.endswith('.wav'):
+            target_paths = [file_name]
+        else:
+            target_paths = gcs_utils.list_files_in_gcs(file_name, '*.wav')
 
+        total_duration = 0
+        total_size = 0
+        chunk_count = 0
         base_language = None
         full_transcript = ''
         go_to_fallback = False
-        for i, chunk in enumerate(recording_chunks):
-            try:
-                chunk_transcript, chunk_language = self.transcribe_chunk_with_deepgram(chunk)
-            except (ValueError, httpx.HTTPError, DeepgramApiError):
-                base_language = None
-                full_transcript = ''
-                go_to_fallback = True
-                break
-            if not full_transcript:
-                base_language = chunk_language
-                full_transcript = chunk_transcript
-            else:
-                if base_language != chunk_language:
-                    raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
-                full_transcript += '\n' + chunk_transcript
+        for path in target_paths:
+            file_data = gcs_utils.download_from_gcs(path)
 
-        if go_to_fallback:
+            if len(file_data) == 0:
+                raise RuntimeError(f'File {path} is empty')
+
+            recording_chunks, file_duration = self.cut_into_chunks(file_data)
+            total_duration += file_duration
+            total_size += len(file_data)
+            chunk_count += len(recording_chunks)
+
             for i, chunk in enumerate(recording_chunks):
                 try:
-                    chunk_transcript, chunk_language = self.transcribe_chunk_with_groq(chunk)
-                except Exception as e:
-                    raise Exception(f'Could not proceed with fallback transcription method. Stack trace:\n{e}')
+                    chunk_transcript, chunk_language = self.transcribe_chunk_with_deepgram(chunk)
+                except (ValueError, httpx.HTTPError, DeepgramApiError):
+                    base_language = None
+                    full_transcript = ''
+                    go_to_fallback = True
+                    break
                 if not full_transcript:
                     base_language = chunk_language
                     full_transcript = chunk_transcript
@@ -248,11 +278,34 @@ class CallProcessingPipeline:
                         raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
                     full_transcript += '\n' + chunk_transcript
 
-            # Lastly, apply diarization
+            if go_to_fallback:
+                for i, chunk in enumerate(recording_chunks):
+                    try:
+                        chunk_transcript, chunk_language = self.transcribe_chunk_with_groq(chunk)
+                    except Exception as e:
+                        raise RuntimeError(f'Could not proceed with fallback transcription method. Stack trace:\n{e}')
+                    if not full_transcript:
+                        base_language = chunk_language
+                        full_transcript = chunk_transcript
+                    else:
+                        if base_language != chunk_language:
+                            raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
+                        full_transcript += '\n' + chunk_transcript
+
+            if base_language is None:
+                base_language = "unknown"
+
+        # Lastly, apply diarization if the fallback method was activated
+        if go_to_fallback:
             full_transcript = self.diarize_transcript(full_transcript)
 
-        if base_language is None:
-            base_language = "unknown"
+        langfuse_context.update_current_trace(
+            metadata={
+                'chunk_count': chunk_count,
+                'total_duration_minutes': round(total_duration / 60000, 2),
+                'total_size_mbs': round(total_size / 1000000, 2)
+            }
+        )
 
         return full_transcript, base_language, total_duration / 1000
 
@@ -341,7 +394,7 @@ class CallProcessingPipeline:
 
         except IndexError as e:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
-            raise ValueError(f'Could not parse transcription response: {response}') from e
+            raise RuntimeError(f'Could not parse transcription response: {response}') from e
         except httpx.HTTPStatusError as e:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
