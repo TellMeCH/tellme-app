@@ -6,10 +6,9 @@ import tempfile
 import hashlib
 from channels.generic.websocket import WebsocketConsumer
 from rest_framework import exceptions
-from django.conf import settings
 from django.utils import timezone
-from call_miner.models import OrganizationAPIKey, Organization
-from call_processing.utils import gcs_utils, audio_utils, tasks_utils
+from call_miner.models import OrganizationAPIKey
+from call_processing.utils import audio_utils, queue_utils
 
 logger = logging.getLogger('django')
 
@@ -261,27 +260,21 @@ class AudioHookConsumer(WebsocketConsumer):
             return
 
         if not self.error_close and size_bytes > 0:
-            # Potentially might have to run
-            # agent_valid, validity_message = check_agent_validity(agent_id, organization_id, timestamp)
-
             # Encode as WAV with linear PCM and proper headers
+            # Note to self: examine whether this takes too long/blocks the consumer
             wav_data = audio_utils.decode_mulaw_file_to_wav(
                 self.temp_file_path,
                 channels=self.AUDIOHOOK_CHANNELS,
                 sample_rate=self.AUDIOHOOK_SAMPLE_RATE
             )
 
-            # Upload to GCS
+            # Upload to GCS and create Task
             blob_name = f"{self.org.id}/{self.customer_id}_{self.agent_id}_{self.connection_timestamp.isoformat()}.wav"
-            gcs_uri = gcs_utils.upload_to_gcs(wav_data, blob_name)
-            logger.info(f"Uploaded local file to GCS ({gcs_uri})")
-
-            # Create a Cloud Task
-            process_url = settings.CALL_PROCESSING_ENDPOINT
-            logger.info(f'Creating an HTTP Task Targeting: {process_url}')
-            tasks_utils.create_task(
-                process_url, blob_name, self.org.id, self.customer_id, self.agent_id, self.connection_timestamp, logger
+            message, status_code = queue_utils.upload_and_create_task(
+                blob_name, self.agent_id, self.customer_id, self.org.id, self.connection_timestamp, logger,
+                False, wav_data  # Note to self: Consider whether checking agent validity is reasonable
             )
+            logger.info(message['message'])
 
         # Remove local file
         os.remove(self.temp_file_path)

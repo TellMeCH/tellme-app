@@ -9,7 +9,7 @@ class TestAudioHookConsumer:
     @pytest.mark.asyncio
     async def test_stream_success(
         self,
-        mock_gcs_upload_download,
+        mock_gcs_utils,
         mock_cloud_tasks,
         setup_db,
     ):
@@ -90,7 +90,7 @@ class TestAudioHookConsumer:
         await communicator.disconnect()
 
         # Check that GCS upload_to_gcs was called
-        upload_mock, download_mock = mock_gcs_upload_download
+        upload_mock = mock_gcs_utils[0]
         assert upload_mock.called, "Expected the consumer to upload final WAV data to GCS"
 
         # Check that a Cloud Task was created

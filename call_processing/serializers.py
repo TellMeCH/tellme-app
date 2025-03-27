@@ -1,6 +1,17 @@
 from rest_framework import serializers
 
 
+class WebhookProcessingSerializer(serializers.Serializer):
+    """
+    A serializer for Webhooks notifying of a call event (Provisional)
+    """
+    call_sid = serializers.CharField(required=True)
+    customer_id = serializers.IntegerField(required=True)
+    agent_id = serializers.IntegerField(required=True)
+    timestamp = serializers.DateTimeField(required=True)
+    call_status = serializers.CharField(required=True)
+
+
 class QueueRecordingSerializer(serializers.Serializer):
     """
     A serializer for requests adding a call processing task to the queue
