@@ -7,7 +7,7 @@ import grpc
 
 
 def create_task(
-        process_url: str, file_name: str, organization_id: int, customer_id: int, agent_id: int,
+        process_url: str, file_name: str, organization_id: int, customer_id: str, agent_id: int,
         timestamp: datetime.datetime, logger
 ):
     payload = {
