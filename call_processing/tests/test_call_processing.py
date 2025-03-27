@@ -51,7 +51,7 @@ class TestCallProcessingPipeline:
                 "duration": 10.0
             }
         }
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(RuntimeError) as exc:
             pipeline(
                 file_name="test.wav",
                 organization_id=1,
@@ -225,7 +225,7 @@ class TestCallProcessingPipeline:
         _, _, mock_list = mock_gcs_utils
         mock_list.return_value = []
 
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(RuntimeError) as exc:
             pipeline(
                 file_name="empty_folder/",
                 organization_id=1,
