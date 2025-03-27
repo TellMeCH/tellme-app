@@ -266,8 +266,8 @@ class TestSmokeTestCloudRunWithLogs:
         )
         assert response.status_code == 202, f"Unexpected status code: {response.status_code}"
         response_data = response.json()
-        assert "gcs_uri" in response_data, "GCS URI not found in response."
-        self.uploaded_gcs_uri = response_data["gcs_uri"]
+        assert "file_name" in response_data, "File name not found in response."
+        self.uploaded_gcs_uri = f"gs://{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}/{response_data["file_name"]}"
 
         # Retrieve logs for /queue and /process
         log_filter = self.generate_logs_filter(trigger_timestamp)
