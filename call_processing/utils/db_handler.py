@@ -39,6 +39,14 @@ def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: da
     return is_valid, message
 
 
+def retrieve_organization_transcription_method(organization_id: int):
+    """
+    Returns the organization transcription method
+    """
+    org = Organization.objects.get(id=organization_id)
+    return org.transcription_method
+
+
 def create_conversation(
     customer_id: str,
     organization_id: int,

@@ -52,7 +52,7 @@ def mock_cloud_tasks():
     """
     Mocks out the Google Cloud Tasks create_task call.
     """
-    with patch("call_processing.utils.tasks_utils.create_task") as mock_create:
+    with patch("call_processing.utils.queue_utils.create_task") as mock_create:
         mock_create.return_value = None
         yield mock_create
 
