@@ -312,7 +312,7 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ['url', 'name', 'conversation_count', 'max_user_count', 'created', 'updated']
+        fields = ['url', 'name', 'conversation_count', 'max_user_count', 'created', 'updated', 'transcription_method']
 
     @staticmethod
     @extend_schema_field({'type': 'integer'})

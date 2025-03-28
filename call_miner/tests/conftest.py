@@ -13,17 +13,25 @@ from call_miner.models import (
 def mock_firebase_auth():
     """Mock firebase_admin.auth methods to prevent real Firebase interactions during tests."""
     with patch('firebase_admin.auth.create_user') as mock_create_user, \
-            patch('firebase_admin.auth.delete_user') as mock_delete_user:
-        # Define a side effect function that generates a unique UID each time create_user is called
+         patch('firebase_admin.auth.delete_user') as mock_delete_user, \
+         patch('firebase_admin.auth.get_user_by_email') as mock_get_user_by_email:
+
+        # Mock create_user to return a mock user with a unique UID
         def create_user_side_effect(*args, **kwargs):
             mock_user = Mock()
-            mock_user.uid = str(uuid.uuid4())  # Generate a unique UID
+            mock_user.uid = str(uuid.uuid4())
             return mock_user
-
         mock_create_user.side_effect = create_user_side_effect
 
-        # Mock the delete_user method to do nothing
+        # Mock delete_user to do nothing
         mock_delete_user.return_value = None
+
+        # Mock get_user_by_email to return a mock user with a fixed UID
+        def get_user_by_email_side_effect(email):
+            mock_user = Mock()
+            mock_user.uid = f"mocked-uid-for-{email}"
+            return mock_user
+        mock_get_user_by_email.side_effect = get_user_by_email_side_effect
 
         yield
 

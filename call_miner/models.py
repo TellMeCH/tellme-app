@@ -1,4 +1,5 @@
 import re
+import uuid
 import secrets
 import hashlib
 import datetime
@@ -12,8 +13,9 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from firebase_admin import auth
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
-from call_miner.utils.email_utils import send_email_with_link
+import call_miner.utils.email_utils as email
 from django.db.models.signals import post_save, post_delete
+from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES
 
 
 class MetaSummaryAbstractModel(models.Model):
@@ -330,6 +332,7 @@ class Organization(models.Model, ConversationTrendMixin):
     max_topic_count = models.IntegerField(default=20)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    transcription_method = models.CharField(choices=TRANSCRIPTION_METHOD_CHOICES, default='deepgram')
 
     def __str__(self):
         return self.name
@@ -443,13 +446,17 @@ class CustomUserManager(BaseUserManager):
             if auth_type == 'password' and password:
                 raise ValueError('User passwords are only set after sending and processing the password reset link')
 
-        # Create the Firebase user first
-        firebase_user = auth.create_user(
-            email=email,
-            password=password,
-            display_name=email
-        )
-        uid = firebase_user.uid
+        # Create the user's UID
+        uid = uuid.uuid4().hex
+
+        # Only create the Firebase user if the login method is email + password
+        if auth_type == 'password':
+            auth.create_user(
+                email=email,
+                password=password,
+                display_name=email,
+                uid=uid
+            )
 
         # Try creating a user with the Firebase UID as ID. If this fails, delete the Firebase User
         try:
@@ -465,7 +472,8 @@ class CustomUserManager(BaseUserManager):
             user.save(using=self._db)
             return user
         except Exception as e:
-            auth.delete_user(uid)
+            if auth_type == 'password':
+                auth.delete_user(uid)
             raise e
 
     def create_superuser(self, email, password, first_name, last_name, **extra_fields):
@@ -511,17 +519,18 @@ class User(AbstractBaseUser, PermissionsMixin):
         No error will be raised in case user can't be found in Firebase
         """
         try:
-            auth.delete_user(self.pk)  # self.pk == self.id
+            firebase_user = auth.get_user_by_email(self.email)
+            auth.delete_user(firebase_user.uid)
         except auth.UserNotFoundError:
             pass
         return super().delete(using=using, keep_parents=keep_parents)
 
     @staticmethod
-    def _send_email_in_background(target_name, target_email, link, method):
+    def _send_email_in_background(*args, **kwargs):
         try:
-            send_email_with_link(target_name, target_email, link, method)
+            email.send_email_with_link(*args, **kwargs)
         except Exception as e:
-            print(f"Failed to send verification email to {target_email}: {e}")
+            print(f"Failed to send verification email: {e}")
 
     def send_onboarding_email(self):
         """
@@ -536,7 +545,26 @@ class User(AbstractBaseUser, PermissionsMixin):
             method = self.auth_type.capitalize() + ' account'
 
         full_name = self.first_name + ' ' + self.last_name
-        threading.Thread(target=self._send_email_in_background, args=(full_name, self.email, link, method)).start()
+        threading.Thread(
+            target=self._send_email_in_background,
+            args=(full_name, self.email, link, method, email.ONBOARDING_TEMPLATE, email.ONBOARDING_SUBJECT)
+        ).start()
+
+    def send_verification_email(self):
+        """
+        Simple method to send an email verification link to a new user.
+        """
+        if self.auth_type == 'password':
+            method = 'email and password'
+        else:
+            method = self.auth_type.capitalize() + ' account'
+
+        link = auth.generate_email_verification_link(self.email)
+        full_name = self.first_name + ' ' + self.last_name
+        threading.Thread(
+            target=self._send_email_in_background,
+            args=(full_name, self.email, link, method, email.VERIFICATION_TEMPLATE, email.VERIFICATION_SUBJECT)
+        ).start()
 
 
 class Employee(models.Model):

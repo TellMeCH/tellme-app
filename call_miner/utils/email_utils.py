@@ -2,7 +2,13 @@ from django.conf import settings
 from mailersend import emails
 
 
-def send_email_with_link(target_name: str, target_email: str, link: str, method: str):
+ONBOARDING_TEMPLATE = "0r83ql3qv6x4zw1j"
+ONBOARDING_SUBJECT = "Welcome to tellme"
+VERIFICATION_TEMPLATE = "3z0vklopmopg7qrx"
+VERIFICATION_SUBJECT = "tellme - Verify your Email"
+
+
+def send_email_with_link(target_name: str, target_email: str, link: str, method: str, template: str, subject: str):
     mailer = emails.NewEmail(settings.MAILER_API_KEY)
 
     mail_body = {}
@@ -24,8 +30,8 @@ def send_email_with_link(target_name: str, target_email: str, link: str, method:
 
     mailer.set_mail_from(mail_from, mail_body)
     mailer.set_mail_to(recipients, mail_body)
-    mailer.set_subject("Welcome to tellme", mail_body)
-    mailer.set_template("0r83ql3qv6x4zw1j", mail_body)
+    mailer.set_subject(subject, mail_body)
+    mailer.set_template(template, mail_body)
     mailer.set_personalization(personalization, mail_body)
 
     mailer.send(mail_body)

@@ -209,7 +209,7 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-date']
-    relationships_to_select = ['customer', 'agent']
+    relationships_to_select = ['customer', 'agent', 'agent__user']
     relationships_to_prefetch = ['topics']
     search_vector = (
         SearchVector('transcript', weight='A') +
@@ -231,10 +231,18 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
         Return conversations that belong to the user's organization
         """
         if self.request.user.is_superuser:
-            return Conversation.objects.all()
-        if self.request.user.employee.organization:
-            return Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
-        return Conversation.objects.none()
+            qs = Conversation.objects.all()
+        elif self.request.user.employee.organization:
+            qs = Conversation.objects.filter(agent__organization=self.request.user.employee.organization)
+        else:
+            return Conversation.objects.none()
+
+        qs = (
+            qs
+            .select_related(*self.relationships_to_select)
+            .prefetch_related(*self.relationships_to_prefetch)
+        )
+        return qs
 
     @extend_schema(
         description=ConversationDetailSerializer.get_processed_transcript.__doc__,
@@ -561,7 +569,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeModifySerializer
 
     def get_serializer_class(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'me']:
             return EmployeeListSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return EmployeeModifySerializer
@@ -576,3 +584,24 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         if self.request.user.employee.organization:
             return Employee.objects.filter(organization=self.request.user.employee.organization)
         return Employee.objects.none()
+
+    @extend_schema(
+        description="Return current employee details",
+        responses={
+            200: EmployeeListSerializer,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=False, methods=['get'])
+    def me(self, request):
+        """
+        Custom endpoint to return the current user's employee data.
+        """
+        employee = getattr(request.user, 'employee', None)
+        if not employee:
+            return response.Response({'detail': 'Employee not found.'}, status=404)
+
+        serializer = self.get_serializer(employee)
+        return response.Response(serializer.data)

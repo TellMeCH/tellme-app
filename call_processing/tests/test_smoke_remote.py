@@ -211,7 +211,7 @@ class TestSmokeTestCloudRunWithLogs:
                 "email": self.agent_email,
                 "first_name": "John",
                 "last_name": "Doe",
-                "auth_type": "google"
+                "auth_type": "password"
             }
         }
         resp = requests.post(
@@ -266,8 +266,8 @@ class TestSmokeTestCloudRunWithLogs:
         )
         assert response.status_code == 202, f"Unexpected status code: {response.status_code}"
         response_data = response.json()
-        assert "gcs_uri" in response_data, "GCS URI not found in response."
-        self.uploaded_gcs_uri = response_data["gcs_uri"]
+        assert "file_name" in response_data, "File name not found in response."
+        self.uploaded_gcs_uri = f"gs://{settings.GOOGLE_CLOUD_PROJECT}_{settings.CALL_PROCESSING_BUCKET}/{response_data["file_name"]}"
 
         # Retrieve logs for /queue and /process
         log_filter = self.generate_logs_filter(trigger_timestamp)
@@ -327,6 +327,20 @@ class TestSmokeTestCloudRunWithLogs:
             if task.http_request.url == f"{self.cloud_run_host}/processing/v1/process/":
                 test_tasks.append(task)
         assert len(test_tasks) == 0, f"Expected 1 task in queue, found {len(test_tasks)}."
+
+    def test_smoke_post_with_logs_groq(self):
+        """
+        Trigger the /queue endpoint using X-API-KEY, after switching the org's transcription_method to 'groq'.
+        Reuses the original smoke test logic.
+        """
+        # Patch the org to use 'groq' transcription method
+        patch_url = f"{self.cloud_run_host}/api/v1/organizations/{self.org_id}/"
+        patch_payload = {"transcription_method": "groq"}
+        patch_resp = requests.patch(patch_url, json=patch_payload, headers=self.superuser_headers)
+        patch_resp.raise_for_status()
+
+        # Reuse the standard smoke test logic
+        self.test_smoke_post_with_logs()
 
     def test_smoke_audiohook_with_logs(self):
         """

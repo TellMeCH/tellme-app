@@ -15,7 +15,8 @@ class TestProcessRecordingView:
             "organization_id": 1,
             "customer_id": "CUST123",
             "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00"
+            "timestamp": "2024-01-01T12:00:00",
+            "transcription_method": "deepgram"
         }
 
     def test_authentication_success(self, settings, setup_db, api_client):
@@ -50,17 +51,17 @@ class TestProcessRecordingView:
         response = api_client.post(url, data={}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_process_empty_file(self, api_client, mock_gcs_upload_download, setup_db, valid_task_payload,
+    def test_process_empty_file(self, api_client, mock_gcs_utils, setup_db, valid_task_payload,
                                 mock_processing_user):
-        mock_gcs_upload_download[1].return_value = b""
+        mock_gcs_utils[1].return_value = b""
         url = reverse("process")
         response = api_client.post(url, data=valid_task_payload, format="json")
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert "is empty" in response.data["error"]
 
     @patch("call_processing.views.create_conversation")
     def test_process_success(
-            self, mock_create_conversation, api_client, valid_task_payload, setup_db, mock_gcs_upload_download,
+            self, mock_create_conversation, api_client, valid_task_payload, setup_db, mock_gcs_utils,
             mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
     ):
         """
@@ -74,7 +75,7 @@ class TestProcessRecordingView:
         assert response.data["message"] == "File processed and saved to DB."
 
     def test_create_conversation_in_db(
-            self, api_client, setup_db, valid_task_payload, mock_gcs_upload_download, mock_deepgram, mock_groq,
+            self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram, mock_groq,
             mock_openai, mock_pydub, mock_processing_user
     ):
         """

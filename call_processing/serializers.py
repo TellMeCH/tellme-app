@@ -1,4 +1,16 @@
 from rest_framework import serializers
+from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES
+
+
+class WebhookProcessingSerializer(serializers.Serializer):
+    """
+    A serializer for Webhooks notifying of a call event (Provisional)
+    """
+    call_sid = serializers.CharField(required=True)
+    customer_id = serializers.IntegerField(required=True)
+    agent_id = serializers.IntegerField(required=True)
+    timestamp = serializers.DateTimeField(required=True)
+    call_status = serializers.CharField(required=True)
 
 
 class QueueRecordingSerializer(serializers.Serializer):
@@ -20,3 +32,4 @@ class ProcessRecordingSerializer(serializers.Serializer):
     customer_id = serializers.CharField(required=True)
     agent_id = serializers.IntegerField(required=True)
     timestamp = serializers.DateTimeField(required=True)
+    transcription_method = serializers.ChoiceField(choices=TRANSCRIPTION_METHOD_CHOICES, required=True)
