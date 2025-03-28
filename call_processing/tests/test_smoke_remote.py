@@ -328,6 +328,20 @@ class TestSmokeTestCloudRunWithLogs:
                 test_tasks.append(task)
         assert len(test_tasks) == 0, f"Expected 1 task in queue, found {len(test_tasks)}."
 
+    def test_smoke_post_with_logs_groq(self):
+        """
+        Trigger the /queue endpoint using X-API-KEY, after switching the org's transcription_method to 'groq'.
+        Reuses the original smoke test logic.
+        """
+        # Patch the org to use 'groq' transcription method
+        patch_url = f"{self.cloud_run_host}/api/v1/organizations/{self.org_id}/"
+        patch_payload = {"transcription_method": "groq"}
+        patch_resp = requests.patch(patch_url, json=patch_payload, headers=self.superuser_headers)
+        patch_resp.raise_for_status()
+
+        # Reuse the standard smoke test logic
+        self.test_smoke_post_with_logs()
+
     def test_smoke_audiohook_with_logs(self):
         """
         Trigger the /process endpoint, this time using the Audiohook emulator
