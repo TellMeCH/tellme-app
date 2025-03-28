@@ -1,4 +1,4 @@
-
+TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
 
 DIARIZATION_PROMPT = """
     You are a helpful diarization assistant, working with transcribed calls between TWO speakers.

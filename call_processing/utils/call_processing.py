@@ -16,8 +16,8 @@ from langfuse.decorators import observe, langfuse_context
 from deepgram.clients.common.v1.errors import DeepgramApiError
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
 from call_miner.models import Topic
-from call_processing.utils.fallback_prompt import (
-    DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
+from call_processing.utils.llm_configs import (
+    TRANSCRIPTION_METHOD_CHOICES, DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
 )
 from call_processing.utils import gcs_utils
 
@@ -122,7 +122,13 @@ class CallProcessingPipeline:
 
     @observe()
     def __call__(
-            self, file_name: str, organization_id: int, customer_id: str, agent_id: int, timestamp: datetime
+            self,
+            file_name: str,
+            organization_id: int,
+            customer_id: str,
+            agent_id: int,
+            timestamp: datetime,
+            transcription_method: str = 'deepgram'
     ) -> dict:
         """
         Executes the full call processing pipeline for a given audio file and call metadata.
@@ -143,6 +149,7 @@ class CallProcessingPipeline:
             customer_id (str): Unique identifier for the customer involved in the call.
             agent_id (int): Unique identifier for the agent handling the call.
             timestamp (datetime): The timestamp indicating when the call took place.
+            transcription_method (str): Indicates what transcription method to use
 
         Returns:
             dict: A dictionary containing the complete enriched result, including:
@@ -164,6 +171,10 @@ class CallProcessingPipeline:
             Warning: If detected language changes between audio chunks.
             Exception: If fallback transcription also fails.
         """
+
+        if transcription_method not in [method[0] for method in TRANSCRIPTION_METHOD_CHOICES]:
+            raise ValueError(f'Invalid Transcription Method ({transcription_method})')
+
         file_metadata = {
             "file_name": file_name,
             "organization_id": organization_id,
@@ -180,7 +191,7 @@ class CallProcessingPipeline:
         )
 
         # Transcribe the audio file
-        transcript, language, total_duration = self.transcribe(file_name)
+        transcript, language, total_duration = self.transcribe(file_name, transcription_method)
 
         if len(transcript) == 0:
             raise RuntimeError('Call Processing: Produced transcript is empty.')
@@ -221,7 +232,7 @@ class CallProcessingPipeline:
         return hashlib.sha256(combined_string.encode()).hexdigest()
 
     @observe(capture_output=False)
-    def transcribe(self, file_name: str) -> (str, str, float):
+    def transcribe(self, file_name: str, transcription_method: str) -> (str, str, float):
         """
         Internal method to handle the full transcription process:
         1. Checks to see whether the provided location is a directory or a file
@@ -232,13 +243,26 @@ class CallProcessingPipeline:
 
         Args:
             file_name (str): The audio location in GCS
+            transcription_method (str): Indicates what transcription method to use
 
         Returns:
             Tuple[str, str, float]: The full transcript, the detected base language and the call duration in seconds.
 
         Raises:
             Warning: If language changes across chunks.
+            ValueError: If provided transcription method is not supported
         """
+        if transcription_method == 'deepgram':
+            primary_method = self.transcribe_chunk_with_deepgram
+            fallback_method = self.transcribe_chunk_with_groq
+            fallback_exceptions = (ValueError, httpx.HTTPError, DeepgramApiError)
+        elif transcription_method == 'groq':
+            primary_method = self.transcribe_chunk_with_groq
+            fallback_method = self.transcribe_chunk_with_deepgram
+            fallback_exceptions = (ValueError, httpx.HTTPError)
+        else:
+            raise ValueError(f'Provided transcription_method is not supported ({transcription_method})')
+
         # Hierarchy: file > chunk
         if file_name.endswith('.wav'):
             target_paths = [file_name]
@@ -264,8 +288,8 @@ class CallProcessingPipeline:
 
             for i, chunk in enumerate(recording_chunks):
                 try:
-                    chunk_transcript, chunk_language = self.transcribe_chunk_with_deepgram(chunk)
-                except (ValueError, httpx.HTTPError, DeepgramApiError):
+                    chunk_transcript, chunk_language = primary_method(chunk)
+                except fallback_exceptions:
                     base_language = None
                     full_transcript = ''
                     go_to_fallback = True
@@ -281,7 +305,7 @@ class CallProcessingPipeline:
             if go_to_fallback:
                 for i, chunk in enumerate(recording_chunks):
                     try:
-                        chunk_transcript, chunk_language = self.transcribe_chunk_with_groq(chunk)
+                        chunk_transcript, chunk_language = fallback_method(chunk)
                     except Exception as e:
                         raise RuntimeError(f'Could not proceed with fallback transcription method. Stack trace:\n{e}')
                     if not full_transcript:
@@ -295,8 +319,8 @@ class CallProcessingPipeline:
             if base_language is None:
                 base_language = "unknown"
 
-        # Lastly, apply diarization if the fallback method was activated
-        if go_to_fallback:
+        # Lastly, apply diarization if transcription was done with groq
+        if transcription_method == 'groq' or (transcription_method != 'groq' and go_to_fallback):
             full_transcript = self.diarize_transcript(full_transcript)
 
         langfuse_context.update_current_trace(

@@ -131,13 +131,21 @@ class ProcessRecordingView(APIView):
         customer_id = serializer.validated_data.get("customer_id")
         agent_id = serializer.validated_data.get("agent_id")
         timestamp = serializer.validated_data.get("timestamp")
+        transcription_method = serializer.validated_data.get("transcription_method")
 
         logger.info(f"Processing file {file_name}")
         processing_start = datetime.datetime.now()
 
         # Enrich data using your pipeline
         try:
-            enriched_data = self.pipeline(file_name, organization_id, customer_id, agent_id, timestamp)
+            enriched_data = self.pipeline(
+                file_name,
+                organization_id,
+                customer_id,
+                agent_id,
+                timestamp,
+                transcription_method
+            )
         except RuntimeError as exc:
             logger.error(f"Processing Pipeline Failed: {str(exc)}")
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
