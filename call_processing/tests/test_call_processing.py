@@ -276,3 +276,77 @@ class TestCallProcessingPipeline:
         assert mock_groq.audio.transcriptions.create.called
         assert "transcript" in result
         assert result["transcript"].strip() != ""
+
+    def test_transcription_method_deepgram_used(
+        self, pipeline, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai, mock_pydub
+    ):
+        """
+        Ensure Deepgram is used as the primary transcription method when explicitly specified.
+        """
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00",
+            transcription_method="deepgram"
+        )
+
+        assert mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert not mock_groq.audio.transcriptions.create.called
+        assert "transcript" in result
+
+    def test_transcription_method_groq_used(
+        self, pipeline, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai, mock_pydub
+    ):
+        """
+        Ensure Groq is used as the primary transcription method when explicitly specified.
+        """
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00",
+            transcription_method="groq"
+        )
+
+        assert mock_groq.audio.transcriptions.create.called
+        assert not mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert "transcript" in result
+
+    def test_invalid_transcription_method_raises(self, pipeline):
+        """
+        If an invalid transcription method is passed, raise ValueError.
+        """
+        with pytest.raises(ValueError) as exc:
+            pipeline(
+                file_name="test.wav",
+                organization_id=1,
+                customer_id="CUST123",
+                agent_id=123,
+                timestamp="2024-01-01T12:00:00",
+                transcription_method="banana"
+            )
+        assert "Invalid Transcription Method" in str(exc.value)
+
+    def test_fallback_transcription_if_groq_fails(
+        self, pipeline, mock_groq, mock_deepgram, mock_openai, mock_langfuse, mock_pydub, mock_dlp, mock_vertexai
+    ):
+        """
+        If Groq fails, the pipeline should fallback to Deepgram and complete processing.
+        """
+        mock_groq.audio.transcriptions.create.side_effect = httpx.TimeoutException("Groq timeout")
+
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00",
+            transcription_method="groq"
+        )
+
+        assert mock_groq.audio.transcriptions.create.called
+        assert mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert "transcript" in result

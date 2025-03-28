@@ -15,7 +15,8 @@ class TestProcessRecordingView:
             "organization_id": 1,
             "customer_id": "CUST123",
             "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00"
+            "timestamp": "2024-01-01T12:00:00",
+            "transcription_method": "deepgram"
         }
 
     def test_authentication_success(self, settings, setup_db, api_client):
