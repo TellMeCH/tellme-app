@@ -2,6 +2,7 @@ from rest_framework import viewsets, decorators, response, status, mixins
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import F
 from drf_spectacular.utils import extend_schema
+from rest_framework.exceptions import MethodNotAllowed
 from django.conf import settings
 from call_miner.models import Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Customer
 from call_miner.serializers import (
@@ -224,7 +225,7 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
             return ConversationDetailSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return ConversationModifySerializer
-        raise ValueError(f'Action {self.action} not permitted.')
+        raise MethodNotAllowed(self.action)
 
     def get_queryset(self):
         """
@@ -281,7 +282,7 @@ class OrganizationViewSet(viewsets.ModelViewSet, TrendsActionsViewSet):
             return OrganizationSerializer
         elif self.action in ['conversations', 'trend', 'overview']:
             return ConversationTrendsSerializer
-        raise ValueError(f'Action {self.action} not permitted.')
+        raise MethodNotAllowed(self.action)
 
     def get_queryset(self):
         if self.request.user.is_superuser:
@@ -360,7 +361,7 @@ class OrganizationAPIKeyViewSet(
             return OrganizationAPIKeyListSerializer
         elif self.action in ['create', 'destroy', 'regenerate']:
             return OrganizationAPIKeyModifySerializer
-        raise ValueError(f'Action {self.action} not permitted.')
+        raise MethodNotAllowed(self.action)
 
     @extend_schema(
         description="Deletes and recreates an API key, maintaining its name and organization but re-setting its expiry",
@@ -415,7 +416,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
             return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return TopicModifySerializer
-        raise ValueError(f'Action {self.action} not permitted.')
+        raise MethodNotAllowed(self.action)
 
     def get_queryset(self):
         """
@@ -468,6 +469,10 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def overview(self, request, pk=None):
+        # Override the inherited /overview action
+        raise MethodNotAllowed("GET")
+
 
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     """
@@ -493,7 +498,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
             return MetaSummarySerializer
         elif self.action in ['conversations', 'trend', 'overview']:
             return ConversationTrendsSerializer
-        raise ValueError(f'Action {self.action} not permitted.')
+        raise MethodNotAllowed(self.action)
 
     def get_queryset(self):
         if self.request.user.is_superuser:
@@ -543,7 +548,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
             return ConversationTrendsSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return CustomerModifySerializer
-        raise ValueError(f'Action {self.action} not permitted.')
+        raise MethodNotAllowed(self.action)
 
     def get_queryset(self):
         """
@@ -573,7 +578,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             return EmployeeListSerializer
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             return EmployeeModifySerializer
-        raise ValueError(f'Action {self.action} not permitted.')
+        raise MethodNotAllowed(self.action)
 
     def get_queryset(self):
         """
