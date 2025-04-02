@@ -369,8 +369,11 @@ def export_from_langfuse(request) -> (str, int):
                 tra[col] = tra[col].fillna(0).astype(float)
 
         # If necessary, iterate over all previous tables in the bucket and add them as null
-        if latest_schema != DESIRED_SCHEMA:
-            backfill_missing_columns(MONITORING_BUCKET, FILE_PREFIX, DESIRED_SCHEMA)
+        if latest_schema is not None:
+            new_cols = set(DESIRED_SCHEMA.keys()).difference(latest_schema.keys())
+            old_cols = set(latest_schema.keys()).difference(DESIRED_SCHEMA.keys())
+            if new_cols or old_cols:
+                backfill_missing_columns(MONITORING_BUCKET, FILE_PREFIX, DESIRED_SCHEMA)
 
         # Lastly, enforce the desired schema on the current data
         tra = enforce_schema(tra, DESIRED_SCHEMA)
