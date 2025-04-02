@@ -247,6 +247,7 @@ def export_from_langfuse(request) -> (str, int):
         # Reformatting the 'name' column
         gen.loc[gen['name'] == 'OpenAI-generation', 'name'] = gen.loc[gen['name'] == 'OpenAI-generation', 'promptName']
         gen.loc[gen['name'] == 'transcribe_chunk_with_groq', 'name'] = 'transcription_groq'
+        gen.loc[gen['name'] == 'transcribe_chunk_with_deepgram', 'name'] = 'transcription_deepgram'
 
         # Aggregate by Trace ID and Name
         gens_agg = (
