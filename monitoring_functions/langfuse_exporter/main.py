@@ -300,8 +300,9 @@ def export_from_langfuse(request) -> (str, int):
         )
 
         # Some totals
-        for dimension in ['count', 'failed_count', 'cost', 'latency']:
+        for dimension in ['count', 'failed_count', 'cost']:
             tra[f'{dimension}_total'] = tra[[col for col in tra.columns if col.startswith(dimension)]].sum(axis=1)
+        tra = tra.rename(columns={'latency': 'latency_total'})
 
         # Lastly, some type enforcement
         tra['sessionId'] = tra['sessionId'].astype(str)
