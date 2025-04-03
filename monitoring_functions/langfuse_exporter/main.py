@@ -14,6 +14,63 @@ SECRET_NAME = env('SETTINGS_NAME')
 GOOGLE_CLOUD_PROJECT = env('GOOGLE_CLOUD_PROJECT')
 MONITORING_BUCKET = f"{GOOGLE_CLOUD_PROJECT}_{os.getenv('MONITORING_BUCKET')}"
 FILE_PREFIX = 'langfuse_data/langfuse_traces_'
+DESIRED_SCHEMA = {
+    "id": "object",
+    "timestamp": "datetime64[ns, UTC]",
+    "name": "object",
+    "input": "object",
+    "output": "object",
+    "userId": "object",
+    "metadata": "object",
+    "tags": "object",
+    "public": "bool",
+    "htmlPath": "object",
+    "latency_total": "float64",
+    "cost_total": "float64",
+    "observations": "object",
+    "scores": "object",
+    "projectId": "object",
+    "updatedAt": "object",
+    "createdAt": "object",
+    "bookmarked": "bool",
+    "environment": "object",
+    "sessionId": "object",
+    "release": "object",
+    "version": "object",
+    "externalId": "object",
+    "cost_call_enrichment": "float64",
+    "cost_diarization_vertexai": "float64",
+    "cost_get_summary_data": "float64",
+    "cost_get_all_summaries": "float64",
+    "cost_redaction_google_dlp": "float64",
+    "cost_transcription_deepgram": "float64",
+    "cost_transcription_groq": "float64",
+    "count_call_enrichment": "int64",
+    "count_diarization_vertexai": "int64",
+    "count_get_summary_data": "int64",
+    "count_get_all_summaries": "int64",
+    "count_redaction_google_dlp": "int64",
+    "count_transcription_deepgram": "int64",
+    "count_transcription_groq": "int64",
+    "failed_count_call_enrichment": "int64",
+    "failed_count_diarization_vertexai": "int64",
+    "failed_count_get_summary_data": "int64",
+    "failed_count_get_all_summaries": "int64",
+    "failed_count_redaction_google_dlp": "int64",
+    "failed_count_transcription_deepgram": "int64",
+    "failed_count_transcription_groq": "int64",
+    "latency_call_enrichment": "float64",
+    "latency_diarization_vertexai": "float64",
+    "latency_get_summary_data": "float64",
+    "latency_get_all_summaries": "float64",
+    "latency_redaction_google_dlp": "float64",
+    "latency_transcription_deepgram": "float64",
+    "latency_transcription_groq": "float64",
+    "failed": "bool",
+    "call_duration": "float64",
+    "count_total": "int64",
+    "failed_count_total": "int64",
+}
 
 
 def langfuse_observations_to_dataframe(langfuse_client: langfuse.Langfuse, start_time: datetime) -> pd.DataFrame:
@@ -121,40 +178,46 @@ def get_most_recent_timestamp_and_schema_from_gcs(bucket_name: str, file_prefix:
     return most_recent_timestamp, most_recent_schema
 
 
-def extend_dataframe_with_schema(df: pd.DataFrame, schema: dict[str, str]) -> pd.DataFrame:
+def enforce_schema(df: pd.DataFrame, schema: dict[str, str]) -> pd.DataFrame:
     """
-    Extends a DataFrame with columns from a given schema that are missing in the DataFrame.
-    New columns are filled with None/NaN values.
+    Enforces a schema on a pandas DataFrame. This will drop columns not included in `schema`, add new ones with null
+    values, and modify matching columns that have an incorrect type
 
     Args:
-        df (pd.DataFrame): The DataFrame to extend.
+        df (pd.DataFrame): The DataFrame whose schema is modified.
         schema (dict[str, str]): A dictionary where keys are column names and values are data types.
 
     Returns:
-        pd.DataFrame: The extended DataFrame.
+        pd.DataFrame: The modified DataFrame.
     """
-    for col, dtype in schema.items():
+    for col, desired_type in schema.items():
         if col not in df.columns:
-            try:  # Try to set the correct dtype
-                if dtype == 'object':
-                    df[col] = None
-                    df[col] = df[col].astype(str)
-                elif dtype == 'int64':
-                    df[col] = 0
-                    df[col] = df[col].astype(int)
-                elif dtype == 'float64':
-                    df[col] = 0
-                    df[col] = df[col].astype(float)
-                elif dtype == 'bool':
-                    df[col] = None
-                    df[col] = df[col].astype(bool)
+            # Create a new column
+            if desired_type == "object":
+                df[col] = None
+            elif desired_type == "bool":
+                df[col] = None
+            elif desired_type == "int64":
+                df[col] = 0
+            elif desired_type.startswith("float"):
+                df[col] = 0.0
 
+        # Convert dtype
+        if desired_type == "datetime64[ns, UTC]":
+            df[col] = pd.to_datetime(df[col], utc=True, errors="coerce")
+        else:
+            try:
+                df[col] = df[col].astype(desired_type)
             except Exception as e:
-                print(f"Could not set dtype {dtype} for {col}: {e}")
+                print(f"Warning: could not cast column {col} to {desired_type}: {e}")
+
+    # Drop any columns not in the schema and re-order
+    cols_to_keep = list(schema.keys())
+    df = df[cols_to_keep]
     return df
 
 
-def backfill_missing_columns(bucket_name: str, file_prefix: str, latest_schema: dict[str, str], col_order: list[str]):
+def backfill_missing_columns(bucket_name: str, file_prefix: str, desired_schema: dict[str, str]):
     """
     Iterates through all CSV files in a GCS bucket with a given prefix and adds missing columns
     from the latest schema, filling the new columns with None/NaN.
@@ -163,9 +226,8 @@ def backfill_missing_columns(bucket_name: str, file_prefix: str, latest_schema: 
     Args:
         bucket_name (str): The name of the Google Cloud Storage bucket.
         file_prefix (str): The prefix of the CSV files to process.
-        latest_schema (dict[str, str]): The schema to use for backfilling, a dict where keys are column names and values
+        desired_schema (dict[str, str]): The schema to use for backfilling, a dict where keys are column names and values
             are pandas data types.
-        col_order (list[str]): The expected column order for the resulting DF
     """
 
     storage_client = storage.Client()
@@ -182,10 +244,7 @@ def backfill_missing_columns(bucket_name: str, file_prefix: str, latest_schema: 
             df = pd.read_csv(io.StringIO(csv_data))
 
             # Extend the DataFrame with missing columns
-            df = extend_dataframe_with_schema(df, latest_schema)
-
-            # Enforce the Column order
-            df = df[col_order]
+            df = enforce_schema(df, desired_schema)
 
             # Save the updated DataFrame back to CSV
             updated_csv_data = df.to_csv(index=False)
@@ -247,6 +306,7 @@ def export_from_langfuse(request) -> (str, int):
         # Reformatting the 'name' column
         gen.loc[gen['name'] == 'OpenAI-generation', 'name'] = gen.loc[gen['name'] == 'OpenAI-generation', 'promptName']
         gen.loc[gen['name'] == 'transcribe_chunk_with_groq', 'name'] = 'transcription_groq'
+        gen.loc[gen['name'] == 'transcribe_chunk_with_deepgram', 'name'] = 'transcription_deepgram'
 
         # Aggregate by Trace ID and Name
         gens_agg = (
@@ -300,8 +360,9 @@ def export_from_langfuse(request) -> (str, int):
         )
 
         # Some totals
-        for dimension in ['count', 'failed_count', 'cost', 'latency']:
+        for dimension in ['count', 'failed_count']:
             tra[f'{dimension}_total'] = tra[[col for col in tra.columns if col.startswith(dimension)]].sum(axis=1)
+        tra = tra.rename(columns={'latency': 'latency_total', 'totalCost': 'cost_total'})
 
         # Lastly, some type enforcement
         tra['sessionId'] = tra['sessionId'].astype(str)
@@ -311,25 +372,15 @@ def export_from_langfuse(request) -> (str, int):
             elif 'cost' in col or 'latency' in col:
                 tra[col] = tra[col].fillna(0).astype(float)
 
-        if latest_schema:
-            # If current file does not contain some columns that the old one does, extend the current schema
-            current_schema = dict(tra.dtypes)
-            forgotten_columns = [c for c in latest_schema.keys() if c not in current_schema.keys()]
-            print(f'Adding latest schema columns ({', '.join(forgotten_columns[:5])}...) to fetched data.')
-            tra = extend_dataframe_with_schema(tra, latest_schema)
+        # If necessary, iterate over all previous tables in the bucket and add them as null
+        if latest_schema is not None:
+            new_cols = set(DESIRED_SCHEMA.keys()).difference(latest_schema.keys())
+            old_cols = set(latest_schema.keys()).difference(DESIRED_SCHEMA.keys())
+            if new_cols or old_cols:
+                backfill_missing_columns(MONITORING_BUCKET, FILE_PREFIX, DESIRED_SCHEMA)
 
-            # Identify columns that only appear in the current fetch
-            current_schema = dict(tra.dtypes)
-            new_columns = [c for c in current_schema.keys() if c not in latest_schema.keys()]
-
-            # Enforce the expected column order
-            column_order = list(latest_schema.keys()) + new_columns
-            tra = tra[column_order]
-
-            # If necessary, iterate over all previous tables in the bucket and add them as null
-            if new_columns:
-                print(f"New columns ({', '.join(list(new_columns)[:5])}...) detected in latest schema. Backfilling...")
-                backfill_missing_columns(MONITORING_BUCKET, FILE_PREFIX, current_schema, column_order)
+        # Lastly, enforce the desired schema on the current data
+        tra = enforce_schema(tra, DESIRED_SCHEMA)
 
         # Define Filename
         timestamp_str = current_time.strftime("%Y%m%d_%H%M%S")
