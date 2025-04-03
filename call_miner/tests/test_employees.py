@@ -792,3 +792,58 @@ class TestEmployeeDelete:
         url = reverse('employee-detail', args=[employee.id])
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestEmployeeActions:
+    """Tests for updating employees via the API."""
+    def test_superuser_can_invite_any_employee(self, client, superuser, analyst_user, mock_user_email_sending):
+        """Test that a superuser can invite any employee"""
+        client.force_authenticate(user=superuser)
+        employee = Employee.objects.get(user=analyst_user)
+        url = reverse('employee-invite', args=[employee.id])
+        response = client.post(url, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        mock_onboarding, mock_verification = mock_user_email_sending
+        mock_onboarding.assert_called_once()
+
+    def test_organization_admin_can_invite_any_employee(self, client, organization_admin_user, analyst_user,
+                                                        mock_user_email_sending):
+        """Test that an organization admin can invite any employee"""
+        client.force_authenticate(user=organization_admin_user)
+        employee = Employee.objects.get(user=analyst_user)
+        url = reverse('employee-invite', args=[employee.id])
+        response = client.post(url, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        mock_onboarding, mock_verification = mock_user_email_sending
+        mock_onboarding.assert_called_once()
+
+    def test_user_cannot_invite_any_employee(self, client, agent_user, analyst_user, mock_user_email_sending):
+        """Test that a regular user can't invite any employee"""
+        client.force_authenticate(user=agent_user)
+        employee = Employee.objects.get(user=analyst_user)
+        url = reverse('employee-invite', args=[employee.id])
+        response = client.post(url, format='json')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        mock_onboarding, mock_verification = mock_user_email_sending
+        mock_onboarding.assert_not_called()
+
+    def test_user_cannot_invite_self(self, client, analyst_user, mock_user_email_sending):
+        """Test that a regular user can't invite itself"""
+        client.force_authenticate(user=analyst_user)
+        employee = Employee.objects.get(user=analyst_user)
+        url = reverse('employee-invite', args=[employee.id])
+        response = client.post(url, format='json')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        mock_onboarding, mock_verification = mock_user_email_sending
+        mock_onboarding.assert_not_called()
+
+    def test_user_can_call_me(self, client, analyst_user):
+        """Test that a user can call the /me endpoint"""
+        client.force_authenticate(user=analyst_user)
+        url = reverse('employee-me')
+        response = client.get(url, format='json')
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data.get('user').get('email') == analyst_user.email
+        assert response.data.get('role') == 'ANALYST'
+
