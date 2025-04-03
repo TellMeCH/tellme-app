@@ -175,7 +175,7 @@ class TestEmployeeRetrieve:
 class TestEmployeeCreate:
     """Tests for creating employees via the API."""
 
-    def test_superuser_can_create_employee(self, client, superuser, organization):
+    def test_superuser_can_create_employee(self, client, superuser, organization, mock_user_email_sending):
         """Test that a superuser can create a new employee with organization specified."""
         client.force_authenticate(user=superuser)
         url = reverse('employee-list')
@@ -200,7 +200,11 @@ class TestEmployeeCreate:
         assert new_employee.role == 'ANALYST'
         assert hasattr(new_employee, 'analyst')
 
-    def test_superuser_cannot_create_employee_without_organization(self, client, superuser, organization):
+        mock_onboarding, mock_verification = mock_user_email_sending
+        mock_onboarding.assert_called_once()
+
+    def test_superuser_cannot_create_employee_without_organization(self, client, superuser, organization,
+                                                                   mock_user_email_sending):
         """Test that a superuser cannot create an employee without specifying an organization."""
         client.force_authenticate(user=superuser)
         url = reverse('employee-list')
@@ -220,7 +224,11 @@ class TestEmployeeCreate:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert str(response.data['organization'][0]) == ERROR_MESSAGES['superusers_organization']
 
-    def test_organization_admin_can_create_employee(self, client, organization_admin_user, organization):
+        mock_onboarding, mock_verification = mock_user_email_sending
+        mock_onboarding.assert_not_called()
+
+    def test_organization_admin_can_create_employee(self, client, organization_admin_user, organization,
+                                                    mock_user_email_sending):
         """Test that an organization admin can create a new employee in their organization."""
         client.force_authenticate(user=organization_admin_user)
         url = reverse('employee-list')
@@ -231,7 +239,7 @@ class TestEmployeeCreate:
                 'auth_type': 'google',
                 'email': 'new_employee@example.com'
             },
-            'role': 'AGENT',
+            'role': 'ANALYST',
             'is_organization_admin': False
             # 'organization' is intentionally omitted
         }
@@ -241,8 +249,11 @@ class TestEmployeeCreate:
         new_employee = new_user.employee
         assert new_user.first_name == 'new'
         assert new_user.email == 'new_employee@example.com'
-        assert new_employee.role == 'AGENT'
-        assert hasattr(new_employee, 'agent')
+        assert new_employee.role == 'ANALYST'
+        assert hasattr(new_employee, 'analyst')
+
+        mock_onboarding, mock_verification = mock_user_email_sending
+        mock_onboarding.assert_called_once()
 
     def test_organization_admin_cannot_create_employee_specifying_organization(self, client, organization_admin_user,
                                                                                organization):

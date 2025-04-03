@@ -46,6 +46,21 @@ def mock_condense_summaries():
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def mock_user_email_sending():
+    """
+    Mocks out User's send_onboarding_email() and send_verification_email()
+    methods so that no real email logic is triggered.
+    """
+    with patch('call_miner.models.User.send_onboarding_email') as mock_onboarding, \
+         patch('call_miner.models.User.send_verification_email') as mock_verification:
+        # You can further control return values or side effects if needed.
+        mock_onboarding.return_value = None
+        mock_verification.return_value = None
+
+        yield mock_onboarding, mock_verification
+
+
 @pytest.fixture
 def client():
     """Return an instance of the DRF APIClient for testing."""
