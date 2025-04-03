@@ -606,8 +606,13 @@ class UserSerializer(serializers.ModelSerializer):
         auth_type = validated_data.get('auth_type')
 
         # If changing the authentication type to 'password', send onboarding email
-        if auth_type is not None and auth_type != instance.auth_type and auth_type == 'password':
-            instance.send_onboarding_email()
+        if auth_type is not None and auth_type != instance.auth_type:
+            if auth_type == 'password':
+                instance.send_onboarding_email()
+            else:
+                raise serializers.ValidationError(
+                    {'auth_type': "Can't change auth_type to something other than 'password'"}
+                )
 
         email = validated_data.get('email')
         if email is not None and email != instance.email:
