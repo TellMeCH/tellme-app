@@ -610,3 +610,24 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(employee)
         return response.Response(serializer.data)
+
+    @extend_schema(
+        description="Send invitation email to an employee",
+        responses={
+            200: {'detail': 'Invitation email was sent.'},
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=True, methods=['post'])
+    def invite(self, request, pk=None):
+        """
+        Custom endpoint to re-send an invitation email to the employee. Only meant for organization admins.
+        """
+        employee = self.get_object()
+        if not employee:
+            return response.Response({'detail': 'Employee not found.'}, status=404)
+
+        employee.user.send_onboarding_email()
+        return response.Response({'detail': 'Invitation email was sent.'}, status=200)

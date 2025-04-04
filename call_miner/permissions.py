@@ -181,7 +181,7 @@ class EmployeePermission(permissions.BasePermission):
             return False
         if request.user.is_superuser or request.user.employee.is_organization_admin:
             return True
-        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE'] and view.action != 'list':
+        if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE'] and view.action not in ['list', 'invite']:
             return hasattr(request.user, 'employee')
         return False
 
