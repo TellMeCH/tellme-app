@@ -1,6 +1,6 @@
 from rest_framework import viewsets, decorators, response, status, mixins
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
-from django.db.models import F
+from django.db.models import F, Max
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
 from django.conf import settings
@@ -423,13 +423,21 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         Return topics that belong to the user's organization
         """
         if self.request.user.is_superuser:
-            return Topic.objects.all()
-        if self.request.user.employee.organization:
-            if self.action in ['list_active', 'all_summaries']:
-                return Topic.objects.filter(organization=self.request.user.employee.organization, is_active=True)
-            else:
-                return Topic.objects.filter(organization=self.request.user.employee.organization)
-        return Topic.objects.none()
+            qs = Topic.objects.all()
+        elif self.request.user.employee.organization:
+            qs = Topic.objects.filter(organization=self.request.user.employee.organization)
+        else:
+            qs = Topic.objects.none()
+
+        # Optimize DB Querying for all_summaries and summary_data
+        if self.action in ['all_summaries', 'summary_data']:
+            qs = qs.prefetch_related('conversations').annotate(latest_date=Max('conversations__date'))
+
+        # If the action is 'list_active', also do the is_active filter:
+        if self.action in ['list_active', 'all_summaries']:
+            qs = qs.filter(is_active=True)
+
+        return qs
 
     @extend_schema(
         description="List active topics of an organization",

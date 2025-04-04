@@ -43,8 +43,13 @@ class MetaSummaryAbstractModel(models.Model):
         if trace_data is None:
             trace_data = {}
 
-        relevant_summaries = [conv.summary for conv in self.conversations.order_by('-date')]
-        latest_date = self.conversations.aggregate(latest_date=models.Max('date'))['latest_date']
+        # Check if the object was fetched from a queryset that annotated 'latest_date',
+        latest_date = getattr(self, 'latest_date', None)
+        if latest_date is None:
+            latest_date = self.conversations.aggregate(latest_date=models.Max('date'))['latest_date']
+
+        conversations = sorted(self.conversations.all(), key=lambda c: c.date, reverse=True)
+        relevant_summaries = [conv.summary for conv in conversations]
         actual_call_count = len(relevant_summaries)
 
         # Compare the count with the Summary object's count field
