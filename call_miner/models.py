@@ -240,6 +240,8 @@ class ConversationTrendMixin:
         Summarizes conversation metrics for the last two months (count, average sentiment, average duration).
         If per_topic=True, results are grouped by each topic found in ``self.topics_scope``; otherwise,
         a single "general" grouping is returned.
+        Note that in per_topic grouping, topics with no associated conversations are omitted, and results are sorted by
+        descending last month count.
 
         Args:
             per_topic (bool): If True, group results by topic. Otherwise, return a single "general" entry.
@@ -324,6 +326,25 @@ class ConversationTrendMixin:
                             this_data['most_popular_topic'][item_month] = item['topic_name']
 
             overview_data[topic] = this_data
+
+        # Final Re-touches for relevant presentation
+        if per_topic:
+            # Remove any topic whose count is 0 for both the last and prior month
+            topics_to_remove = []
+            for topic, data in overview_data.items():
+                if data['count'][last_month] == 0 and data['count'][prior_month] == 0:
+                    topics_to_remove.append(topic)
+            for topic in topics_to_remove:
+                del overview_data[topic]
+
+            # Sort remaining topics by their last-month count in descending order
+            sorted_items = sorted(
+                overview_data.items(),
+                key=lambda dict_item: dict_item[1]['count'][last_month],
+                reverse=True
+            )
+            overview_data = dict(sorted_items)
+
         return overview_data
 
 
