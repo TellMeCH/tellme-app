@@ -211,8 +211,8 @@ def conversation(agent, customer, topic):
     """Create and return a conversation between the given agent and customer."""
     utc = zoneinfo.ZoneInfo("UTC")
     conv_date = (
-            datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0) -
-            timedelta(days=5)
+            datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            - timedelta(days=15)
     )
     conv = Conversation.objects.create(
         path='path/to/conversation',

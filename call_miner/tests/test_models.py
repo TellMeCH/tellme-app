@@ -1,5 +1,6 @@
 import pytest
 import pytz
+import zoneinfo
 from datetime import timedelta, datetime
 from django.db import IntegrityError
 
@@ -47,9 +48,19 @@ def another_topic_same_organization(organization):
 
 @pytest.fixture
 def another_conversation_same_organization(agent, customer, another_topic_same_organization):
+    utc = zoneinfo.ZoneInfo("UTC")
+    conv_date = (
+            datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            - timedelta(days=15)
+    )
+    weekday = conv_date.weekday()
+    if weekday > 2:
+        another_date = conv_date - timedelta(days=2)
+    else:
+        another_date = conv_date + timedelta(days=2)
     another_conv = Conversation.objects.create(
         path="Another Test Call",
-        date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=1),
+        date=another_date,
         duration=45,
         transcript="<agent>: How can I help you? <customer>: I have an issue.",
         sentiment=0.6,
