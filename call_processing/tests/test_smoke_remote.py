@@ -151,7 +151,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Firebase API Key
         self.firebase_api_key = settings.FIREBASE_WEB_API_KEY
 
-        # Test User Email
+        # Test User Email - For security
         self.agent_email = os.getenv('TEST_USER_EMAIL')
         if not self.agent_email:
             raise EnvironmentError("TEST_USER_EMAIL environment variable not set")
