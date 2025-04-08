@@ -309,5 +309,6 @@ jobs:
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
           CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.url }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         run: |
           poetry run pytest -v ./call_processing/tests/test_smoke_remote.py
