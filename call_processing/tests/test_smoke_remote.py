@@ -148,6 +148,11 @@ class TestSmokeTestCloudRunWithLogs:
         if not self.service_name:
             raise EnvironmentError("SERVICE_NAME environment variable not set")
 
+        # Test User Email
+        self.agent_email = os.getenv('TEST_USER_EMAIL')
+        if not self.agent_email:
+            raise EnvironmentError("TEST_USER_EMAIL environment variable not set")
+
         # Firebase API Key
         self.firebase_api_key = settings.FIREBASE_WEB_API_KEY
 
@@ -202,7 +207,6 @@ class TestSmokeTestCloudRunWithLogs:
         logger.info(f"Created Org API Key {apikey_json['name']}")
 
         # Create Agent via the Employees endpoint
-        self.agent_email = os.getenv('TEST_USER_EMAIL')
         agent_data = {
             "role": "AGENT",
             "organization": self.org_id,
