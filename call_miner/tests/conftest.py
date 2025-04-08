@@ -2,6 +2,7 @@ import pytz
 import pytest
 from unittest.mock import patch, Mock, MagicMock
 import uuid
+import zoneinfo
 from rest_framework.test import APIClient
 from datetime import timedelta, datetime
 from call_miner.models import (
@@ -208,9 +209,14 @@ def another_organization_customer(another_organization):
 @pytest.fixture
 def conversation(agent, customer, topic):
     """Create and return a conversation between the given agent and customer."""
+    utc = zoneinfo.ZoneInfo("UTC")
+    conv_date = (
+            datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0) -
+            timedelta(days=5)
+    )
     conv = Conversation.objects.create(
         path='path/to/conversation',
-        date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC),
+        date=conv_date,
         duration=123.45,
         title='Test Conversation',
         summary='Test summary',
