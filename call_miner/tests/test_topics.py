@@ -1,7 +1,9 @@
+import zoneinfo
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Topic
+from datetime import timedelta, datetime
+from call_miner.models import Topic, Conversation
 
 TREND_ACTIONS = ['conversations', 'trend']
 
@@ -739,8 +741,8 @@ class TestTopicSummary:
         
 
 @pytest.mark.django_db
-class TestTopicListActive:
-    """Tests for the topic-list-active action"""
+class TestTopicListActiveRecent:
+    """Tests for the topic-list-active and topic-list-recent actions"""
 
     def test_superuser_can_list_active_topics(self, client, superuser, topic, another_organization_topic):
         """
@@ -752,12 +754,38 @@ class TestTopicListActive:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 2
 
+    def test_superuser_can_list_recent_topics(
+            self, client, superuser, topic, conversation, another_organization_topic, another_organization_conversation
+    ):
+        """
+        Test that a superuser can list all recent topics.
+        """
+        client.force_authenticate(user=superuser)
+        url = reverse('topic-list-recent')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 2
+
     def test_organization_analyst_can_list_active_topics(self, client, analyst_user, topic, another_organization_topic):
         """
         Test that an analyst can list only active topics in their organization.
         """
         client.force_authenticate(user=analyst_user)
         url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_organization_analyst_can_list_recent_topics(
+            self, client, analyst_user, topic, conversation, another_organization_topic,
+            another_organization_conversation
+    ):
+        """
+        Test that an analyst can list only recent topics in their organization.
+        """
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-list-recent')
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
@@ -775,6 +803,20 @@ class TestTopicListActive:
         assert len(response.data['results']) == 1
         assert response.data['results'][0]['name'] == topic.name
 
+    def test_agent_in_same_organization_can_list_recent_topics(
+            self, client, agent_user, topic, conversation, another_organization_topic,
+            another_organization_conversation
+    ):
+        """
+        Test that an agent can list only recent topics in their organization.
+        """
+        client.force_authenticate(user=agent_user)
+        url = reverse('topic-list-recent')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
     def test_analyst_in_other_organization_can_list_active_topics(self, client, another_organization_analyst_user,
                                                                   topic, another_organization_topic):
         """
@@ -782,6 +824,20 @@ class TestTopicListActive:
         """
         client.force_authenticate(user=another_organization_analyst_user)
         url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == another_organization_topic.name
+
+    def test_analyst_in_other_organization_can_list_recent_topics(
+            self, client, another_organization_analyst_user, topic, conversation, another_organization_topic,
+            another_organization_conversation
+    ):
+        """
+        Test that an analyst can list only recent topics in their own organization.
+        """
+        client.force_authenticate(user=another_organization_analyst_user)
+        url = reverse('topic-list-recent')
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
@@ -799,11 +855,33 @@ class TestTopicListActive:
         assert len(response.data['results']) == 1
         assert response.data['results'][0]['name'] == another_organization_topic.name
 
+    def test_agent_in_other_organization_can_list_recent_topics(
+            self, client, another_organization_agent_user, topic, conversation, another_organization_topic,
+            another_organization_conversation
+    ):
+        """
+        Test that an agent can list only recent topics in their own organization.
+        """
+        client.force_authenticate(user=another_organization_agent_user)
+        url = reverse('topic-list-recent')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == another_organization_topic.name
+
     def test_unauthenticated_user_cannot_list_active_topics(self, client, topic, another_organization_topic):
         """
         Test that an unauthenticated user cannot list active topics.
         """
         url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_unauthenticated_user_cannot_list_recent_topics(self, client, topic, conversation):
+        """
+        Test that an unauthenticated user cannot list recent topics.
+        """
+        url = reverse('topic-list-recent')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -820,6 +898,62 @@ class TestTopicListActive:
         )
         client.force_authenticate(user=analyst_user)
         url = reverse('topic-list-active')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_list_recent_topics_excludes_old_topics(
+            self, client, analyst_user, topic, conversation, organization, agent, customer
+    ):
+        """
+        Test that very old topics are excluded from the recent topics list.
+        """
+        # Create an inactive topic
+        old_topic = Topic.objects.create(
+            name='Old Topic',
+            description='Should not appear in recent list',
+            organization=organization,
+            is_active=False
+        )
+        utc = zoneinfo.ZoneInfo("UTC")
+        conv_date = datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(days=400)
+        old_conversation = Conversation.objects.create(
+            path='path/to/another_conversation',
+            date=conv_date,
+            duration=123.45,
+            title='Another Conversation',
+            summary='Another summary',
+            transcript='Another test transcript',
+            sentiment=3.5,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50
+        )
+        old_conversation.topics.add(old_topic)
+
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-list-recent')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) == 1
+        assert response.data['results'][0]['name'] == topic.name
+
+    def test_list_recent_topics_excludes_unused_topics(self, client, analyst_user, topic, conversation, organization):
+        """
+        Test that unused topics are excluded from the recent topics list.
+        """
+        # Create an inactive topic
+        Topic.objects.create(
+            name='Old Topic',
+            description='Should not appear in recent list',
+            organization=organization,
+            is_active=False
+        )
+
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-list-recent')
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
