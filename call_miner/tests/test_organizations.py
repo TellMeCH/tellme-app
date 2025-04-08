@@ -797,12 +797,17 @@ class TestOrganizationActions:
         # Create topics
         topic1 = Topic.objects.create(name='Topic 1', description='Description 1', organization=organization)
         topic2 = Topic.objects.create(name='Topic 2', description='Description 2', organization=organization)
+        topic3 = Topic.objects.create(name='Topic 3', description='Unused', organization=organization)
         # Create conversations with topics
         utc = zoneinfo.ZoneInfo("UTC")
         for i in range(5):
+            conv_date = (
+                    datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0) -
+                    timedelta(days=i + 1)
+            )
             conv = Conversation.objects.create(
                 path=f'path/to/conversation_{i}',
-                date=datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i),
+                date=conv_date,
                 duration=100 + i,
                 title=f'Test title {i}',
                 summary=f'Test summary {i}',
@@ -813,7 +818,7 @@ class TestOrganizationActions:
                 input_tokens=100 + i,
                 output_tokens=50 + i
             )
-            if i % 2 == 0:
+            if i > 2:  # Ensure topic2 appears more than topic1
                 conv.topics.add(topic1)
             else:
                 conv.topics.add(topic2)
@@ -822,11 +827,13 @@ class TestOrganizationActions:
         response = client.get(url, {'per_topic': True})
         assert response.status_code == status.HTTP_200_OK
         data = response.json().get(str(organization.id))
-        assert len(data) == 2  # One entry per topic
+        assert len(data) == 2  # One entry per topic, topic3 omitted
+        assert list(data.keys())[0] == topic2.name  # Ensure ordering by descending popularity
         for topic_name, entry in data.items():
             for kpi in ['avg_sentiment', 'avg_duration', 'count']:
                 assert kpi in entry
-            assert topic_name in ['Topic 1', 'Topic 2']
+            assert topic_name in [topic1.name, topic2.name]
+            assert topic_name != topic3.name
 
     def test_conversations_action_no_data(self, client, analyst_user, organization):
         """Test that the conversations action can return an empty result when no conversations are present."""
