@@ -1,4 +1,3 @@
-import pytz
 import pytest
 from unittest.mock import patch, Mock, MagicMock
 import uuid
@@ -242,9 +241,14 @@ def conversation(agent, customer, topic):
 def another_organization_conversation(another_organization_agent, another_organization_customer,
                                       another_organization_topic):
     """Create and return another conversation between the given agent and customer."""
+    utc = zoneinfo.ZoneInfo("UTC")
+    conv_date = (
+            datetime.now(tz=utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            - timedelta(days=15)
+    )
     conv = Conversation.objects.create(
         path='path/to/another_conversation',
-        date=datetime(2024, 1, 1, 0, 0, 0, tzinfo=pytz.UTC) + timedelta(days=1),
+        date=conv_date,
         duration=123.45,
         title='Another Conversation',
         summary='Another summary',
