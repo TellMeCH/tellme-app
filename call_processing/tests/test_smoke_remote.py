@@ -148,13 +148,13 @@ class TestSmokeTestCloudRunWithLogs:
         if not self.service_name:
             raise EnvironmentError("SERVICE_NAME environment variable not set")
 
+        # Firebase API Key
+        self.firebase_api_key = settings.FIREBASE_WEB_API_KEY
+
         # Test User Email
         self.agent_email = os.getenv('TEST_USER_EMAIL')
         if not self.agent_email:
             raise EnvironmentError("TEST_USER_EMAIL environment variable not set")
-
-        # Firebase API Key
-        self.firebase_api_key = settings.FIREBASE_WEB_API_KEY
 
         # Authorization header for setup and teardown
         superuser_id_token = self.user_id_token(f'app.admin.{settings.TELLME_ENV}@tell-me.ch')
