@@ -309,15 +309,26 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
     conversation_count = serializers.SerializerMethodField(
         help_text='Count of conversations associated to the organization'
     )
+    employee_count = serializers.SerializerMethodField(
+        help_text='Count of employees associated to the organization'
+    )
 
     class Meta:
         model = Organization
-        fields = ['url', 'name', 'conversation_count', 'max_user_count', 'created', 'updated', 'transcription_method']
+        fields = [
+            'url', 'name', 'conversation_count', 'max_user_count', 'created', 'updated', 'transcription_method',
+            'employee_count'
+        ]
 
     @staticmethod
     @extend_schema_field({'type': 'integer'})
     def get_conversation_count(obj):
         return obj.conversations_scope.count()
+
+    @staticmethod
+    @extend_schema_field({'type': 'integer'})
+    def get_employee_count(obj):
+        return obj.employees.count()
 
 
 class OrganizationAPIKeyListSerializer(serializers.ModelSerializer):
