@@ -436,7 +436,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
             qs = qs.prefetch_related('conversations').annotate(latest_date=Max('conversations__date'))
 
         # If the action is 'list_active', also do the is_active filter:
-        if self.action in ['list_active', 'all_summaries']:
+        if self.action == 'list_active':
             qs = qs.filter(is_active=True)
 
         return qs
