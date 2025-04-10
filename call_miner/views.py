@@ -604,6 +604,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [EmployeePermission]
     serializer_class = EmployeeModifySerializer
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['-created']
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'me']:
