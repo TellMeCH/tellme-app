@@ -116,17 +116,35 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',
         'patternProperties': {
-            r'^\d+$': {  # Numeric keys
+            r'^\d+$': {
                 'type': 'object',
                 'properties': {
                     'summary': {
-                        'type': 'string',
-                        'description': 'Summary of all conversation summaries of the object.'
+                        'type': ['object', 'null'],
+                        'description': 'Detailed summary data for the conversation topic.',
+                        'properties': {
+                            'Reasons for Calling': {'type': 'string'},
+                            'Stages of the Customer Journey': {'type': 'string'},
+                            'Call Resolution Rates': {'type': 'string'},
+                            'Churn Potential': {'type': 'string'},
+                            'Causes for Dissatisfaction': {'type': 'string'},
+                            'Causes for Engagement': {'type': 'string'},
+                            'Suggested Actions': {'type': 'string'},
+                        },
+                        'required': [
+                            'Reasons for Calling',
+                            'Stages of the Customer Journey',
+                            'Call Resolution Rates',
+                            'Churn Potential',
+                            'Causes for Dissatisfaction',
+                            'Causes for Engagement',
+                            'Suggested Actions'
+                        ]
                     },
                     'summary_date': {
                         'type': 'string',
                         'format': 'date-time',
-                        'description': 'Date of this summarization.'
+                        'description': 'Date and time when this summary was generated.'
                     },
                     'summary_call_count': {
                         'type': 'integer',
@@ -134,31 +152,33 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
                     },
                     'name': {
                         'type': 'string',
-                        'description': 'Name of the object'
+                        'description': 'Name of the conversation topic.'
                     },
                 },
                 'required': ['summary', 'summary_date', 'summary_call_count', 'name'],
-                'example': {
-                    'summary': 'The recurring issues in these conversations indicate systemic challenges bla bla.',
-                    'summary_date': '2024-12-27T00:00:00Z',
-                    'summary_call_count': 32,
-                    'name': 'Systemic Challenges'
-                }
             }
         },
         'additionalProperties': False,
         'example': {
             "1": {
-                "summary": "The recurring issues in these conversations indicate systemic challenges bla bla.",
-                "summary_date": "2024-12-27T00:00:00Z",
-                "summary_call_count": 32,
-                "name": "Systemic Challenges"
+                "summary": {
+                    "Reasons for Calling": "Customers frequently contact the call center regarding delayed packages and order status updates.",
+                    "Stages of the Customer Journey": "These callers are predominantly found in the fulfillment stage of the customer journey, particularly when awaiting delivery of their orders.",
+                    "Call Resolution Rates": "Most issues are resolved during the initial call, especially when agents provide updates or arrange expedited shipping.",
+                    "Churn Potential": "Customers are more likely to strengthen their relationship with the company, as agents are responsive and proactive in addressing delivery issues.",
+                    "Causes for Dissatisfaction": "The primary cause of dissatisfaction stems from delays in package delivery, which can lead to urgency and frustration for customers.",
+                    "Causes for Engagement": "Customers express engagement and loyalty when agents provide timely updates and solutions, such as expedited shipping.",
+                    "Suggested Actions": "The company could improve customer satisfaction by enhancing communication about delivery timelines and proactively notifying customers of potential delays."
+                },
+                "summary_date": "2025-03-28T16:23:14.593689Z",
+                "summary_call_count": 6,
+                "name": "Order Status"
             },
-            "2": {
-                "summary": "The recurring issues appear to involve a high volume of customer inquiries, bla bla.",
-                "summary_date": "2024-12-21T00:00:00Z",
-                "summary_call_count": 36,
-                "name": "Call Center Workload"
+            "9": {
+                "summary": None,
+                "summary_date": "2025-04-10T16:23:14.210357Z",
+                "summary_call_count": 0,
+                "name": "Product Quality"
             }
         }
     }
