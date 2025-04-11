@@ -148,6 +148,21 @@ class TestTopicRetrieve:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN or response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    def test_topic_conversation_stats(self, client, organization_admin_user, conversation, agent, customer, topic):
+        """
+        Test that the conversation stats for the topic are as expected
+        """
+        client.force_authenticate(user=organization_admin_user)
+        url = reverse('topic-detail', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert "conversation_count" in response.data
+        assert "first_conversation_date" in response.data
+        assert "last_conversation_date" in response.data
+        assert response.data.get("conversation_count") == 1
+        assert response.data.get("first_conversation_date") == conversation.date.isoformat()[:-6] + 'Z'
+        assert response.data.get("last_conversation_date") == conversation.date.isoformat()[:-6] + 'Z'
+
 
 @pytest.mark.django_db
 class TestTopicCreate:
