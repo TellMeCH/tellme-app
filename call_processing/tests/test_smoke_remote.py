@@ -26,7 +26,6 @@ class TestSmokeTestCloudRunWithLogs:
     """
     org_name = "TestOrg-Suite"
     api_key_name = "TestAPIKey-Suite"
-    agent_email = "testagent-smoke@example.com"
     customer_id = "smoke_customer_123"
     uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
     timestamp_pattern = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}\+00:00'
@@ -151,6 +150,11 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Firebase API Key
         self.firebase_api_key = settings.FIREBASE_WEB_API_KEY
+
+        # Test User Email - For security
+        self.agent_email = os.getenv('TEST_USER_EMAIL')
+        if not self.agent_email:
+            raise EnvironmentError("TEST_USER_EMAIL environment variable not set")
 
         # Authorization header for setup and teardown
         superuser_id_token = self.user_id_token(f'app.admin.{settings.TELLME_ENV}@tell-me.ch')

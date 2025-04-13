@@ -731,11 +731,11 @@ class Command(BaseCommand):
 
         try:
             self.stdout.write('Creating 50 Sample Conversations for ACME Org Customers')
-            base_date = datetime(2024, 1, 1)
+            base_date = datetime.now() - timedelta(days=90)
             for i, data in enumerate(CONVERSATION_DATA):
                 agent = random.choice(agents)
                 customer = random.choice(customers)
-                naive_date = base_date + timedelta(days=random.randint(0, 364))  # Naive datetime
+                naive_date = base_date + timedelta(days=random.randint(0, 90))  # Naive datetime
                 date = timezone.make_aware(naive_date)  # Convert to aware datetime
                 sentiment = random.uniform(0, 5)  # Sentiment between 0 and 5
                 duration = random.randint(30, 1800)  # Random duration in seconds

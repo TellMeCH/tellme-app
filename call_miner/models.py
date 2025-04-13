@@ -8,13 +8,11 @@ import threading
 from django.utils import timezone
 from django.db import models
 from django.conf import settings
-from django.dispatch import receiver
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from firebase_admin import auth
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
 import call_miner.utils.email_utils as email
-from django.db.models.signals import post_save, post_delete
 from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES
 
 
@@ -101,34 +99,6 @@ class ConversationStatsAbstractModel(models.Model):
         self.first_conversation_date = stats['first_date']
         self.last_conversation_date = stats['last_date']
         self.save()
-
-    @staticmethod
-    def register_signals(conversation_model, related_field):
-        """
-        Registers signals to automatically update the conversation count for different models.
-
-        Args:
-            conversation_model: The model that has the conversations (e.g., Conversation).
-            related_field: The name of the field on the conversation_model that links to the related object
-                           (e.g., 'customer', 'agent', 'organization').
-        """
-        @receiver(post_save, sender=conversation_model)
-        def update_stats_on_save(sender, instance, **kwargs):
-            if related_field == 'topics':
-                for topic in instance.topics.all():
-                    topic.update_conversation_stats()
-            else:
-                related_object = getattr(instance, related_field)
-                related_object.update_conversation_stats()
-
-        @receiver(post_delete, sender=conversation_model)
-        def update_stats_on_delete(sender, instance, **kwargs):
-            if related_field == 'topics':
-                for topic in instance.topics.all():
-                    topic.update_conversation_stats()
-            else:
-                related_object = getattr(instance, related_field)
-                related_object.update_conversation_stats()
 
 
 class ConversationTrendMixin:
@@ -240,6 +210,8 @@ class ConversationTrendMixin:
         Summarizes conversation metrics for the last two months (count, average sentiment, average duration).
         If per_topic=True, results are grouped by each topic found in ``self.topics_scope``; otherwise,
         a single "general" grouping is returned.
+        Note that in per_topic grouping, topics with no associated conversations are omitted, and results are sorted by
+        descending last month count.
 
         Args:
             per_topic (bool): If True, group results by topic. Otherwise, return a single "general" entry.
@@ -324,6 +296,25 @@ class ConversationTrendMixin:
                             this_data['most_popular_topic'][item_month] = item['topic_name']
 
             overview_data[topic] = this_data
+
+        # Final Re-touches for relevant presentation
+        if per_topic:
+            # Remove any topic whose count is 0 for both the last and prior month
+            topics_to_remove = []
+            for topic, data in overview_data.items():
+                if data['count'][last_month] == 0 and data['count'][prior_month] == 0:
+                    topics_to_remove.append(topic)
+            for topic in topics_to_remove:
+                del overview_data[topic]
+
+            # Sort remaining topics by their last-month count in descending order
+            sorted_items = sorted(
+                overview_data.items(),
+                key=lambda dict_item: dict_item[1]['count'][last_month],
+                reverse=True
+            )
+            overview_data = dict(sorted_items)
+
         return overview_data
 
 
@@ -717,21 +708,3 @@ class Conversation(models.Model):
                 'class': 'agent-message' if speaker == '<agent>:' else 'customer-message'
             })
         return processed_messages
-
-
-@receiver(models.signals.m2m_changed, sender=Conversation.topics.through)
-def validate_topics_organization(sender, instance, action, **kwargs):
-    """
-    This function checks that all associated topics belong to the same organization as the conversation's agent
-    whenever the topics are added, updated, or cleared.
-    """
-    # Check if topics were added or changed
-    if action == 'post_add' or action == 'post_clear' or action == 'post_remove':
-        conversation_organization = instance.agent.organization
-
-        # Validate that all topics belong to the same organization as the customer and agent
-        for topic in instance.topics.all():
-            if topic.organization != conversation_organization:
-                raise ValueError(
-                    f"Topic '{topic.name}' is not associated with the same organization as the customer and agent."
-                )

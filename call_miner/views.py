@@ -1,6 +1,8 @@
+import zoneinfo
 from rest_framework import viewsets, decorators, response, status, mixins
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
 from django.db.models import F, Max
+from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
 from django.conf import settings
@@ -408,7 +410,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
 
     def get_serializer_class(self):
-        if self.action in ['list', 'list_active', 'retrieve']:
+        if self.action in ['list', 'list_active', 'retrieve', 'list_recent']:
             return TopicListSerializer
         elif self.action in ['summary_data', 'all_summaries']:
             return MetaSummarySerializer
@@ -430,11 +432,11 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
             qs = Topic.objects.none()
 
         # Optimize DB Querying for all_summaries and summary_data
-        if self.action in ['all_summaries', 'summary_data']:
+        if self.action in ['all_summaries', 'summary_data', 'list_recent']:
             qs = qs.prefetch_related('conversations').annotate(latest_date=Max('conversations__date'))
 
         # If the action is 'list_active', also do the is_active filter:
-        if self.action in ['list_active', 'all_summaries']:
+        if self.action == 'list_active':
             qs = qs.filter(is_active=True)
 
         return qs
@@ -449,6 +451,28 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         Custom action to list only active topics
         """
         return self.list(request)
+
+    @extend_schema(
+        description="List topics of an organization mentioned in the past year",
+        responses=LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA
+    )
+    @decorators.action(detail=False, methods=['get'], url_path='list_recent')
+    def list_recent(self, request):
+        """
+        Custom action to list only topics mentioned in the past year
+        """
+        qs = self.get_queryset()
+        one_year_ago = datetime.now(tz=zoneinfo.ZoneInfo("UTC")) - timedelta(days=365)
+        recent_qs = qs.filter(latest_date__gte=one_year_ago)  # Excludes topics with latest_date = None
+
+        # Paginate and return
+        page = self.paginate_queryset(recent_qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(recent_qs, many=True)
+        return response.Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
         responses={
@@ -580,6 +604,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [EmployeePermission]
     serializer_class = EmployeeModifySerializer
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['-created']
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'me']:
