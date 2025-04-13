@@ -1,4 +1,4 @@
-from django.db.models.signals import post_save, post_delete, m2m_changed
+from django.db.models.signals import post_save, pre_delete, post_delete, m2m_changed
 from django.dispatch import receiver
 from call_miner.models import Conversation
 
@@ -25,18 +25,22 @@ def conversation_post_save_update_stats(sender, instance, created, **kwargs):
         topic.update_conversation_stats()
 
 
+@receiver(pre_delete, sender=Conversation)
+def conversation_pre_delete_store_topics(sender, instance, **kwargs):
+    # Stash the topics in an attribute, so we can access them in post_delete
+    instance._topics_before_deletion = list(instance.topics.all())
+
+
 @receiver(post_delete, sender=Conversation)
 def conversation_post_delete_update_stats(sender, instance, **kwargs):
-    """
-    Similar logic for when a Conversation is deleted.
-    """
     if instance.agent:
         instance.agent.update_conversation_stats()
 
     if instance.customer:
         instance.customer.update_conversation_stats()
 
-    for topic in instance.topics.all():
+    # Now we can't use instance.topics.all(), but we have instance._topics_before_deletion
+    for topic in getattr(instance, '_topics_before_deletion', []):
         topic.update_conversation_stats()
 
 
