@@ -15,17 +15,6 @@ from call_miner.models import (
 )
 
 
-@pytest.fixture(autouse=True)
-def register_signals():
-    """
-    Fixture to ensure signals are registered during tests.
-    """
-    from call_miner.models import Topic, Agent, Customer, Conversation
-    Topic.register_signals(Conversation, related_field='topics')
-    Agent.register_signals(Conversation, related_field='agent')
-    Customer.register_signals(Conversation, related_field='customer')
-
-
 @pytest.fixture
 def analyst(organization, user):
     return Analyst.objects.create(organization=organization, user=user)
