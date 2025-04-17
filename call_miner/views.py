@@ -605,7 +605,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     permission_classes = [EmployeePermission]
     serializer_class = EmployeeModifySerializer
     pagination_class = CustomListViewPaginator
-    cursor_ordering = ['-created']
+    cursor_ordering = ['-role', 'user__last_name', 'id']
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'me']:
@@ -619,9 +619,19 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         Return employees that belong to the user's organization
         """
         if self.request.user.is_superuser:
-            return Employee.objects.all()
+            return (
+                Employee
+                .objects
+                .all()
+                .select_related('user')
+            )
         if self.request.user.employee.organization:
-            return Employee.objects.filter(organization=self.request.user.employee.organization)
+            return (
+                Employee
+                .objects
+                .filter(organization=self.request.user.employee.organization)
+                .select_related('user')
+            )
         return Employee.objects.none()
 
     @extend_schema(
