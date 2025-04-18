@@ -533,10 +533,12 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         raise MethodNotAllowed(self.action)
 
     def get_queryset(self):
+        qs = Agent.objects.select_related('user', 'manager', 'manager__user')
+
         if self.request.user.is_superuser:
-            return Agent.objects.all()
+            return qs
         if self.request.user.employee.organization:
-            return Agent.objects.filter(organization=self.request.user.employee.organization)
+            return qs.filter(organization=self.request.user.employee.organization)
         return Agent.objects.none()
 
     @extend_schema(
