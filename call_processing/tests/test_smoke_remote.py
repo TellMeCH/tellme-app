@@ -65,11 +65,17 @@ class TestSmokeTestCloudRunWithLogs:
         possible.
         """
         # Detect agents to be deleted. For each of them, delete all conversations
-        agent_response = requests.get(
-            f"{self.cloud_run_host}/api/v1/agents/",
-            headers=self.superuser_headers
-        )
-        agent_list = agent_response.json()["results"]
+        next_url = f"{self.cloud_run_host}/api/v1/agents/"
+        agent_list = []
+        while next_url:
+            agent_response = requests.get(
+                next_url,
+                headers=self.superuser_headers
+            )
+            agent_response = agent_response.json()
+            agent_list.extend(agent_response["results"])
+            next_url = agent_response.get('next')
+
         for agent in agent_list:
             if agent['email'] == self.agent_email:
                 # Iterate over all related conversations and delete them
@@ -163,12 +169,19 @@ class TestSmokeTestCloudRunWithLogs:
         }
 
         # Before creating an organization, check for existing organizations with the same name
-        org_list_resp = requests.get(
-            f"{self.cloud_run_host}/api/v1/organizations/",
-            headers=self.superuser_headers
-        )
-        org_list_resp.raise_for_status()
-        for org in org_list_resp.json().get("results", []):
+        next_url = f"{self.cloud_run_host}/api/v1/organizations/"
+        org_list = []
+        while next_url:
+            org_list_resp = requests.get(
+                next_url,
+                headers=self.superuser_headers
+            )
+            org_list_resp.raise_for_status()
+            org_list_resp = org_list_resp.json()
+            org_list.extend(org_list_resp.get('results', []))
+            next_url = org_list_resp.get('next')
+
+        for org in org_list:
             if org["name"] == self.org_name:
                 logger.info(f"Found existing organization with URL {org["url"]}. Deleting it.")
                 self.delete_surrogate_data(org["url"])
