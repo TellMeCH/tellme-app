@@ -47,6 +47,22 @@ def retrieve_organization_transcription_method(organization_id: int):
     return org.transcription_method
 
 
+def obtain_active_topics(organization_id: int):
+    """
+    Query the call_miner data model to extract all active topics from the organization.
+
+    Args:
+        organization_id (int): ID of the organization to query
+
+    Returns:
+        str: A string enumerating the names and descriptions of all active topics
+    """
+    active_topics = ''
+    for topic in Topic.objects.filter(organization=organization_id, is_active=True):
+        active_topics += f'{topic.name}: {topic.description}, '
+    return active_topics
+
+
 def create_conversation(
     customer_id: str,
     organization_id: int,
