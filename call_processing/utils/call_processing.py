@@ -33,22 +33,35 @@ GROQ_COSTS = {
 
 class CallProcessingPipeline:
     """
-    A processing pipeline in charge of the transcription, diarization, and mining of call recording data.
+    Orchestrates the end-to-end processing of a call recording from audio ingestion all the way to an enriched, 
+    redacted, speaker-labeled transcript with analytics.
 
-    Steps:
-    1. Splits the recording into CHUNK_SIZE minute segments.
-    2. Transcribes each chunk with Deepgram. If this fails, falls back to Groq
-    3. Ensures consistency in detected language across chunks.
-    4. Logs the entire process in Langfuse for observability.
+    High-level workflow:
+    1. Chunking: split recording into `CHUNK_SIZE`-minute blocks.  
+    2. Transcription: Deepgram (primary) ➔ Groq (fallback).  
+    3. Language check: ensure all chunks share the same detected language.  
+    4. Optional diarization: Gemini if the model did not diarize natively.  
+    5. Redaction: Google Cloud DLP removes PII.  
+    6. Enrichment: OpenAI or Gemini adds summary, topics, sentiment, …  
+    7. Post-processing: replace original speaker labels with `<agent>` /
+       `<customer>` tokens.  
+    8. Observability: every network call is traced with Langfuse.
 
     Attributes:
-        CHUNK_SIZE (float): Duration of each audio chunk in minutes.
-        TRANSCRIPTION_MODEL_NAME_DEEPGRAM (str): The name of the transcription model to use when using the Deepgram API.
-        TRANSCRIPTION_MODEL_NAME_GROQ (str): The name of the transcription model to use when using the Groq API.
-        API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with any API
-        API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with any API
-        API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with any API
-        DLP_ENTITY_TYPES (list of str): List of entities to detect as sensitive information and redact
+    CHUNK_SIZE : float
+        Length of each audio chunk, in minutes.
+    TRANSCRIPTION_MODEL_NAME_DEEPGRAM : str
+        Model used when transcribing with Deepgram.
+    TRANSCRIPTION_MODEL_NAME_GROQ : str
+        Model used when transcribing with Groq.
+    API_MAX_RETRIES : int
+        Max retry attempts for any network call in the pipeline.
+    API_BASE_DELAY : float
+        Initial back-off delay (seconds) for retry logic.
+    API_BACKOFF_FACTOR : int
+        Multiplier for exponential back-off.
+    DLP_ENTITY_TYPES : list[str]
+        Sensitive entities that should be redacted via DLP.
     """
     CHUNK_SIZE: float = 5
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
@@ -150,6 +163,7 @@ class CallProcessingPipeline:
             agent_id (int): Unique identifier for the agent handling the call.
             timestamp (datetime): The timestamp indicating when the call took place.
             transcription_method (str): Indicates what transcription method to use
+            enrichment_method (str): Indicates what method to use for call summarization and topic modelling
 
         Returns:
             dict: A dictionary containing the complete enriched result, including:
@@ -483,6 +497,12 @@ class CallProcessingPipeline:
 
     @staticmethod
     def vertexai_retry_logic(error):
+        """
+        Centralised predicate for tenacity retries on Vertex AI calls.
+
+        Returns ``True`` for HTTP 429s raised by either *httpx* or the
+        `google-genai` SDK, allowing the decorator to back off and retry.
+        """
         case_1 = isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 429
         case_2 = isinstance(error, errors.ClientError) and error.code == 429
         return case_1 or case_2
@@ -572,7 +592,18 @@ class CallProcessingPipeline:
 
     @observe
     def enrich_recording(self, transcript: str, enrichment_method: str, organization_id: int):
+        """
+        Produce structured analytics for the call (`summary`, `topics`, …).
 
+        A schema-constrained JSON response is requested from either OpenAI
+        (GPT-4o mini) or Gemini, with automatic fail-over to the other provider
+        on retriable errors.
+
+        Returns:
+            enrichment: dict
+            input_tokens: int
+            output_tokens: int
+        """
         # Retrieve relevant topic data
         topic_data = db_handler.obtain_active_topics(organization_id)
 
@@ -628,7 +659,12 @@ class CallProcessingPipeline:
         retry=retry_if_exception_type(httpx.HTTPError)
     )
     def enrich_recording_with_openai(self, transcript: str, system_message: str, config: dict) -> (dict, int, int):
+        """
+        Internal helper that calls the OpenAI Chat Completions endpoint in JSON schema mode.
 
+        The function is wrapped in exponential back-off that retries on network errors and rate limits
+        (`httpx.HTTPError`).
+        """
         langfuse_context.update_current_observation(
             name="enrichment_openai",
             prompt=self.enrichment_prompt
@@ -654,6 +690,12 @@ class CallProcessingPipeline:
         retry=retry_if_exception(vertexai_retry_logic)
     )
     def enrich_recording_with_vertexai(self, transcript: str, system_message: str, config: dict) -> (dict, int, int):
+        """
+        Same enrichment as above but executed on Gemini (Vertex AI).
+
+        The call is made in *structured output* mode by passing both `response_mime_type="application/json"` and the
+        OpenAPI-compatible `response_schema` to `GenerateContentConfig`.
+        """
         generation = self.vertexai.models.generate_content(
             model=config['model'],
             contents=f"Here is the call transcript:\n{transcript}",
