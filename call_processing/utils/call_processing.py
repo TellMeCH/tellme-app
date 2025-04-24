@@ -595,9 +595,8 @@ class CallProcessingPipeline:
         """
         Produce structured analytics for the call (`summary`, `topics`, …).
 
-        A schema-constrained JSON response is requested from either OpenAI
-        (GPT-4o mini) or Gemini, with automatic fail-over to the other provider
-        on retriable errors.
+        A schema-constrained JSON response is requested from either OpenAI (GPT-4o mini) or Gemini, with automatic
+        fail-over to the other provider on retriable errors.
 
         Returns:
             enrichment: dict
