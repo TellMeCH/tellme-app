@@ -15,11 +15,10 @@ from langfuse import openai, Langfuse
 from langfuse.decorators import observe, langfuse_context
 from deepgram.clients.common.v1.errors import DeepgramApiError
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
-from call_miner.models import Topic
 from call_processing.utils.llm_configs import (
     TRANSCRIPTION_METHOD_CHOICES, DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
 )
-from call_processing.utils import gcs_utils
+from call_processing.utils import gcs_utils, db_handler
 
 # Transcription costs in dollars per second
 DEEPGRAM_COSTS = {
@@ -34,22 +33,35 @@ GROQ_COSTS = {
 
 class CallProcessingPipeline:
     """
-    A processing pipeline in charge of the transcription, diarization, and mining of call recording data.
+    Orchestrates the end-to-end processing of a call recording from audio ingestion all the way to an enriched, 
+    redacted, speaker-labeled transcript with analytics.
 
-    Steps:
-    1. Splits the recording into CHUNK_SIZE minute segments.
-    2. Transcribes each chunk with Deepgram. If this fails, falls back to Groq
-    3. Ensures consistency in detected language across chunks.
-    4. Logs the entire process in Langfuse for observability.
+    High-level workflow:
+    1. Chunking: split recording into `CHUNK_SIZE`-minute blocks.  
+    2. Transcription: Deepgram (primary) ➔ Groq (fallback).  
+    3. Language check: ensure all chunks share the same detected language.  
+    4. Optional diarization: Gemini if the model did not diarize natively.  
+    5. Redaction: Google Cloud DLP removes PII.  
+    6. Enrichment: OpenAI or Gemini adds summary, topics, sentiment, …  
+    7. Post-processing: replace original speaker labels with `<agent>` /
+       `<customer>` tokens.  
+    8. Observability: every network call is traced with Langfuse.
 
     Attributes:
-        CHUNK_SIZE (float): Duration of each audio chunk in minutes.
-        TRANSCRIPTION_MODEL_NAME_DEEPGRAM (str): The name of the transcription model to use when using the Deepgram API.
-        TRANSCRIPTION_MODEL_NAME_GROQ (str): The name of the transcription model to use when using the Groq API.
-        API_MAX_RETRIES (int): Maximum retries per recording chunk when dealing with any API
-        API_BASE_DELAY (float): Base waiting time per recording chunk when dealing with any API
-        API_BACKOFF_FACTOR (int): Back-off factor per recording chunk when dealing with any API
-        DLP_ENTITY_TYPES (list of str): List of entities to detect as sensitive information and redact
+    CHUNK_SIZE : float
+        Length of each audio chunk, in minutes.
+    TRANSCRIPTION_MODEL_NAME_DEEPGRAM : str
+        Model used when transcribing with Deepgram.
+    TRANSCRIPTION_MODEL_NAME_GROQ : str
+        Model used when transcribing with Groq.
+    API_MAX_RETRIES : int
+        Max retry attempts for any network call in the pipeline.
+    API_BASE_DELAY : float
+        Initial back-off delay (seconds) for retry logic.
+    API_BACKOFF_FACTOR : int
+        Multiplier for exponential back-off.
+    DLP_ENTITY_TYPES : list[str]
+        Sensitive entities that should be redacted via DLP.
     """
     CHUNK_SIZE: float = 5
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
@@ -128,7 +140,8 @@ class CallProcessingPipeline:
             customer_id: str,
             agent_id: int,
             timestamp: datetime,
-            transcription_method: str = 'deepgram'
+            transcription_method: str = 'deepgram',
+            enrichment_method: str = 'openai'
     ) -> dict:
         """
         Executes the full call processing pipeline for a given audio file and call metadata.
@@ -150,6 +163,7 @@ class CallProcessingPipeline:
             agent_id (int): Unique identifier for the agent handling the call.
             timestamp (datetime): The timestamp indicating when the call took place.
             transcription_method (str): Indicates what transcription method to use
+            enrichment_method (str): Indicates what method to use for call summarization and topic modelling
 
         Returns:
             dict: A dictionary containing the complete enriched result, including:
@@ -199,11 +213,12 @@ class CallProcessingPipeline:
         # Redact sensitive information
         transcript = self.redact_transcript(transcript)
 
-        # Extract the active topics of the organization
-        active_topics = self.obtain_active_topics(file_metadata['organization_id'])
-
         # Obtain additional information from the transcript
-        enriched_data, input_tokens, output_tokens = self.enrich_recording(transcript, active_topics)
+        enriched_data, input_tokens, output_tokens = self.enrich_recording(
+            transcript,
+            enrichment_method,
+            file_metadata['organization_id']
+        )
 
         # Replace speaker labels
         enriched_data = self.replace_speaker_labels(transcript, enriched_data)
@@ -252,16 +267,17 @@ class CallProcessingPipeline:
             Warning: If language changes across chunks.
             ValueError: If provided transcription method is not supported
         """
-        if transcription_method == 'deepgram':
-            primary_method = self.transcribe_chunk_with_deepgram
-            fallback_method = self.transcribe_chunk_with_groq
-            fallback_exceptions = (ValueError, httpx.HTTPError, DeepgramApiError)
-        elif transcription_method == 'groq':
-            primary_method = self.transcribe_chunk_with_groq
-            fallback_method = self.transcribe_chunk_with_deepgram
-            fallback_exceptions = (ValueError, httpx.HTTPError)
-        else:
+        methods = {'deepgram': self.transcribe_chunk_with_deepgram, 'groq': self.transcribe_chunk_with_groq}
+        fallback_exceptions = {
+            'deepgram': (ValueError, httpx.HTTPError, DeepgramApiError),
+            'groq': (ValueError, httpx.HTTPError)
+        }
+
+        if transcription_method not in methods:
             raise ValueError(f'Provided transcription_method is not supported ({transcription_method})')
+        else:
+            fallback_name = [m for m in methods.keys() if m != transcription_method][0]
+            fallback_exceptions = fallback_exceptions[transcription_method]
 
         # Hierarchy: file > chunk
         if file_name.endswith('.wav'):
@@ -288,7 +304,7 @@ class CallProcessingPipeline:
 
             for i, chunk in enumerate(recording_chunks):
                 try:
-                    chunk_transcript, chunk_language = primary_method(chunk)
+                    chunk_transcript, chunk_language = methods[transcription_method](chunk)
                 except fallback_exceptions:
                     base_language = None
                     full_transcript = ''
@@ -305,7 +321,7 @@ class CallProcessingPipeline:
             if go_to_fallback:
                 for i, chunk in enumerate(recording_chunks):
                     try:
-                        chunk_transcript, chunk_language = fallback_method(chunk)
+                        chunk_transcript, chunk_language = methods[fallback_name](chunk)
                     except Exception as e:
                         raise RuntimeError(f'Could not proceed with fallback transcription method. Stack trace:\n{e}')
                     if not full_transcript:
@@ -479,13 +495,24 @@ class CallProcessingPipeline:
             langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
 
+    @staticmethod
+    def vertexai_retry_logic(error):
+        """
+        Centralised predicate for tenacity retries on Vertex AI calls.
+
+        Returns ``True`` for HTTP 429s raised by either *httpx* or the
+        `google-genai` SDK, allowing the decorator to back off and retry.
+        """
+        case_1 = isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 429
+        case_2 = isinstance(error, errors.ClientError) and error.code == 429
+        return case_1 or case_2
+
     @observe(as_type="generation")
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
         stop=stop_after_attempt(API_MAX_RETRIES),
-        retry=retry_if_exception(lambda e: (isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429) or
-                                           (isinstance(e, errors.ClientError) and e.code == 429))
+        retry=retry_if_exception(vertexai_retry_logic)
     )
     def diarize_transcript(self, transcript: str) -> str:
         """
@@ -563,51 +590,80 @@ class CallProcessingPipeline:
         )
         return redacted_transcript
 
-    @staticmethod
-    def obtain_active_topics(organization: int):
+    @observe
+    def enrich_recording(self, transcript: str, enrichment_method: str, organization_id: int):
         """
-        Query the call_miner data model to extract all active topics from the organization.
+        Produce structured analytics for the call (`summary`, `topics`, …).
 
-        Args:
-            organization (int): ID of the organization to query
+        A schema-constrained JSON response is requested from either OpenAI (GPT-4o mini) or Gemini, with automatic
+        fail-over to the other provider on retriable errors.
 
         Returns:
-            str: A string enumerating the names and descriptions of all active topics
+            enrichment: dict
+            input_tokens: int
+            output_tokens: int
         """
-        active_topics = ''
-        for topic in Topic.objects.filter(organization=organization, is_active=True):
-            active_topics += f'{topic.name}: {topic.description}, '
-        return active_topics
+        # Retrieve relevant topic data
+        topic_data = db_handler.obtain_active_topics(organization_id)
 
-    @observe()
+        # Prepare Prompt and Response Format
+        system_message = self.enrichment_prompt.compile(topics_string=topic_data)
+        if self.enrichment_prompt.is_fallback:
+            enrichment_config = ENRICHMENT_CONFIG
+        else:
+            enrichment_config = {'langfuse_prompt': self.enrichment_prompt}
+            enrichment_config.update(self.enrichment_prompt.config)
+
+        possible_models = enrichment_config.get('model')
+        fallback_exceptions = (ValueError, httpx.HTTPError, errors.ClientError)
+        methods = {'openai': self.enrich_recording_with_openai, 'vertexai': self.enrich_recording_with_vertexai}
+
+        if enrichment_method not in methods:
+            raise ValueError(f'Provided enrichment_method is not supported ({enrichment_method})')
+        else:
+            fallback_name = [m for m in methods.keys() if m != enrichment_method][0]
+
+        go_to_fallback = False
+        response = None
+        input_tokens = None
+        output_tokens = None
+        try:
+            enrichment_config['model'] = possible_models[enrichment_method]
+            response, input_tokens, output_tokens = methods[enrichment_method](
+                transcript,
+                system_message,
+                enrichment_config
+            )
+        except fallback_exceptions:
+            go_to_fallback = True
+
+        if go_to_fallback:
+            try:
+                enrichment_config['model'] = possible_models[fallback_name]
+                response, input_tokens, output_tokens = methods[fallback_name](
+                    transcript,
+                    system_message,
+                    enrichment_config
+                )
+            except Exception as e:
+                raise RuntimeError(f'Could not proceed with fallback enrichment method {fallback_name}. Trace:\n{e}')
+
+        return response, input_tokens, output_tokens
+
+    @observe(as_type="generation")
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception_type(httpx.HTTPError)
     )
-    def enrich_recording(self, transcript: str, topic_data: str) -> (dict, int, int):
+    def enrich_recording_with_openai(self, transcript: str, system_message: str, config: dict) -> (dict, int, int):
         """
-        Call OpenAI to obtain additional information from the call transcript. Uses the topic data string to complete
-        the prompt's system message.
+        Internal helper that calls the OpenAI Chat Completions endpoint in JSON schema mode.
 
-        Args:
-            transcript (str): Call transcript from which to extract information
-            topic_data (str): String numerating names and descriptions of all active topics
-
-        Returns:
-            dict: Results of enrichment, defined according to EnrichmentResponse
-            int: Input tokens to completion
-            int: Output tokens from completion
+        The function is wrapped in exponential back-off that retries on network errors and rate limits
+        (`httpx.HTTPError`).
         """
-        # Prepare Prompt and Response Format
-        system_message = self.enrichment_prompt.compile(topics_string=topic_data)
-        if self.enrichment_prompt.is_fallback:
-            config_kwargs = ENRICHMENT_CONFIG
-        else:
-            config_kwargs = {'langfuse_prompt': self.enrichment_prompt}
-            config_kwargs.update(self.enrichment_prompt.config)
-
         langfuse_context.update_current_observation(
             name="enrichment_openai",
             prompt=self.enrichment_prompt
@@ -617,13 +673,55 @@ class CallProcessingPipeline:
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": f"Here is the call transcript:\n{transcript}"}
             ],
-            **config_kwargs
+            **config
         )
 
         response = completion.choices[0].message
         input_tokens = completion.usage.prompt_tokens
         output_tokens = completion.usage.completion_tokens
         return json.loads(response.content), input_tokens, output_tokens
+
+    @observe(as_type="generation")
+    @retry(
+        reraise=True,
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
+        retry=retry_if_exception(vertexai_retry_logic)
+    )
+    def enrich_recording_with_vertexai(self, transcript: str, system_message: str, config: dict) -> (dict, int, int):
+        """
+        Same enrichment as above but executed on Gemini (Vertex AI).
+
+        The call is made in *structured output* mode by passing both `response_mime_type="application/json"` and the
+        OpenAPI-compatible `response_schema` to `GenerateContentConfig`.
+        """
+        generation = self.vertexai.models.generate_content(
+            model=config['model'],
+            contents=f"Here is the call transcript:\n{transcript}",
+            config=types.GenerateContentConfig(
+                system_instruction=system_message,
+                temperature=config['temperature'],
+                response_mime_type="application/json",
+                response_schema=config["response_format"]["json_schema"]["schema"]
+            ),
+        )
+
+        # Send observation data to Langfuse
+        langfuse_context.update_current_observation(
+            name="enrichment_vertexai",
+            prompt=self.enrichment_prompt,
+            model=config['model'],
+            usage={
+                "promptTokens": generation.usage_metadata.prompt_token_count,
+                "completionTokens": generation.usage_metadata.candidates_token_count,
+                "totalTokens": generation.usage_metadata.total_token_count
+            }
+        )
+
+        response = generation.candidates[0].content.parts[0].text
+        input_tokens = generation.usage_metadata.prompt_token_count
+        output_tokens = generation.usage_metadata.candidates_token_count
+        return json.loads(response), input_tokens, output_tokens
 
     @staticmethod
     def replace_speaker_labels(transcript: str, data: dict) -> dict:

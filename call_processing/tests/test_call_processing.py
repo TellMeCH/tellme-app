@@ -236,8 +236,7 @@ class TestCallProcessingPipeline:
         assert "Produced transcript is empty" in str(exc.value)
 
     def test_transcribe_directory_fallback_partial_failure(
-        self, pipeline, mock_deepgram, mock_groq, mock_gcs_utils,
-        mock_pydub, mock_openai, mock_vertexai, mock_dlp
+        self, pipeline, mock_deepgram, mock_groq, mock_gcs_utils, mock_pydub, mock_openai, mock_vertexai, mock_dlp
     ):
         """
         If Deepgram fails on the first file but not the second,
@@ -350,3 +349,125 @@ class TestCallProcessingPipeline:
         assert mock_groq.audio.transcriptions.create.called
         assert mock_deepgram.listen.rest.v("1").transcribe_file.called
         assert "transcript" in result
+
+    def test_fallback_enrichment_if_openai_fails(
+            self, pipeline, mock_openai, mock_vertexai, mock_deepgram, mock_pydub, mock_langfuse, mock_dlp
+    ):
+        """
+        When OpenAI enrichment raises a retriable error, the pipeline should retry with Vertex AI and still return a
+        structured payload.
+        """
+        # Force the primary provider (OpenAI) to fail
+        mock_openai.chat.completions.create.side_effect = httpx.HTTPError("Simulated OpenAI failure")
+
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00",
+            enrichment_method="openai"
+        )
+
+        assert mock_openai.chat.completions.create.called
+        assert mock_vertexai.called
+        assert mock_vertexai.call_count == 1
+
+        for key in ("title", "summary", "sentiment", "topics"):
+            assert key in result
+        assert result["transcript"].strip() != ""
+
+    def test_fallback_enrichment_if_vertexai_fails(
+        self, pipeline, mock_vertexai, mock_openai, mock_deepgram, mock_pydub, mock_langfuse, mock_dlp
+    ):
+        """
+        When Vertex AI enrichment fails, the pipeline should fall back to OpenAI and succeed.
+        """
+        mock_vertexai.side_effect = httpx.HTTPError("Simulated Gemini failure")
+
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00",
+            enrichment_method="vertexai"
+        )
+
+        assert mock_vertexai.called
+        assert mock_openai.chat.completions.create.called
+        assert mock_openai.chat.completions.create.call_count == 1
+
+        for key in ("title", "summary", "sentiment", "topics"):
+            assert key in result
+
+    def test_fallback_enrichment_both_fail_raises(
+        self, pipeline, mock_openai, mock_vertexai, mock_deepgram, mock_pydub, mock_langfuse, mock_dlp
+    ):
+        """
+        If both OpenAI and Vertex AI fail, the pipeline should raise a RuntimeError signalling that enrichment could not be completed.
+        """
+        mock_openai.chat.completions.create.side_effect = httpx.HTTPError("OpenAI meltdown")
+        mock_vertexai.side_effect = httpx.HTTPError("Gemini meltdown")
+
+        with pytest.raises(RuntimeError) as exc:
+            pipeline(
+                file_name="test.wav",
+                organization_id=1,
+                customer_id="CUST123",
+                agent_id=123,
+                timestamp="2024-01-01T12:00:00",
+                enrichment_method="openai"      # primary
+            )
+
+        assert "Could not proceed with fallback enrichment method" in str(exc.value)
+
+    def test_enrichment_openai_payload_structure(
+        self, pipeline, mock_openai, mock_vertexai, mock_deepgram, mock_pydub, mock_langfuse, mock_dlp
+    ):
+        """
+        When `enrichment_method="openai"` the pipeline should call the OpenAI chat completion once and not call VertexAI
+        """
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00",
+            enrichment_method="openai"
+        )
+
+        # Provider usage
+        assert mock_openai.chat.completions.create.called
+        assert not mock_vertexai.called
+
+        # Basic schema checks
+        assert set(result).issuperset({"title", "summary", "sentiment", "topics", "transcript"})
+        assert isinstance(result["topics"], list)
+        assert isinstance(result["sentiment"], (int, float))
+        assert "<agent>" in result["transcript"] and "<customer>" in result["transcript"]
+
+    def test_enrichment_vertexai_payload_structure(
+        self, pipeline, mock_vertexai, mock_openai, mock_deepgram, mock_pydub, mock_langfuse, mock_dlp
+    ):
+        """
+        Same assertions as above but with `enrichment_method="vertexai"`
+        """
+
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00",
+            enrichment_method="vertexai"
+        )
+
+        # Provider usage
+        assert mock_vertexai.called
+        assert not mock_openai.chat.completions.create.called
+
+        # Schema checks
+        assert set(result).issuperset({"title", "summary", "sentiment", "topics", "transcript"})
+        assert isinstance(result["topics"], list)
+        assert isinstance(result["sentiment"], (int, float))
