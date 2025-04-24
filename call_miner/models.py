@@ -13,7 +13,7 @@ from firebase_admin import auth
 from django.contrib.contenttypes.models import ContentType
 from call_miner.utils.summary_mining import condense_summaries
 import call_miner.utils.email_utils as email
-from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES
+from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
 
 
 class MetaSummaryAbstractModel(models.Model):
@@ -329,6 +329,7 @@ class Organization(models.Model, ConversationTrendMixin):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     transcription_method = models.CharField(choices=TRANSCRIPTION_METHOD_CHOICES, default='deepgram')
+    enrichment_method = models.CharField(choices=ENRICHMENT_METHOD_CHOICES, default='openai')
 
     def __str__(self):
         return self.name
