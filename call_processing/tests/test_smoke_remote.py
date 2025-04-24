@@ -359,6 +359,36 @@ class TestSmokeTestCloudRunWithLogs:
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs()
 
+    def test_smoke_post_with_logs_enrichment_vertexai(self):
+        """
+        Trigger the /queue endpoint using X-API-KEY, after switching the org's transcription_method to 'openai' and its
+        enrichment method to 'vertexai'.
+        Reuses the original smoke test logic.
+        """
+        # Patch the org to use 'deepgram' as transcription method and 'vertexai' for enrichment
+        patch_url = f"{self.cloud_run_host}/api/v1/organizations/{self.org_id}/"
+        patch_payload = {"transcription_method": "deepgram", "enrichment_method": "vertexai"}
+        patch_resp = requests.patch(patch_url, json=patch_payload, headers=self.superuser_headers)
+        patch_resp.raise_for_status()
+
+        # Reuse the standard smoke test logic
+        self.test_smoke_post_with_logs()
+
+    def test_smoke_post_with_logs_groq_enrichment_vertexai(self):
+        """
+        Trigger the /queue endpoint using X-API-KEY, after switching the org's transcription_method to 'groq' and its
+        enrichment method to 'openai'.
+        Reuses the original smoke test logic.
+        """
+        # Patch the org to use 'groq' as transcription method and 'vertexai' for enrichment
+        patch_url = f"{self.cloud_run_host}/api/v1/organizations/{self.org_id}/"
+        patch_payload = {"transcription_method": "groq", "enrichment_method": "vertexai"}
+        patch_resp = requests.patch(patch_url, json=patch_payload, headers=self.superuser_headers)
+        patch_resp.raise_for_status()
+
+        # Reuse the standard smoke test logic
+        self.test_smoke_post_with_logs()
+
     def test_smoke_audiohook_with_logs(self):
         """
         Trigger the /process endpoint, this time using the Audiohook emulator
