@@ -317,7 +317,7 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
         model = Organization
         fields = [
             'url', 'name', 'conversation_count', 'max_user_count', 'created', 'updated', 'transcription_method',
-            'employee_count'
+            'enrichment_method', 'employee_count'
         ]
 
     @staticmethod
