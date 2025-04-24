@@ -1,4 +1,5 @@
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
+ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
 
 DIARIZATION_PROMPT = """
     You are a helpful diarization assistant, working with transcribed calls between TWO speakers.
