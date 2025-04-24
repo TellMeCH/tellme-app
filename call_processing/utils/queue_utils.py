@@ -14,7 +14,7 @@ def create_storage_path(organization_id: int, customer_id: str, agent_id: int, c
 
 def create_task(
         process_url: str, file_name: str, organization_id: int, customer_id: str, agent_id: int,
-        timestamp: datetime.datetime, transcription_method: str, logger
+        timestamp: datetime.datetime, transcription_method: str, enrichment_method: str, logger
 ):
     payload = {
         "file_name": file_name,
@@ -22,7 +22,8 @@ def create_task(
         "customer_id": customer_id,
         "agent_id": agent_id,
         "timestamp": timestamp.isoformat(),
-        "transcription_method": transcription_method
+        "transcription_method": transcription_method,
+        "enrichment_method": enrichment_method
     }
     task = {
         "http_request": {
@@ -108,7 +109,7 @@ def upload_and_create_task(
             logger.info(f"Uploaded local file to GCS ({gcs_uri})")
 
         # Determine the Organization's Transcription Method
-        transcription_method = db_handler.retrieve_organization_transcription_method(organization_id)
+        transcription_method, enrichment_method = db_handler.retrieve_organization_processing_methods(organization_id)
 
         # Create a task to process this recording
         process_url = settings.CALL_PROCESSING_ENDPOINT
@@ -121,6 +122,7 @@ def upload_and_create_task(
             agent_id,
             call_timestamp,
             transcription_method,
+            enrichment_method,
             logger
         )
         response = {"message": "Recording(s) queued for processing.", "file_name": file_name}

@@ -39,12 +39,19 @@ def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: da
     return is_valid, message
 
 
-def retrieve_organization_transcription_method(organization_id: int):
+def retrieve_organization_processing_methods(organization_id: int) -> (str, str):
     """
-    Returns the organization transcription method
+    Returns the organization transcription and enrichment methods
+
+    Args:
+        organization_id (int): ID of the organization to query
+
+    Returns:
+        transcription_method: str, Identifies provider used for transcription
+        enrichment_method: str, Identifies provider used for enrichment
     """
     org = Organization.objects.get(id=organization_id)
-    return org.transcription_method
+    return org.transcription_method, org.enrichment_method
 
 
 def obtain_active_topics(organization_id: int):
