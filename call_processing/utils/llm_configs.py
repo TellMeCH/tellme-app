@@ -101,8 +101,7 @@ ENRICHMENT_CONFIG = {
                     "summary",
                     "title",
                     "sentiment"
-                ],
-                "additionalProperties": False
+                ]
             },
             "strict": True
         }
