@@ -614,9 +614,17 @@ class CallProcessingPipeline:
             enrichment_config = {'langfuse_prompt': self.enrichment_prompt}
             enrichment_config.update(self.enrichment_prompt.config)
 
-        possible_models = enrichment_config.get('model')
         fallback_exceptions = (ValueError, httpx.HTTPError, errors.ClientError)
         methods = {'openai': self.enrich_recording_with_openai, 'vertexai': self.enrich_recording_with_vertexai}
+
+        # Define enrichment configs per provider
+        configs = {}
+        for meth in methods.keys():
+            configs[meth] = enrichment_config.copy()
+            configs[meth]['model'] = configs[meth]['model'][meth]
+
+            if meth == 'openai':
+                configs[meth]['response_format']['json_schema']['schema']['additionalProperties'] = False
 
         if enrichment_method not in methods:
             raise ValueError(f'Provided enrichment_method is not supported ({enrichment_method})')
@@ -628,22 +636,20 @@ class CallProcessingPipeline:
         input_tokens = None
         output_tokens = None
         try:
-            enrichment_config['model'] = possible_models[enrichment_method]
             response, input_tokens, output_tokens = methods[enrichment_method](
                 transcript,
                 system_message,
-                enrichment_config
+                configs[enrichment_method]
             )
         except fallback_exceptions:
             go_to_fallback = True
 
         if go_to_fallback:
             try:
-                enrichment_config['model'] = possible_models[fallback_name]
                 response, input_tokens, output_tokens = methods[fallback_name](
                     transcript,
                     system_message,
-                    enrichment_config
+                    configs[fallback_name]
                 )
             except Exception as e:
                 raise RuntimeError(f'Could not proceed with fallback enrichment method {fallback_name}. Trace:\n{e}')
