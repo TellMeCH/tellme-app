@@ -1,6 +1,7 @@
 import time
 import hashlib
 import json
+import copy
 from datetime import datetime
 from io import BytesIO
 from django.conf import settings
@@ -620,7 +621,7 @@ class CallProcessingPipeline:
         # Define enrichment configs per provider
         configs = {}
         for meth in methods.keys():
-            configs[meth] = enrichment_config.copy()
+            configs[meth] = copy.deepcopy(enrichment_config)
             configs[meth]['model'] = configs[meth]['model'][meth]
 
             if meth == 'openai':

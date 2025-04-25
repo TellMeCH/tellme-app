@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock, Mock
 import uuid
 from rest_framework.test import APIClient
 from call_miner.models import Organization, User, Agent, Topic, Customer, OrganizationAPIKey
+from call_processing.utils.llm_configs import ENRICHMENT_CONFIG
 
 
 @pytest.fixture(autouse=True)
@@ -285,11 +286,7 @@ def mock_langfuse():
 
         mock_prompt = MagicMock()
         mock_prompt.is_fallback = False
-        mock_prompt.config = {
-            'model': {"openai": "gpt-4o-mini-2024-07-18", "vertexai": "gemini-2.0-flash-001"},
-            'temperature': 0,
-            'response_format': {'json_schema': {'schema': None}}
-        }
+        mock_prompt.config = ENRICHMENT_CONFIG
         mock_lf_instance.get_prompt.return_value = mock_prompt
 
         yield mock_lf_instance
