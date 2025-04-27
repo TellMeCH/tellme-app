@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES
+from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
 
 
 class WebhookProcessingSerializer(serializers.Serializer):
@@ -33,3 +33,4 @@ class ProcessRecordingSerializer(serializers.Serializer):
     agent_id = serializers.IntegerField(required=True)
     timestamp = serializers.DateTimeField(required=True)
     transcription_method = serializers.ChoiceField(choices=TRANSCRIPTION_METHOD_CHOICES, required=True)
+    enrichment_method = serializers.ChoiceField(choices=ENRICHMENT_METHOD_CHOICES, required=True)

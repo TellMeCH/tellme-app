@@ -1,4 +1,5 @@
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
+ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
 
 DIARIZATION_PROMPT = """
     You are a helpful diarization assistant, working with transcribed calls between TWO speakers.
@@ -56,7 +57,7 @@ The following schema contains:
 - sentiment: An integer that represents the overall sentiment of the call
 """
 ENRICHMENT_CONFIG = {
-    "model": "gpt-4o-mini-2024-07-18",
+    "model": {"openai": "gpt-4o-mini-2024-07-18", "vertexai": "gemini-2.0-flash-001"},
     "temperature": 0.2,
     "response_format": {
         "type": "json_schema",
@@ -100,8 +101,7 @@ ENRICHMENT_CONFIG = {
                     "summary",
                     "title",
                     "sentiment"
-                ],
-                "additionalProperties": False
+                ]
             },
             "strict": True
         }

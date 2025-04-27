@@ -132,6 +132,7 @@ class ProcessRecordingView(APIView):
         agent_id = serializer.validated_data.get("agent_id")
         timestamp = serializer.validated_data.get("timestamp")
         transcription_method = serializer.validated_data.get("transcription_method")
+        enrichment_method = serializer.validated_data.get("enrichment_method")
 
         logger.info(f"Processing file {file_name}")
         processing_start = datetime.datetime.now()
@@ -144,7 +145,8 @@ class ProcessRecordingView(APIView):
                 customer_id,
                 agent_id,
                 timestamp,
-                transcription_method
+                transcription_method,
+                enrichment_method
             )
         except RuntimeError as exc:
             logger.error(f"Processing Pipeline Failed: {str(exc)}")

@@ -38,29 +38,33 @@ DESIRED_SCHEMA = {
     "release": "object",
     "version": "object",
     "externalId": "object",
-    "cost_call_enrichment": "float64",
     "cost_diarization_vertexai": "float64",
+    "cost_enrichment_openai": "float64",
+    "cost_enrichment_vertexai": "float64",
     "cost_get_summary_data": "float64",
     "cost_get_all_summaries": "float64",
     "cost_redaction_google_dlp": "float64",
     "cost_transcription_deepgram": "float64",
     "cost_transcription_groq": "float64",
-    "count_call_enrichment": "int64",
     "count_diarization_vertexai": "int64",
+    "count_enrichment_openai": "int64",
+    "count_enrichment_vertexai": "int64",
     "count_get_summary_data": "int64",
     "count_get_all_summaries": "int64",
     "count_redaction_google_dlp": "int64",
     "count_transcription_deepgram": "int64",
     "count_transcription_groq": "int64",
-    "failed_count_call_enrichment": "int64",
     "failed_count_diarization_vertexai": "int64",
+    "failed_count_enrichment_openai": "int64",
+    "failed_count_enrichment_vertexai": "int64",
     "failed_count_get_summary_data": "int64",
     "failed_count_get_all_summaries": "int64",
     "failed_count_redaction_google_dlp": "int64",
     "failed_count_transcription_deepgram": "int64",
     "failed_count_transcription_groq": "int64",
-    "latency_call_enrichment": "float64",
     "latency_diarization_vertexai": "float64",
+    "latency_enrichment_openai": "float64",
+    "latency_enrichment_vertexai": "float64",
     "latency_get_summary_data": "float64",
     "latency_get_all_summaries": "float64",
     "latency_redaction_google_dlp": "float64",
@@ -300,11 +304,12 @@ def export_from_langfuse(request) -> (str, int):
 
     # Focusing on Generations - Process only if observations are present
     if not obs.empty:
-        gen = obs.loc[obs['type'] == 'GENERATION'].copy()
+        gen = obs.loc[(obs['type'] == 'GENERATION') & (obs['name'] != 'enrichment_openai')].copy()
         gen.loc[:, 'failed'] = gen['statusMessage'].notna()
 
         # Reformatting the 'name' column
-        gen.loc[gen['name'] == 'OpenAI-generation', 'name'] = gen.loc[gen['name'] == 'OpenAI-generation', 'promptName']
+        mask_enrichment_openai = (gen['name'] == 'OpenAI-generation') & (gen['promptName'] == 'call_enrichment')
+        gen.loc[mask_enrichment_openai, 'name'] = 'enrichment_openai'
         gen.loc[gen['name'] == 'transcribe_chunk_with_groq', 'name'] = 'transcription_groq'
         gen.loc[gen['name'] == 'transcribe_chunk_with_deepgram', 'name'] = 'transcription_deepgram'
 

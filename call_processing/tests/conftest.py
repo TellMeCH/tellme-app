@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock, Mock
 import uuid
 from rest_framework.test import APIClient
 from call_miner.models import Organization, User, Agent, Topic, Customer, OrganizationAPIKey
+from call_processing.utils.llm_configs import ENRICHMENT_CONFIG
 
 
 @pytest.fixture(autouse=True)
@@ -151,34 +152,51 @@ def mock_vertexai():
     Mocks out the google.genai.Client used in CallProcessingPipeline.
     Specifically, it mocks the .models.generate_content call.
     """
-    with patch("google.genai.Client") as mock_genai_client_class:
-        # Create a mock client instance returned by the constructor
-        mock_client_instance = MagicMock()
-        mock_genai_client_class.return_value = mock_client_instance
+    with patch("google.genai.Client") as mock_client_cls:
+        client = MagicMock()
+        mock_client_cls.return_value = client
 
-        # Now mock the .models.generate_content(...) call
-        mock_gen_content = MagicMock()
-        # The structure we return should mimic the real Vertex AI (Gemini) response
-        mock_response = MagicMock()
-        mock_response.candidates = [
-            MagicMock(
-                content=MagicMock(
-                    parts=[MagicMock(text="Speaker 0: Diarized from Gemini\nSpeaker 1: Yes, indeed.")]
+        diarization_text = "Speaker 0: Diarized from Gemini\nSpeaker 1: Yes, indeed."
+
+        enrichment_json = """{
+            "title": "Test Call",
+            "summary": "Short summary",
+            "sentiment": 0.9, 
+            "topics": ["Sales"],
+            "agent_speaker_labels": ["Speaker 0:"],
+            "customer_speaker_labels": ["Speaker 1:"]
+        }"""
+
+        def gen_content_side_effect(*args, **kwargs):
+            """
+            Signature of the real method is
+              generate_content(model, contents, config)
+            but callers may mix positional / keyword args – we handle both.
+            """
+            cfg = kwargs.get("config") or (args[2] if len(args) > 2 else None)
+            is_structured = getattr(cfg, "response_mime_type", None) == "application/json"
+
+            text_payload = enrichment_json if is_structured else diarization_text
+
+            resp = MagicMock()
+            resp.candidates = [
+                MagicMock(
+                    content=MagicMock(
+                        parts=[MagicMock(text=text_payload)]
+                    )
                 )
+            ]
+            resp.usage_metadata = MagicMock(
+                prompt_token_count=10,
+                candidates_token_count=5,
+                total_token_count=15
             )
-        ]
-        mock_response.usage_metadata = MagicMock(
-            prompt_token_count=10,
-            candidates_token_count=5,
-            total_token_count=15
-        )
-        # When generate_content is called, return the mock_response
-        mock_gen_content.return_value = mock_response
+            return resp
 
-        # Attach the mock to the `.models.generate_content` on the client
-        mock_client_instance.models.generate_content = mock_gen_content
+        gen_content_mock = MagicMock(side_effect=gen_content_side_effect)
+        client.models.generate_content = gen_content_mock
 
-        yield mock_gen_content
+        yield gen_content_mock
 
 
 @pytest.fixture
@@ -268,7 +286,7 @@ def mock_langfuse():
 
         mock_prompt = MagicMock()
         mock_prompt.is_fallback = False
-        mock_prompt.config = {'model': None, 'temperature': 0}
+        mock_prompt.config = ENRICHMENT_CONFIG
         mock_lf_instance.get_prompt.return_value = mock_prompt
 
         yield mock_lf_instance
