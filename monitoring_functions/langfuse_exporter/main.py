@@ -308,7 +308,8 @@ def export_from_langfuse(request) -> (str, int):
         gen.loc[:, 'failed'] = gen['statusMessage'].notna()
 
         # Reformatting the 'name' column
-        gen.loc[gen['name'] == 'OpenAI-generation', 'name'] = 'enrichment_openai'
+        mask_enrichment_openai = (gen['name'] == 'OpenAI-generation') & (gen['promptName'] == 'call_enrichment')
+        gen.loc[mask_enrichment_openai, 'name'] = 'enrichment_openai'
         gen.loc[gen['name'] == 'transcribe_chunk_with_groq', 'name'] = 'transcription_groq'
         gen.loc[gen['name'] == 'transcribe_chunk_with_deepgram', 'name'] = 'transcription_deepgram'
 
