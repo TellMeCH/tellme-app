@@ -17,7 +17,7 @@ class TopicAdmin(admin.ModelAdmin):
     list_display = ['name', 'organization', 'description']
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
-    readonly_fields = ['summary', 'summary_date', 'summary_call_count', 'is_active', 'created', 'updated']
+    readonly_fields = ['is_active', 'created', 'updated']
 
 
 class EmployeeAdmin(admin.ModelAdmin):
@@ -50,7 +50,6 @@ class CustomerAdmin(admin.ModelAdmin):
     list_display = ['external_id', 'organization']
     search_fields = ['external_id', 'organization__name']
     list_filter = ['organization']
-    readonly_fields = ['summary', 'summary_date', 'summary_call_count']
 
 
 class ConversationAdmin(admin.ModelAdmin):
