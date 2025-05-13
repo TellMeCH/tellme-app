@@ -9,6 +9,15 @@ ID_PARAMETER_SCHEMA = OpenApiParameter(
     required=True,
 )
 
+SUMMARY_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
+    name='period',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='Summarization period (week, month, quarter)',
+    required=False,
+    default='month',
+)
+
 TREND_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
     name='trend_period',
     type=OpenApiTypes.STR,

@@ -19,7 +19,7 @@ from call_miner.permissions import (ConversationPermission, OrganizationPermissi
 from call_miner.utils.paginators import CustomListViewPaginator
 from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
-    ID_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA,
+    ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA,
     CONVERSATIONS_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA, ORGANIZATION_TREND_RESPONSE_SCHEMA,
     TREND_PERIOD_PARAMETER_SCHEMA, OVERVIEW_RESPONSE_SCHEMA, ORGANIZATION_OVERVIEW_RESPONSE_SCHEMA,
     PER_TOPIC_PARAMETER_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA, REGENERATE_API_KEY_RESPONSE_SCHEMA,
@@ -54,7 +54,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
 
     @extend_schema(
         description=MetaSummarySerializer.get_summary_data.__doc__,
-        parameters=[ID_PARAMETER_SCHEMA],
+        parameters=[ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA],
         responses={
             200: SUMMARY_DATA_RESPONSE_SCHEMA,
             400: ERROR_RESPONSE_SCHEMA,
