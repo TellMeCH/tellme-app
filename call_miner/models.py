@@ -6,68 +6,117 @@ import datetime
 import zoneinfo
 import threading
 from django.utils import timezone
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from firebase_admin import auth
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+from call_miner.utils.period_utils import period_bounds
 from call_miner.utils.summary_mining import condense_summaries
 import call_miner.utils.email_utils as email
 from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
+
+
+class PeriodSummary(models.Model):
+    """
+    Table containing object summaries, relating each summary with an object and a period–
+    """
+    PERIOD_CHOICES = [
+        ('week', 'Week'),
+        ('month', 'Month'),
+        ('quarter', 'Quarter')
+    ]
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveBigIntegerField()
+    target = GenericForeignKey("content_type", "object_id")
+    period_type = models.CharField(choices=PERIOD_CHOICES)
+    period_label = models.CharField(max_length=12)  # '2025-W20', '2025-05', '2025-Q2'...
+    summary = models.JSONField()
+    last_call_at = models.DateTimeField()
+    call_count = models.PositiveIntegerField()
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("content_type", "object_id", "period_type", "period_label")
+        indexes = [models.Index(fields=["period_type", "period_label"])]
 
 
 class MetaSummaryAbstractModel(models.Model):
     """
     An abstract model that handles the creation and retrieval of summaries objects for Agent, Customer, and Topic models
     """
-    summary = models.JSONField(null=True)
-    summary_date = models.DateTimeField(auto_now_add=True, null=True)
-    summary_call_count = models.IntegerField(default=0)
-
     # Deviation Threshold (in %) for Re-calculation
     DEVIATION_THRESHOLD = 10
 
     class Meta:
         abstract = True
 
-    def get_or_create_summary(self, trace_data: dict = None):
+    @transaction.atomic
+    def get_or_create_summary(self, period: str = 'month', trace_data: dict | None = None):
         """
-        Extract all the object's related conversations, as well as their summaries. If enough new summaries have
-        been produced, condense them into a new meta-summary for the object.
+        Extract all the object's related conversations, as well as their summaries, for the specified time period.
+        If enough new summaries have been produced, condense them into a new meta-summary for the object.
         Args:
+            period (str): Period of conversations to focus on. One of 'week', 'month', or 'quarter'
             trace_data (dict): A dictionary containing data to store in the corresponding Langfuse trace
-
         """
-        if trace_data is None:
-            trace_data = {}
+        trace_data = trace_data or {}
+        start, end, label = period_bounds(period)
+
+        # Extract all conversations in the relevant time period
+        conversations = self.conversations.filter(date__gte=start, date__lt=end)
+        call_count = conversations.count()  # Current number of calls
+        if call_count == 0:
+            return None, None, 0, label
 
         # Check if the object was fetched from a queryset that annotated 'latest_date',
         latest_date = getattr(self, 'latest_date', None)
         if latest_date is None:
-            latest_date = self.conversations.aggregate(latest_date=models.Max('date'))['latest_date']
+            latest_date = self.conversations.order_by("-date").values_list("date", flat=True).first()
 
-        conversations = sorted(self.conversations.all(), key=lambda c: c.date, reverse=True)
-        relevant_summaries = [conv.summary for conv in conversations]
-        actual_call_count = len(relevant_summaries)
+        # Fetch existing PeriodSummary (if it exists)
+        content_type = ContentType.objects.get_for_model(self.__class__)
+        summary, created = PeriodSummary.objects.select_for_update().get_or_create(
+            content_type=content_type,
+            object_id=self.pk,
+            period_type=period,
+            period_label=label,
+            defaults=dict(
+                summary={},
+                last_call_at=latest_date,
+                call_count=0,
+            )
+        )
 
-        # Compare the count with the Summary object's count field
-        if self.is_deviation_significant(actual_call_count):
-            # Call the external function with the list of summaries
-            new_summary = condense_summaries(relevant_summaries, trace_data)
-            self.summary = new_summary
-            self.summary_call_count = actual_call_count
-            self.summary_date = latest_date
-            self.save()  # Save the updated MetaSummary with the new data
+        # If no refresh is needed, return existing summary
+        # Note: summary.call_count is number of calls at the time of that summary
+        if not created and not self._needs_refresh(summary.call_count, call_count):
+            return summary.summary, latest_date, call_count, label
 
-    def is_deviation_significant(self, actual_count):
+        # Otherwise, perform the summarization anew
+        new_summary = condense_summaries(
+            list(conversations.values_list("summary", flat=True)),
+            trace_data=trace_data
+        )
+
+        summary.summary = new_summary
+        summary.call_count = call_count
+        summary.last_call_at = latest_date
+        summary.save(update_fields=["summary", "call_count", "last_call_at"])
+        return new_summary, latest_date, call_count, label
+
+    def _needs_refresh(self, previous: int, current: int) -> bool:
         """
         Determine whether enough new calls have been created associated to the agent/customer/topic to warrant a
         summary re-calculation
         """
         # Calculate the percentage deviation
-        if self.summary_call_count == 0:  # Prevent division by zero
-            return actual_count > 0
-        deviation = abs((actual_count - self.summary_call_count) / self.summary_call_count) * 100
+        if previous == 0:
+            return current > 0
+        deviation = abs(current - previous) * 100 / previous
         return deviation > self.DEVIATION_THRESHOLD
 
 

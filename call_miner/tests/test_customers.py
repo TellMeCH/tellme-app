@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
@@ -436,7 +437,7 @@ class TestCustomerActions:
         assert results[0]['topic_name'] == str(conversation.topics.all()[0])
         assert 'topic_id' in results[0]
 
-    def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer, conversation):
+    def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer, conversation_today):
         """
         Test that the 'summary-data' action for a customer retrieves the expected summary data.
         """
@@ -448,3 +449,5 @@ class TestCustomerActions:
             assert response.status_code == status.HTTP_200_OK
             assert 'summary' in response.data
             assert response.data['summary'] == 'Mocked summary text'
+            assert 'period_label' in response.data
+            assert response.data['period_label'] == datetime.today().strftime('%Y-%m')

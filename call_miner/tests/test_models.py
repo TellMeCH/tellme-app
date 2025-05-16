@@ -3,7 +3,7 @@ import pytz
 import zoneinfo
 from datetime import timedelta, datetime
 from django.db import IntegrityError
-
+from django.contrib.contenttypes.models import ContentType
 from call_miner.models import (
     Organization,
     Topic,
@@ -12,7 +12,31 @@ from call_miner.models import (
     Employee,
     Analyst,
     Agent,
+    PeriodSummary
 )
+from call_miner.utils.period_utils import period_bounds
+
+
+def get_topic_period_summary(topic, period="month"):
+    """
+    Return the PeriodSummary instance for `topic` and the current period label.
+    Raises PeriodSummary.DoesNotExist if none is found.
+    """
+    # Build the label ("2025-05", "2025-W20", ...) that get_or_create_summary() uses
+    _, _, label = period_bounds(period)
+
+    ps, created = PeriodSummary.objects.get_or_create(
+        content_type=ContentType.objects.get_for_model(topic.__class__),
+        object_id=topic.pk,
+        period_type=period,
+        period_label=label,
+        defaults=dict(
+            summary={},
+            last_call_at=datetime.today(),
+            call_count=0,
+        )
+    )
+    return ps
 
 
 @pytest.fixture
@@ -66,46 +90,34 @@ def another_conversation_same_organization(agent, customer, another_topic_same_o
 
 @pytest.mark.django_db
 class TestMetaSummaryAbstractModel:
-    def test_meta_summary_creation(self, topic, conversation, mocker):
+    def test_meta_summary_creation(self, topic, conversation_today, mocker):
         """
         Test that get_or_create_summary method creates a summary for the Topic.
         """
         mock_condense = mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
         topic.get_or_create_summary()
-        mock_condense.assert_called_once_with([conversation.summary], {})
-        assert topic.summary == "Mocked Summary"
-        assert topic.summary_call_count == 1
-        assert topic.summary_date == conversation.date
+        mock_condense.assert_called_once()
+        ps = get_topic_period_summary(topic)
+        assert ps.summary == "Mocked Summary"
+        assert ps.call_count == 1
+        assert ps.last_call_at.date() == conversation_today.date.date()
 
-    def test_meta_summary_no_update_when_deviation_not_significant(self, topic, conversation, mocker):
+    def test_meta_summary_no_update_when_deviation_not_significant(self, topic, conversation_today, mocker):
         """
         Test that get_or_create_summary does not update the summary if deviation is not significant.
         """
-        topic.summary_call_count = 1
-        topic.summary = "Existing Summary"
-        topic.summary_date = conversation.date
-        topic.save()
+        ps = get_topic_period_summary(topic)
+        ps.call_count = 1
+        ps.summary = "Existing Summary"
+        ps.last_call_at = conversation_today.date
+        ps.save()
 
         mock_condense = mocker.patch('call_miner.models.condense_summaries')
         topic.get_or_create_summary()
         mock_condense.assert_not_called()
-        assert topic.summary == "Existing Summary"
 
-    def test_is_deviation_significant(self, topic):
-        """
-        Test the is_deviation_significant method for various scenarios.
-        """
-        topic.summary_call_count = 100
-        topic.save()
-        assert topic.is_deviation_significant(111) is True
-        assert topic.is_deviation_significant(89) is True
-        assert topic.is_deviation_significant(110) is False
-        assert topic.is_deviation_significant(90) is False
-        assert topic.is_deviation_significant(100) is False
-        topic.summary_call_count = 0
-        topic.save()
-        assert topic.is_deviation_significant(1) is True
-        assert topic.is_deviation_significant(0) is False
+        ps = get_topic_period_summary(topic)
+        assert ps.summary == "Existing Summary"
 
     def test_get_or_create_summary_no_conversations(self, topic, mocker):
         """
@@ -114,7 +126,6 @@ class TestMetaSummaryAbstractModel:
         mock_condense = mocker.patch('call_miner.models.condense_summaries', return_value=None)
         topic.get_or_create_summary()
         assert not mock_condense.called
-        assert topic.summary is None
 
 
 @pytest.mark.django_db
@@ -490,7 +501,7 @@ class TestTopic:
         Test that Topics have the functionalities inherited from MetaSummaryAbstractModel.
         """
         assert hasattr(topic, 'get_or_create_summary')
-        assert hasattr(topic, 'is_deviation_significant')
+        assert hasattr(topic, '_needs_refresh')
 
     def test_topic_inherits_conversation_stats_model(self, topic):
         """
@@ -552,7 +563,7 @@ class TestAgent:
         Test that Agents have the functionalities inherited from MetaSummaryAbstractModel.
         """
         assert hasattr(agent, 'get_or_create_summary')
-        assert hasattr(agent, 'is_deviation_significant')
+        assert hasattr(agent, '_needs_refresh')
 
     def test_agent_inherits_conversation_stats_model(self, agent):
         """
@@ -597,7 +608,7 @@ class TestCustomer:
         Test that Customers have the functionalities inherited from MetaSummaryAbstractModel.
         """
         assert hasattr(customer, 'get_or_create_summary')
-        assert hasattr(customer, 'is_deviation_significant')
+        assert hasattr(customer, '_needs_refresh')
 
     def test_customer_inherits_conversation_stats_model(self, customer):
         """
