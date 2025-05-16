@@ -6,7 +6,7 @@ import datetime
 import zoneinfo
 import threading
 from django.utils import timezone
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from firebase_admin import auth
@@ -54,6 +54,7 @@ class MetaSummaryAbstractModel(models.Model):
     class Meta:
         abstract = True
 
+    @transaction.atomic
     def get_or_create_summary(self, period: str = 'month', trace_data: dict | None = None):
         """
         Extract all the object's related conversations, as well as their summaries, for the specified time period.
@@ -69,7 +70,12 @@ class MetaSummaryAbstractModel(models.Model):
         conversations = self.conversations.filter(date__gte=start, date__lt=end)
         call_count = conversations.count()  # Current number of calls
         if call_count == 0:
-            return {}
+            return None, None, 0, label
+
+        # Check if the object was fetched from a queryset that annotated 'latest_date',
+        latest_date = getattr(self, 'latest_date', None)
+        if latest_date is None:
+            latest_date = self.conversations.order_by("-date").values_list("date", flat=True).first()
 
         # Fetch existing PeriodSummary (if it exists)
         content_type = ContentType.objects.get_for_model(self.__class__)
@@ -80,7 +86,7 @@ class MetaSummaryAbstractModel(models.Model):
             period_label=label,
             defaults=dict(
                 summary={},
-                last_call_at=None,
+                last_call_at=latest_date,
                 call_count=0,
             )
         )
@@ -88,7 +94,7 @@ class MetaSummaryAbstractModel(models.Model):
         # If no refresh is needed, return existing summary
         # Note: summary.call_count is number of calls at the time of that summary
         if not created and not self._needs_refresh(summary.call_count, call_count):
-            return summary.summary
+            return summary.summary, latest_date, call_count, label
 
         # Otherwise, perform the summarization anew
         new_summary = condense_summaries(
@@ -96,16 +102,11 @@ class MetaSummaryAbstractModel(models.Model):
             trace_data=trace_data
         )
 
-        # Check if the object was fetched from a queryset that annotated 'latest_date',
-        latest_date = getattr(self, 'latest_date', None)
-        if latest_date is None:
-            latest_date = self.conversations.order_by("-date").values_list("date", flat=True).first()
-
         summary.summary = new_summary
         summary.call_count = call_count
         summary.last_call_at = latest_date
         summary.save(update_fields=["summary", "call_count", "last_call_at"])
-        return new_summary, latest_date, call_count
+        return new_summary, latest_date, call_count, label
 
     def _needs_refresh(self, previous: int, current: int) -> bool:
         """

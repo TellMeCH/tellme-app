@@ -167,11 +167,12 @@ class MetaSummarySerializer(serializers.Serializer):
         trace_data = self.context.get('trace_data', {})
         request = self.context.get('request')
         period = request.query_params.get('period', 'month')
-        summary, summary_date, call_count = obj.get_or_create_summary(period, trace_data)
+        summary, summary_date, call_count, period_label = obj.get_or_create_summary(period, trace_data)
         return {
             'summary': summary,
             'summary_date': summary_date,
-            'summary_call_count': call_count
+            'summary_call_count': call_count,
+            'period_label': period_label
         }
 
 

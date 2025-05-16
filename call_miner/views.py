@@ -66,7 +66,12 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     def summary_data(self, request, pk=None):
         obj = self.get_object()
         trace_data = self.define_trace_data(request, obj, 'get_summary_data')
-        serializer = self.get_serializer(obj, context={'trace_data': trace_data})
+
+        # Inject trace data to the default serializer context
+        context = self.get_serializer_context()
+        context['trace_data'] = trace_data
+
+        serializer = self.get_serializer(obj, context=context)
         try:
             return response.Response(serializer.get_summary_data(obj))
         except ValueError as e:
@@ -492,8 +497,12 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         try:
             summaries = {}
             for obj in queryset:
+                # Inject trace data to the default serializer context
+                context = self.get_serializer_context()
                 trace_data = self.define_trace_data(request, obj, 'get_all_summaries')
-                serializer = self.get_serializer(obj, context={'trace_data': trace_data})
+                context['trace_data'] = trace_data
+
+                serializer = self.get_serializer(obj, context=context)
                 summary_data = serializer.get_summary_data(obj)
                 summary_data['name'] = obj.name
                 summaries[obj.id] = summary_data
