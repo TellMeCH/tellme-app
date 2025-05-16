@@ -3,7 +3,7 @@ import pytest
 from django.urls import reverse
 from rest_framework import status
 from datetime import timedelta, datetime
-from call_miner.models import Topic, Conversation
+from call_miner.models import Topic, Conversation, PeriodSummary
 
 TREND_ACTIONS = ['conversations', 'trend']
 
@@ -720,7 +720,7 @@ class TestTopicSummary:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_topic_summary_data_returns_expected_content(self, client, analyst_user, topic, conversation):
+    def test_topic_summary_data_returns_expected_content(self, client, analyst_user, topic, conversation_today):
         """
         Test that the 'summary-data' action for a topic retrieves the expected summary data and mocks the summary
         generation.
@@ -728,16 +728,28 @@ class TestTopicSummary:
 
         client.force_authenticate(user=analyst_user)
         url = reverse('topic-summary-data', args=[topic.id])
-        response = client.get(url)
-        assert response.status_code == status.HTTP_200_OK
-        assert 'summary' in response.data
-        assert response.data['summary'] == {
-            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
-        }
-        assert response.data['summary_call_count'] == 1
-        assert response.data['summary_date'].date() == conversation.date.date()
 
-    def test_all_summaries_returns_expected_content(self, client, analyst_user, topic, conversation):
+        for period in ['week', 'month', 'quarter']:
+            response = client.get(url, {'period': period})
+            assert response.status_code == status.HTTP_200_OK
+            assert 'summary' in response.data
+            assert response.data['summary'] == {
+                'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
+            }
+            assert response.data['summary_call_count'] == 1
+            assert response.data['summary_date'].date() == conversation_today.date.date()
+            assert 'period_label' in response.data
+
+            if period == 'month':
+                assert response.data['period_label'] == datetime.today().strftime('%Y-%m')
+            elif period == 'week':
+                assert response.data['period_label'] == datetime.today().strftime("%G-W%V")
+            else:
+                label = f"{datetime.today().year}-Q{(datetime.today().month - 1) // 3 + 1}"
+                assert response.data['period_label'] == label
+
+
+    def test_all_summaries_returns_expected_content(self, client, analyst_user, topic, conversation_today):
         """
         Test that the 'all-summaries' action for all topic retrieves the expected summary data and mocks the summary
         generation.
@@ -751,8 +763,31 @@ class TestTopicSummary:
             'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
         }
         assert response.data[topic.id]['summary_call_count'] == 1
-        assert response.data[topic.id]['summary_date'].date() == conversation.date.date()
+        assert response.data[topic.id]['summary_date'].date() == conversation_today.date.date()
         assert response.data[topic.id]['name'] == topic.name
+
+    def test_existing_period_summary_is_reutilized(
+        self,
+        client,
+        analyst_user,
+        topic,
+        conversation_today,
+        mock_condense_summaries,
+    ):
+        """
+        A second call for the same month must *reuse* the existing PeriodSummary instead of triggering another summary.
+        """
+        client.force_authenticate(user=analyst_user)
+        url = reverse("topic-summary-data", args=[topic.id])
+
+        initial_calls = mock_condense_summaries.call_count
+        resp1 = client.get(url)
+        assert resp1.status_code == status.HTTP_200_OK
+        assert mock_condense_summaries.call_count == initial_calls + 1
+
+        resp2 = client.get(url)
+        assert resp2.status_code == status.HTTP_200_OK
+        assert mock_condense_summaries.call_count == initial_calls + 1
         
 
 @pytest.mark.django_db
