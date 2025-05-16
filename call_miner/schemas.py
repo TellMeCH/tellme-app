@@ -9,6 +9,15 @@ ID_PARAMETER_SCHEMA = OpenApiParameter(
     required=True,
 )
 
+SUMMARY_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
+    name='period',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='Summarization period (week, month, quarter)',
+    required=False,
+    default='month',
+)
+
 TREND_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
     name='trend_period',
     type=OpenApiTypes.STR,
@@ -102,12 +111,17 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
                 'type': 'integer',
                 'description': 'Number of calls included in the summary.'
             },
+            'period_label': {
+                'type': 'string',
+                'description': 'Described the period for which the summary was obtained. Three formats: 2025-W14 for weeks, 2025-03 for months, 2025-Q1 for quarters.'
+            },
         },
-        'required': ['summary', 'summary_date', 'summary_call_count'],
+        'required': ['summary', 'summary_date', 'summary_call_count', 'period_label'],
         'example': {
             'summary': {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'},
             'summary_date': '2023-10-15T12:34:56Z',
-            'summary_call_count': 150
+            'summary_call_count': 150,
+            'period_label': '2023-10'
         }
     }
 )

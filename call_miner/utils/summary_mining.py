@@ -1,6 +1,7 @@
 import time
 import json
 import logging
+import random
 from langfuse import openai, Langfuse
 import tiktoken
 from django.conf import settings
@@ -60,8 +61,9 @@ def condense_summaries(summaries: list[str], trace_data: dict):
         config_kwargs = {'langfuse_prompt': prompt}
         config_kwargs.update(prompt.config)
 
-    # Select all summaries to the point of reaching the token cutoff
+    # Randomly select summaries to the point of reaching the token cutoff
     selected_text = ''
+    random.shuffle(summaries)
     for i, summ in enumerate(summaries):
         new_part = f'Conversation #{i + 1}: {summ}'
         potential_payload = f'{prompt.prompt}\n\n{selected_text}\n\n{new_part}'
