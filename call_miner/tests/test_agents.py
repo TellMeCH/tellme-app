@@ -776,6 +776,31 @@ class TestAgentSummary:
                     label = f"{datetime.today().year}-Q{(datetime.today().month - 1) // 3 + 1}"
                     assert response.data['period_label'] == label
 
+    def test_all_summaries_uses_month_period(
+            self, client, organization_admin_user, agent, topic, conversation_today
+    ):
+        """
+        • agent → already has 1 call (from fixture) → included
+        • period label must be monthly
+        """
+        # silent agent without any conversation
+        silent_user = User.objects.create_user(
+            "silent@example.com", "password", "Silent", "Agent"
+        )
+        silent_agent = Agent.objects.create(
+            user=silent_user, organization=agent.organization
+        )
+
+        client.force_authenticate(user=organization_admin_user)
+        resp = client.get(reverse("agent-all-summaries"))
+        assert resp.status_code == status.HTTP_200_OK
+
+        data = resp.data
+        assert agent.id in data
+
+        expected_month = datetime.today().strftime("%Y-%m")
+        assert data[agent.id]["period_label"] == expected_month
+
 
 @pytest.mark.django_db
 class TestAgentManagedAgents:
