@@ -104,6 +104,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         """
         This method takes get_summary_data a step further, obtaining the summary data of all objects in the queryset.
         The response is now a dictionary, where the key corresponds to the object ID.
+        The default summarization period is 'month'. For Customers, the summarization period is 'quarter'.
         """
         queryset = self.get_queryset()
         try:

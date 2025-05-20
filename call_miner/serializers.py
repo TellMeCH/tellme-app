@@ -161,8 +161,8 @@ class MetaSummarySerializer(serializers.Serializer):
 
     def get_summary_data(self, obj):
         """
-        Summary of all conversation summaries of the object. Includes also the date of this summarization and the
-        number of calls that was taken into account for this summary.
+        Summary of all conversation summaries (for a given period) of the object. Includes also the date of this
+        summarization and the number of calls that were taken into account for this summary.
         """
         trace_data = self.context.get('trace_data', {})
         period = self.context.get('period')
