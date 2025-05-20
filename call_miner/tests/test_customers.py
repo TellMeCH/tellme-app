@@ -1,9 +1,10 @@
 import pytest
-from datetime import datetime
+import zoneinfo
+from datetime import datetime, timedelta
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Customer
+from call_miner.models import Customer, Conversation
 
 TREND_ACTIONS = ['conversations', 'trend', 'summary-data']
 
@@ -450,4 +451,72 @@ class TestCustomerActions:
             assert 'summary' in response.data
             assert response.data['summary'] == 'Mocked summary text'
             assert 'period_label' in response.data
-            assert response.data['period_label'] == datetime.today().strftime('%Y-%m')
+            today = datetime.today()
+            expected_quarter = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
+            assert response.data['period_label'] == expected_quarter
+
+    def test_all_summaries_respects_minimum_call_count_and_period(
+            self, client, organization_admin_user, agent, customer, topic, conversation_today
+    ):
+        """
+        • customer (with 1 call) → add a 2nd call so it qualifies
+        • low_customer  (1 call) → should be filtered out
+        • zero_customer (0 call) → should be filtered out
+        • period label must be quarterly
+        """
+        # make qualifying 2nd conversation for 'customer'
+        utc = zoneinfo.ZoneInfo("UTC")
+        Conversation.objects.create(
+            path="2nd",
+            date=datetime.now(tz=utc) - timedelta(hours=1),
+            duration=60,
+            title="2nd",
+            summary="x",
+            transcript="t",
+            sentiment=4.2,
+            agent=agent,
+            customer=customer,
+            input_tokens=10,
+            output_tokens=5,
+        ).topics.add(topic)
+
+        # low-customer: only 1 conversation
+        low_customer = Customer.objects.create(
+            external_id="low123",
+            organization=customer.organization,
+        )
+        Conversation.objects.create(
+            path="low",
+            date=datetime.now(tz=utc),
+            duration=30,
+            title="low",
+            summary="x",
+            transcript="t",
+            sentiment=3.5,
+            agent=agent,
+            customer=low_customer,
+            input_tokens=10,
+            output_tokens=5,
+        ).topics.add(topic)
+
+        # customer with zero calls
+        zero_customer = Customer.objects.create(
+            external_id="zero123",
+            organization=customer.organization,
+        )
+
+        client.force_authenticate(user=organization_admin_user)
+        resp = client.get(reverse("customer-all-summaries"))
+        assert resp.status_code == status.HTTP_200_OK
+
+        data = resp.data
+        # qualifying customer included
+        assert customer.id in data
+        # others excluded
+        assert low_customer.id not in data
+        assert zero_customer.id not in data
+
+        # correct period label (quarter)
+        today = datetime.today()
+        expected_quarter = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
+        assert data[customer.id]["period_label"] == expected_quarter

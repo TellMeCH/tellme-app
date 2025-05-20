@@ -748,7 +748,6 @@ class TestTopicSummary:
                 label = f"{datetime.today().year}-Q{(datetime.today().month - 1) // 3 + 1}"
                 assert response.data['period_label'] == label
 
-
     def test_all_summaries_returns_expected_content(self, client, analyst_user, topic, conversation_today):
         """
         Test that the 'all-summaries' action for all topic retrieves the expected summary data and mocks the summary
