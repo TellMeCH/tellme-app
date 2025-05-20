@@ -31,13 +31,24 @@ from call_miner.schemas import (
 class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     """
     A ViewSet to outline the actions of the MetaSummarySerializer.
+    Attributes:
+        summary_period (str): Time period by which to apply summarization
     """
+    summary_period = "month"
 
     @staticmethod
-    def define_trace_data(request, obj, name: str):
+    def get_summary_name(obj):
+        """
+        Returns the label that will be placed next to every summary.
+        Default: try obj.name, otherwise None.
+        """
+        return getattr(obj, "name", None)
+
+    def define_trace_data(self, request, obj, name: str):
         """
         This method defines trace data to be used by Langfuse when recording an LLM trace
         """
+        period = request.query_params.get("period", self.summary_period)
         if hasattr(request.user, 'employee'):
             role = request.user.employee.role.lower()
             organization = request.user.employee.organization
@@ -49,7 +60,9 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
                 role = 'unknown'
         return {
             'name': name, 'user_id': request.user.id, 'tags': [settings.TELLME_ENV],
-            'metadata': {'organization': organization, 'role': role, 'object': str(type(obj)), 'id': obj.id}
+            'metadata': {
+                'organization': organization, 'role': role, 'object': str(type(obj)), 'id': obj.id, 'period': period
+            }
         }
 
     @extend_schema(
@@ -65,15 +78,48 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     @decorators.action(detail=True, methods=['get'])
     def summary_data(self, request, pk=None):
         obj = self.get_object()
-        trace_data = self.define_trace_data(request, obj, 'get_summary_data')
-
-        # Inject trace data to the default serializer context
         context = self.get_serializer_context()
-        context['trace_data'] = trace_data
 
+        # Inject trace data and period to the default serializer context
+        trace_data = self.define_trace_data(request, obj, 'get_summary_data')
+        period = self.request.query_params.get("period", self.summary_period)
+        context['trace_data'] = trace_data
+        context['period'] = period
         serializer = self.get_serializer(obj, context=context)
         try:
             return response.Response(serializer.get_summary_data(obj))
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @extend_schema(
+        responses={
+            200: ALL_SUMMARIES_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=False, methods=['get'], url_path='all_summaries')
+    def all_summaries(self, request):
+        """
+        This method takes get_summary_data a step further, obtaining the summary data of all objects in the queryset.
+        The response is now a dictionary, where the key corresponds to the object ID.
+        """
+        queryset = self.get_queryset()
+        try:
+            summaries = {}
+            context = self.get_serializer_context()
+            context['period'] = self.summary_period
+            for obj in queryset:
+                # Inject trace data to the default serializer context
+                trace_data = self.define_trace_data(request, obj, 'get_all_summaries')
+                context['trace_data'] = trace_data
+
+                serializer = self.get_serializer(obj, context=context)
+                summary_data = serializer.get_summary_data(obj)
+                summary_data['name'] = self.get_summary_name(obj)
+                summaries[obj.id] = summary_data
+            return response.Response(summaries)
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -413,6 +459,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
+    summary_period = 'month'
 
     def get_serializer_class(self):
         if self.action in ['list', 'list_active', 'retrieve', 'list_recent']:
@@ -479,37 +526,6 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         serializer = self.get_serializer(recent_qs, many=True)
         return response.Response(serializer.data, status=status.HTTP_200_OK)
 
-    @extend_schema(
-        responses={
-            200: ALL_SUMMARIES_RESPONSE_SCHEMA,
-            400: ERROR_RESPONSE_SCHEMA,
-            403: FORBIDDEN_RESPONSE_SCHEMA,
-            404: NOT_FOUND_RESPONSE_SCHEMA
-        }
-    )
-    @decorators.action(detail=False, methods=['get'], url_path='all_summaries')
-    def all_summaries(self, request):
-        """
-        This method takes get_summary_data a step further, obtaining the summary data of all topics in the queryset.
-        The response is now a dictionary, where the key corresponds to the topic ID.
-        """
-        queryset = self.get_queryset()
-        try:
-            summaries = {}
-            for obj in queryset:
-                # Inject trace data to the default serializer context
-                context = self.get_serializer_context()
-                trace_data = self.define_trace_data(request, obj, 'get_all_summaries')
-                context['trace_data'] = trace_data
-
-                serializer = self.get_serializer(obj, context=context)
-                summary_data = serializer.get_summary_data(obj)
-                summary_data['name'] = obj.name
-                summaries[obj.id] = summary_data
-            return response.Response(summaries)
-        except ValueError as e:
-            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
     def overview(self, request, pk=None):
         # Override the inherited /overview action
         raise MethodNotAllowed("GET")
@@ -535,7 +551,7 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
             return AgentListSerializer
         elif self.action in ['retrieve', 'managed_agents']:
             return AgentDetailSerializer
-        elif self.action in ['summary_data']:
+        elif self.action in ['summary_data', 'all_summaries']:
             return MetaSummarySerializer
         elif self.action in ['conversations', 'trend', 'overview']:
             return ConversationTrendsSerializer
@@ -566,6 +582,9 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         serializer = self.get_serializer(obj)
         return response.Response(serializer.get_agent_data(obj))
 
+    def get_summary_name(self, obj):
+        return f"{obj.user.first_name} {obj.user.last_name}"
+
 
 class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
     """
@@ -577,15 +596,17 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     - Modification is only allowed to superusers
     - Viewing is allowed to any employee of the same organization (and superusers)
     """
+    MINIMUM_CALL_COUNT = 2  # Minimum number of calls for a customer to be included in all_summaries result
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-last_conversation_date', 'conversation_count']
+    summary_period = 'quarter'
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
             return CustomerListSerializer
-        elif self.action in ['summary_data']:
+        elif self.action in ['summary_data', 'all_summaries']:
             return MetaSummarySerializer
         elif self.action in ['conversations', 'trend']:
             return ConversationTrendsSerializer
@@ -598,10 +619,23 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
         Return agents that belong to the user's organization
         """
         if self.request.user.is_superuser:
-            return Customer.objects.all()
-        if self.request.user.employee.organization:
-            return Customer.objects.filter(organization=self.request.user.employee.organization)
-        return Customer.objects.none()
+            qs = Customer.objects.all()
+        elif self.request.user.employee.organization:
+            qs = Customer.objects.filter(organization=self.request.user.employee.organization)
+        else:
+            qs = Customer.objects.none()
+
+        # Optimize DB Querying for all_summaries and summary_data
+        if self.action in ['all_summaries', 'summary_data']:
+            qs = qs.prefetch_related('conversations').annotate(latest_date=Max('conversations__date'))
+
+        # Load only customers that have a minimum conversation count
+        if self.action == 'all_summaries':
+            qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT)
+        return qs
+
+    def get_summary_name(self, obj):
+        return obj.external_id
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):

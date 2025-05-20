@@ -165,8 +165,7 @@ class MetaSummarySerializer(serializers.Serializer):
         number of calls that was taken into account for this summary.
         """
         trace_data = self.context.get('trace_data', {})
-        request = self.context.get('request')
-        period = request.query_params.get('period', 'month')
+        period = self.context.get('period')
         summary, summary_date, call_count, period_label = obj.get_or_create_summary(period, trace_data)
         return {
             'summary': summary,

@@ -135,25 +135,7 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
                 'properties': {
                     'summary': {
                         'type': ['object', 'null'],
-                        'description': 'Detailed summary data for the conversation topic.',
-                        'properties': {
-                            'Reasons for Calling': {'type': 'string'},
-                            'Stages of the Customer Journey': {'type': 'string'},
-                            'Call Resolution Rates': {'type': 'string'},
-                            'Churn Potential': {'type': 'string'},
-                            'Causes for Dissatisfaction': {'type': 'string'},
-                            'Causes for Engagement': {'type': 'string'},
-                            'Suggested Actions': {'type': 'string'},
-                        },
-                        'required': [
-                            'Reasons for Calling',
-                            'Stages of the Customer Journey',
-                            'Call Resolution Rates',
-                            'Churn Potential',
-                            'Causes for Dissatisfaction',
-                            'Causes for Engagement',
-                            'Suggested Actions'
-                        ]
+                        'description': 'Detailed summary data for the object.'
                     },
                     'summary_date': {
                         'type': 'string',
@@ -164,12 +146,16 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
                         'type': 'integer',
                         'description': 'Number of calls included in the summary.'
                     },
-                    'name': {
+                    'period_label': {
                         'type': 'string',
-                        'description': 'Name of the conversation topic.'
+                        'description': 'Period over which recorded calls were taken'
+                    },
+                    'name': {
+                        'type': ['object', 'null'],
+                        'description': 'Name of the conversation topic, if the summary pertains to a topic'
                     },
                 },
-                'required': ['summary', 'summary_date', 'summary_call_count', 'name'],
+                'required': ['summary', 'summary_date', 'summary_call_count', 'period_label', 'name'],
             }
         },
         'additionalProperties': False,
