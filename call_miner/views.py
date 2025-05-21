@@ -17,6 +17,7 @@ from call_miner.serializers import (
 from call_miner.permissions import (ConversationPermission, OrganizationPermission, OrganizationAPIKeyPermission,
                                     TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
 from call_miner.utils.paginators import CustomListViewPaginator
+from call_miner.utils.period_utils import period_bounds
 from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA,
@@ -32,9 +33,13 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
     """
     A ViewSet to outline the actions of the MetaSummarySerializer.
     Attributes:
-        summary_period (str): Time period by which to apply summarization
+        summary_period (str): Time period by which to apply summarization when calling all_summaries
+        summary_order_keys (list[str]): List of keys inside the dictionary summary by which to order resulting summaries
+        summary_order_desc (bool): Indicates whether order the summary dictionaries in descending order of the order key
     """
     summary_period = "month"
+    summary_order_keys = ['summary_call_count']
+    summary_order_desc = True
 
     @staticmethod
     def get_summary_name(obj):
@@ -109,6 +114,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = self.get_queryset()
         try:
             summaries = {}
+            ordering = {}
             context = self.get_serializer_context()
             context['period'] = self.summary_period
             for obj in queryset:
@@ -120,7 +126,23 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
                 summary_data = serializer.get_summary_data(obj)
                 summary_data['name'] = self.get_summary_name(obj)
                 summaries[obj.id] = summary_data
-            return response.Response(summaries)
+
+                # Extract the order of this summary item
+                order_value = summary_data.copy()
+                for key in self.summary_order_keys:
+                    order_value = order_value.get(key)
+                ordering[obj.id] = order_value
+
+            # Sort the resulting summary data by the ordering
+            print(ordering)
+            sorted_summaries = dict(sorted(
+                    summaries.items(),
+                    key=lambda item: ordering[item[0]],
+                    reverse=self.summary_order_desc
+                )
+            )
+            print(sorted_summaries.keys())
+            return response.Response(sorted_summaries)
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -461,6 +483,8 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
     summary_period = 'month'
+    summary_order_keys = ['summary_call_count']
+    summary_order_desc = True
 
     def get_serializer_class(self):
         if self.action in ['list', 'list_active', 'retrieve', 'list_recent']:
@@ -486,7 +510,12 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
 
         # Optimize DB Querying for all_summaries and summary_data
         if self.action in ['all_summaries', 'summary_data', 'list_recent']:
-            qs = qs.prefetch_related('conversations').annotate(latest_date=Max('conversations__date'))
+            qs = qs.prefetch_related('conversations')
+
+        # If the action is 'all_summaries' fetch only those topics that would contribute to the period's summary
+        if self.action == 'all_summaries':
+            start, end, label = period_bounds(self.summary_period)
+            qs = qs.filter(last_conversation_date__gte=start)
 
         # If the action is 'list_active', also do the is_active filter:
         if self.action == 'list_active':
@@ -516,7 +545,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
         """
         qs = self.get_queryset()
         one_year_ago = datetime.now(tz=zoneinfo.ZoneInfo("UTC")) - timedelta(days=365)
-        recent_qs = qs.filter(latest_date__gte=one_year_ago)  # Excludes topics with latest_date = None
+        recent_qs = qs.filter(last_conversation_date__gte=one_year_ago)  # Excludes topics with no conversations
 
         # Paginate and return
         page = self.paginate_queryset(recent_qs)
@@ -603,6 +632,8 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-last_conversation_date', 'conversation_count']
     summary_period = 'quarter'
+    summary_order_keys = ['summary', 'Customer Value']
+    summary_order_desc = True
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
@@ -628,11 +659,12 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
 
         # Optimize DB Querying for all_summaries and summary_data
         if self.action in ['all_summaries', 'summary_data']:
-            qs = qs.prefetch_related('conversations').annotate(latest_date=Max('conversations__date'))
+            qs = qs.prefetch_related('conversations')
 
-        # Load only customers that have a minimum conversation count
+        # Load only customers that have a minimum conversation count and would have a summary for the period
         if self.action == 'all_summaries':
-            qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT)
+            start, end, label = period_bounds(self.summary_period)
+            qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT).filter(last_conversation_date__gte=start)
         return qs
 
     def get_summary_name(self, obj):
