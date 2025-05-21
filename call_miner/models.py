@@ -72,8 +72,8 @@ class MetaSummaryAbstractModel(models.Model):
         if call_count == 0:
             return None, None, 0, label
 
-        # Check if the object was fetched from a queryset that annotated 'latest_date',
-        latest_date = getattr(self, 'latest_date', None)
+        # Check if the object has an attribute 'last_conversation_date' from ConversationStatsAbstractModel
+        latest_date = getattr(self, 'last_conversation_date', None)
         if latest_date is None:
             latest_date = self.conversations.order_by("-date").values_list("date", flat=True).first()
 
