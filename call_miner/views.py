@@ -527,7 +527,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
 
         # If the action is 'all_summaries' fetch only those topics that would contribute to the period's summary
         if self.action == 'all_summaries':
-            start, end, label = period_bounds(self.summary_period)
+            start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
             qs = qs.filter(last_conversation_date__gte=start)
 
         # If the action is 'list_active', also do the is_active filter:
@@ -677,7 +677,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
 
         # Load only customers that have a minimum conversation count and would have a summary for the period
         if self.action == 'all_summaries':
-            start, end, label = period_bounds(self.summary_period)
+            start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
             qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT).filter(last_conversation_date__gte=start)
         return qs
 
