@@ -166,7 +166,10 @@ class MetaSummarySerializer(serializers.Serializer):
         """
         trace_data = self.context.get('trace_data', {})
         period = self.context.get('period')
-        summary, summary_date, call_count, period_label = obj.get_or_create_summary(period, trace_data)
+        rolling = self.context.get('rolling')
+        if isinstance(rolling, str):
+            rolling = rolling.lower() == 'true'
+        summary, summary_date, call_count, period_label = obj.get_or_create_summary(period, rolling, trace_data)
         return {
             'summary': summary,
             'summary_date': summary_date,

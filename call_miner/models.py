@@ -55,25 +55,25 @@ class MetaSummaryAbstractModel(models.Model):
         abstract = True
 
     @transaction.atomic
-    def get_or_create_summary(self, period: str = 'month', trace_data: dict | None = None):
+    def get_or_create_summary(self, period: str = 'month', rolling: bool = False, trace_data: dict | None = None):
         """
         Extract all the object's related conversations, as well as their summaries, for the specified time period.
         If enough new summaries have been produced, condense them into a new meta-summary for the object.
         Args:
             period (str): Period of conversations to focus on. One of 'week', 'month', or 'quarter'
+            rolling (bool): Indicates whether to compute the summary on a rolling window basis or not
             trace_data (dict): A dictionary containing data to store in the corresponding Langfuse trace
         """
         trace_data = trace_data or {}
-        start, end, label = period_bounds(period)
+        start, end, label = period_bounds(period, rolling)
 
         # Extract all conversations in the relevant time period
         conversations = self.conversations.filter(date__gte=start, date__lt=end)
-        call_count = conversations.count()  # Current number of calls
-        if call_count == 0:
+        if not conversations.exists():
             return None, None, 0, label
 
-        # Check if the object was fetched from a queryset that annotated 'latest_date',
-        latest_date = getattr(self, 'latest_date', None)
+        # Check if the object has an attribute 'last_conversation_date' from ConversationStatsAbstractModel
+        latest_date = getattr(self, 'last_conversation_date', None)
         if latest_date is None:
             latest_date = self.conversations.order_by("-date").values_list("date", flat=True).first()
 
@@ -91,9 +91,11 @@ class MetaSummaryAbstractModel(models.Model):
             )
         )
 
+        # Examine whether re-calculating a summary is needed (call_count is the current conversation count)
+        needs_refresh, call_count = self._needs_refresh(summary, conversations, rolling, start)
+
         # If no refresh is needed, return existing summary
-        # Note: summary.call_count is number of calls at the time of that summary
-        if not created and not self._needs_refresh(summary.call_count, call_count):
+        if not created and not needs_refresh:
             return summary.summary, latest_date, call_count, label
 
         # Otherwise, perform the summarization anew
@@ -108,16 +110,41 @@ class MetaSummaryAbstractModel(models.Model):
         summary.save(update_fields=["summary", "call_count", "last_call_at"])
         return new_summary, latest_date, call_count, label
 
-    def _needs_refresh(self, previous: int, current: int) -> bool:
+    def _needs_refresh(
+            self, summary: PeriodSummary, conversations: models.query.QuerySet, rolling: bool, window_start: datetime
+    ) -> bool:
         """
-        Determine whether enough new calls have been created associated to the agent/customer/topic to warrant a
-        summary re-calculation
+        Decide whether the summary should be recalculated based on conversation volume changes.
+
+        In period based mode, if the conversation count has changed significantly, a refresh is triggered
+        In rolling mode, if enough new conversations have been added or the previous summary is too old,
+        a refresh is triggered.
+
+        Parameters:
+            summary : PeriodSummary, The existing summary object to compare against.
+            conversations : QuerySet, All conversations within the target time window.
+            rolling : bool, Whether the summary is for a rolling window (uses new conversations after last_call_at).
+            window_start: datetime, Date bound of the time window used to obtain relevant conversations
+
+        Returns:
+        (needs_refresh, current_count) : tuple[bool, int]
+            - True if a summary refresh is needed, False otherwise.
+            - The current number of relevant conversations.
         """
-        # Calculate the percentage deviation
+        current = conversations.count()
+        previous = summary.call_count
         if previous == 0:
-            return current > 0
-        deviation = abs(current - previous) * 100 / previous
-        return deviation > self.DEVIATION_THRESHOLD
+            return current > 0, current
+        if not rolling:
+            deviation = abs(current - previous) * 100 / previous
+        else:
+            old_latest_call = summary.last_call_at
+            if window_start > old_latest_call:
+                deviation = self.DEVIATION_THRESHOLD + 1
+            else:
+                new_call_count = conversations.filter(date__gt=old_latest_call).count()
+                deviation = new_call_count * 100 / previous
+        return deviation > self.DEVIATION_THRESHOLD, current
 
 
 class ConversationStatsAbstractModel(models.Model):
