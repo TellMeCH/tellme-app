@@ -728,24 +728,37 @@ class TestTopicSummary:
 
         client.force_authenticate(user=analyst_user)
         url = reverse('topic-summary-data', args=[topic.id])
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'summary' in response.data
+        assert response.data['summary'] == {
+            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
+        }
+        assert response.data['summary_call_count'] == 1
+        assert response.data['summary_date'].date() == conversation_today.date.date()
+        assert 'period_label' in response.data
+        assert response.data['period_label'] == 'Rolling30D'
 
         for period in ['week', 'month', 'quarter']:
-            response = client.get(url, {'period': period})
-            assert response.status_code == status.HTTP_200_OK
-            assert 'summary' in response.data
-            assert response.data['summary'] == {
-                'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
-            }
-            assert response.data['summary_call_count'] == 1
-            assert response.data['summary_date'].date() == conversation_today.date.date()
-            assert 'period_label' in response.data
-
-            if period == 'month':
-                assert response.data['period_label'] == datetime.today().strftime('%Y-%m')
-            elif period == 'week':
-                assert response.data['period_label'] == datetime.today().strftime("%G-W%V")
-            else:
-                label = f"{datetime.today().year}-Q{(datetime.today().month - 1) // 3 + 1}"
+            for rolling in [True, False]:
+                response = client.get(url, {'period': period, 'rolling': rolling})
+                assert response.status_code == status.HTTP_200_OK
+                assert 'summary' in response.data
+                assert response.data['summary'] == {
+                    'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
+                }
+                assert 'period_label' in response.data
+                if rolling:
+                    days = {'week': 7, 'month': 30, 'quarter': 90}
+                    label = f'Rolling{days[period]}D'
+                else:
+                    today = datetime.today()
+                    if period == 'week':
+                        label = today.strftime("%G-W%V")
+                    elif period == 'month':
+                        label = today.strftime("%Y-%m")
+                    else:
+                        label = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
                 assert response.data['period_label'] == label
 
     def test_all_summaries_returns_expected_content(self, client, analyst_user, topic, conversation_today):
@@ -764,6 +777,7 @@ class TestTopicSummary:
         assert response.data[topic.id]['summary_call_count'] == 1
         assert response.data[topic.id]['summary_date'].date() == conversation_today.date.date()
         assert response.data[topic.id]['name'] == topic.name
+        assert response.data[topic.id]['period_label'] == 'Rolling30D'
 
     def test_existing_period_summary_is_reutilized(
         self,

@@ -451,9 +451,27 @@ class TestCustomerActions:
             assert 'summary' in response.data
             assert response.data['summary'] == 'Mocked summary text'
             assert 'period_label' in response.data
-            today = datetime.today()
-            expected_quarter = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
-            assert response.data['period_label'] == expected_quarter
+            assert response.data['period_label'] == 'Rolling90D'
+
+            for period in ['week', 'month', 'quarter']:
+                for rolling in [True, False]:
+                    response = client.get(url, {'period': period, 'rolling': rolling})
+                    assert response.status_code == status.HTTP_200_OK
+                    assert 'summary' in response.data
+                    assert response.data['summary'] == 'Mocked summary text'
+                    assert 'period_label' in response.data
+                    if rolling:
+                        days = {'week': 7, 'month': 30, 'quarter': 90}
+                        label = f'Rolling{days[period]}D'
+                    else:
+                        today = datetime.today()
+                        if period == 'week':
+                            label = today.strftime("%G-W%V")
+                        elif period == 'month':
+                            label = today.strftime("%Y-%m")
+                        else:
+                            label = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
+                    assert response.data['period_label'] == label
 
     def test_all_summaries_respects_minimum_call_count_and_period(
             self, client, organization_admin_user, agent, customer, topic, conversation_today
@@ -517,6 +535,4 @@ class TestCustomerActions:
         assert zero_customer.id not in data
 
         # correct period label (quarter)
-        today = datetime.today()
-        expected_quarter = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
-        assert data[customer.id]["period_label"] == expected_quarter
+        assert data[customer.id]["period_label"] == 'Rolling90D'
