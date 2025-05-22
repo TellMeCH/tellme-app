@@ -18,6 +18,15 @@ SUMMARY_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
     default='month',
 )
 
+SUMMARY_ROLLING_PARAMETER_SCHEMA = OpenApiParameter(
+    name='rolling',
+    type=OpenApiTypes.BOOL,
+    location=OpenApiParameter.QUERY,
+    description='Whether the summarization window is rolling (week, month, quarter)',
+    required=False,
+    default=False,
+)
+
 TREND_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
     name='trend_period',
     type=OpenApiTypes.STR,

@@ -20,12 +20,13 @@ from call_miner.utils.paginators import CustomListViewPaginator
 from call_miner.utils.period_utils import period_bounds
 from call_miner.authentication import FirebaseAuthentication
 from call_miner.schemas import (
-    ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA,
-    CONVERSATIONS_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA, ORGANIZATION_TREND_RESPONSE_SCHEMA,
-    TREND_PERIOD_PARAMETER_SCHEMA, OVERVIEW_RESPONSE_SCHEMA, ORGANIZATION_OVERVIEW_RESPONSE_SCHEMA,
-    PER_TOPIC_PARAMETER_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA, REGENERATE_API_KEY_RESPONSE_SCHEMA,
-    SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA, LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA,
-    MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA, NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
+    ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA,
+    SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA, CONVERSATIONS_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA,
+    ORGANIZATION_TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, OVERVIEW_RESPONSE_SCHEMA,
+    ORGANIZATION_OVERVIEW_RESPONSE_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
+    REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
+    LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
+    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
 )
 
 
@@ -36,10 +37,12 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         summary_period (str): Time period by which to apply summarization when calling all_summaries
         summary_order_keys (list[str]): List of keys inside the dictionary summary by which to order resulting summaries
         summary_order_desc (bool): Indicates whether order the summary dictionaries in descending order of the order key
+        summary_rolling_window (bool): Indicates whether to use a rolling window when selecting conversations
     """
     summary_period = "month"
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
+    summary_rolling_window = False
 
     @staticmethod
     def get_summary_name(obj):
@@ -54,6 +57,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         This method defines trace data to be used by Langfuse when recording an LLM trace
         """
         period = request.query_params.get("period", self.summary_period)
+        rolling = request.query_params.get("rolling", self.summary_rolling_window)
         if hasattr(request.user, 'employee'):
             role = request.user.employee.role.lower()
             organization = request.user.employee.organization
@@ -66,13 +70,18 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         return {
             'name': name, 'user_id': request.user.id, 'tags': [settings.TELLME_ENV],
             'metadata': {
-                'organization': organization, 'role': role, 'object': str(type(obj)), 'id': obj.id, 'period': period
+                'organization': organization,
+                'role': role,
+                'object': str(type(obj)),
+                'id': obj.id,
+                'period': period,
+                'rolling': rolling
             }
         }
 
     @extend_schema(
         description=MetaSummarySerializer.get_summary_data.__doc__,
-        parameters=[ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA],
+        parameters=[ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA],
         responses={
             200: SUMMARY_DATA_RESPONSE_SCHEMA,
             400: ERROR_RESPONSE_SCHEMA,
@@ -88,8 +97,10 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         # Inject trace data and period to the default serializer context
         trace_data = self.define_trace_data(request, obj, 'get_summary_data')
         period = self.request.query_params.get("period", self.summary_period)
+        rolling = self.request.query_params.get("rolling", self.summary_rolling_window)
         context['trace_data'] = trace_data
         context['period'] = period
+        context['rolling'] = rolling
         serializer = self.get_serializer(obj, context=context)
         try:
             return response.Response(serializer.get_summary_data(obj))
@@ -117,6 +128,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
             ordering = {}
             context = self.get_serializer_context()
             context['period'] = self.summary_period
+            context['rolling'] = self.summary_rolling_window
             for obj in queryset:
                 # Inject trace data to the default serializer context
                 trace_data = self.define_trace_data(request, obj, 'get_all_summaries')
@@ -134,14 +146,14 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
                 ordering[obj.id] = order_value
 
             # Sort the resulting summary data by the ordering
-            print(ordering)
+            # NOTE: Ordering does not work because the dict response is re-sorted when JSONified.
+            # Would have to return a list for this ordering to stick
             sorted_summaries = dict(sorted(
                     summaries.items(),
                     key=lambda item: ordering[item[0]],
                     reverse=self.summary_order_desc
                 )
             )
-            print(sorted_summaries.keys())
             return response.Response(sorted_summaries)
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -485,6 +497,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     summary_period = 'month'
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
+    summary_rolling_window = True
 
     def get_serializer_class(self):
         if self.action in ['list', 'list_active', 'retrieve', 'list_recent']:
@@ -634,6 +647,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     summary_period = 'quarter'
     summary_order_keys = ['summary', 'Customer Value']
     summary_order_desc = True
+    summary_rolling_window = True
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
