@@ -11,6 +11,8 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
     """
     Authentication class for Django Rest Framework to authenticate requests using JWT Bearer Tokens supplied by a
     Firebase application.
+
+    Used for authenticating call to ViewSets
     """
     HEADER_SCHEMA = 'Bearer '
 
