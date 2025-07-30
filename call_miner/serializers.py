@@ -336,16 +336,6 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
         return obj.employees.count()
 
 
-class OrganizationAPIKeyListSerializer(serializers.ModelSerializer):
-    """
-    Read-only serializer for listing or retrieving existing API keys. Only exposes name, created, expires.
-    """
-    class Meta:
-        model = OrganizationAPIKey
-        fields = ['id', 'name', 'created', 'expires']
-        read_only_fields = fields
-
-
 class OrganizationAPIKeyModifySerializer(serializers.ModelSerializer):
     """
     Serializer for creating and deleting an API key. Accepts the name of the key and the organization ID.
@@ -422,6 +412,16 @@ class OrganizationAPIKeyModifySerializer(serializers.ModelSerializer):
             'organization': organization,
             'plain_key': plain_key
         }
+
+
+class OrganizationAPIKeyListSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for listing or retrieving existing API keys. Only exposes name, created, expires.
+    """
+    class Meta:
+        model = OrganizationAPIKey
+        fields = ['id', 'name', 'created', 'expires']
+        read_only_fields = fields
 
 
 class TopicModifySerializer(serializers.ModelSerializer):
