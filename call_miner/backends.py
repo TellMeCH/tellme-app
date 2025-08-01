@@ -15,6 +15,8 @@ class FirebaseEmailPasswordBackend(BaseBackend):
     Custom authentication backend to sign in users with email and password
     via Firebase's Identity Toolkit REST API. If successful, an ID token is
     returned, which we verify using firebase_admin.
+
+    Used when authenticating to the admin page
     """
 
     def authenticate(self, request, username=None, password=None, **kwargs):
