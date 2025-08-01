@@ -2,6 +2,9 @@ from drf_spectacular.extensions import OpenApiAuthenticationExtension
 
 
 class FirebaseAuthenticationScheme(OpenApiAuthenticationExtension):
+    """
+    Authentication Extension used only for documentation purposes (hence the OpenAPI)
+    """
     target_class = 'call_miner.authentication.FirebaseAuthentication'
     name = 'BearerAuth'
 
