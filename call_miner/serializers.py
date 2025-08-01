@@ -161,15 +161,20 @@ class MetaSummarySerializer(serializers.Serializer):
 
     def get_summary_data(self, obj):
         """
-        Summary of all conversation summaries of the object. Includes also the date of this summarization and the
-        number of calls that was taken into account for this summary.
+        Summary of all conversation summaries (for a given period) of the object. Includes also the date of this
+        summarization and the number of calls that were taken into account for this summary.
         """
         trace_data = self.context.get('trace_data', {})
-        obj.get_or_create_summary(trace_data)
+        period = self.context.get('period')
+        rolling = self.context.get('rolling')
+        if isinstance(rolling, str):
+            rolling = rolling.lower() == 'true'
+        summary, summary_date, call_count, period_label = obj.get_or_create_summary(period, rolling, trace_data)
         return {
-            'summary': obj.summary,
-            'summary_date': obj.summary_date,
-            'summary_call_count': obj.summary_call_count
+            'summary': summary,
+            'summary_date': summary_date,
+            'summary_call_count': call_count,
+            'period_label': period_label
         }
 
 
@@ -331,16 +336,6 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
         return obj.employees.count()
 
 
-class OrganizationAPIKeyListSerializer(serializers.ModelSerializer):
-    """
-    Read-only serializer for listing or retrieving existing API keys. Only exposes name, created, expires.
-    """
-    class Meta:
-        model = OrganizationAPIKey
-        fields = ['id', 'name', 'created', 'expires']
-        read_only_fields = fields
-
-
 class OrganizationAPIKeyModifySerializer(serializers.ModelSerializer):
     """
     Serializer for creating and deleting an API key. Accepts the name of the key and the organization ID.
@@ -417,6 +412,16 @@ class OrganizationAPIKeyModifySerializer(serializers.ModelSerializer):
             'organization': organization,
             'plain_key': plain_key
         }
+
+
+class OrganizationAPIKeyListSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for listing or retrieving existing API keys. Only exposes name, created, expires.
+    """
+    class Meta:
+        model = OrganizationAPIKey
+        fields = ['id', 'name', 'created', 'expires']
+        read_only_fields = fields
 
 
 class TopicModifySerializer(serializers.ModelSerializer):
@@ -635,28 +640,6 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
 
 
-class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):
-    """
-    Serializer user to list Employee instances.
-    """
-    user = UserSerializer()
-    organization = serializers.HyperlinkedRelatedField(
-        view_name='organization-detail',
-        read_only=True,
-        help_text='Link to associated organization'
-    )
-    manager = serializers.HyperlinkedRelatedField(
-        view_name='employee-detail',
-        read_only=True,
-        help_text='Link to employee manager'
-    )
-
-    class Meta:
-        model = Employee
-        fields = ['url', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
-        read_only_fields = ['created', 'updated']
-
-
 class EmployeeModifySerializer(serializers.ModelSerializer):
     """
     This serializer is used for superusers and organization admins to create new Employees. It contains separate methods
@@ -800,3 +783,25 @@ class EmployeeModifySerializer(serializers.ModelSerializer):
             instance.agent.manager = manager
             instance.agent.save()
         return instance
+
+
+class EmployeeListSerializer(serializers.HyperlinkedModelSerializer):
+    """
+    Serializer user to list Employee instances.
+    """
+    user = UserSerializer()
+    organization = serializers.HyperlinkedRelatedField(
+        view_name='organization-detail',
+        read_only=True,
+        help_text='Link to associated organization'
+    )
+    manager = serializers.HyperlinkedRelatedField(
+        view_name='employee-detail',
+        read_only=True,
+        help_text='Link to employee manager'
+    )
+
+    class Meta:
+        model = Employee
+        fields = ['url', 'organization', 'user', 'role', 'manager', 'is_organization_admin', 'created', 'updated']
+        read_only_fields = ['created', 'updated']

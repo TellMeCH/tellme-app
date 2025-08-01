@@ -137,7 +137,6 @@ class ProcessRecordingView(APIView):
         logger.info(f"Processing file {file_name}")
         processing_start = datetime.datetime.now()
 
-        # Enrich data using your pipeline
         try:
             enriched_data = self.pipeline(
                 file_name,

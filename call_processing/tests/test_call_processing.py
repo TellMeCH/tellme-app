@@ -105,7 +105,7 @@ class TestCallProcessingPipeline:
                 agent_id=123,
                 timestamp="2024-01-01T12:00:00"
             )
-        assert "Detected language changed suddenly" in str(exc.value)
+        assert "Language changed suddenly from" in str(exc.value)
 
     def test_enrich_recording_structure(self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse):
         """

@@ -1,15 +1,21 @@
 import time
 import json
 import logging
+import random
 from langfuse import openai, Langfuse
 import tiktoken
 from django.conf import settings
-from call_miner.utils.fallback_prompt import SUMMARIZER_PROMPT, PROMPT_CONFIG
+from call_miner.utils.fallback_prompt import SUMMARIZER_PROMPTS, PROMPT_CONFIGS
 
 
 logger = logging.getLogger("django")
-TOKEN_CUTOFF = 120000
 openai.api_key = settings.OPENAI_API_KEY
+TOKEN_CUTOFF = 120000
+PROMPT_MAPPING = {
+    "<class 'call_miner.models.Topic'>": "summary_mining",
+    "<class 'call_miner.models.Customer'>": "customer_summary",
+    "<class 'call_miner.models.Agent'>": "agent_summary",
+}
 
 
 def count_tokens(text: str, model_name: str) -> int:
@@ -45,23 +51,37 @@ def condense_summaries(summaries: list[str], trace_data: dict):
 
     client = openai.OpenAI()
 
+    # Retrieve object class based on trace data
+    metadata = trace_data.get('metadata')
+    if 'object' not in metadata:
+        raise ValueError(f'Invalid trace_data. Could not extract object type from metadata field {metadata}.')
+    else:
+        object_type = metadata.get('object')
+
+    # Determine prompts and configs to use based on object_type
+    if object_type not in PROMPT_MAPPING:
+        raise ValueError(f'Object of type {object_type} is not expected to receive summarization.')
+    else:
+        prompt_category = PROMPT_MAPPING[object_type]
+
     # Prompt with Fallback
     # Perhaps in the future it is necessary to add the organization_type as an input, to load different summarizer
     # prompts according to the company. For example, different questions might be relevant to marketing compared to
     # sales teams.
     prompt = Langfuse().get_prompt(
-        'summary_mining',
+        prompt_category,
         label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
-        fallback=SUMMARIZER_PROMPT
+        fallback=SUMMARIZER_PROMPTS[prompt_category]
     )
     if prompt.is_fallback:
-        config_kwargs = PROMPT_CONFIG
+        config_kwargs = PROMPT_CONFIGS[prompt_category]
     else:
         config_kwargs = {'langfuse_prompt': prompt}
         config_kwargs.update(prompt.config)
 
-    # Select all summaries to the point of reaching the token cutoff
+    # Randomly select summaries to the point of reaching the token cutoff
     selected_text = ''
+    random.shuffle(summaries)
     for i, summ in enumerate(summaries):
         new_part = f'Conversation #{i + 1}: {summ}'
         potential_payload = f'{prompt.prompt}\n\n{selected_text}\n\n{new_part}'

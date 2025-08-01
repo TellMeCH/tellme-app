@@ -9,6 +9,24 @@ ID_PARAMETER_SCHEMA = OpenApiParameter(
     required=True,
 )
 
+SUMMARY_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
+    name='period',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='Summarization period (week, month, quarter)',
+    required=False,
+    default='month',
+)
+
+SUMMARY_ROLLING_PARAMETER_SCHEMA = OpenApiParameter(
+    name='rolling',
+    type=OpenApiTypes.BOOL,
+    location=OpenApiParameter.QUERY,
+    description='Whether the summarization window is rolling (week, month, quarter)',
+    required=False,
+    default=False,
+)
+
 TREND_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
     name='trend_period',
     type=OpenApiTypes.STR,
@@ -102,12 +120,17 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
                 'type': 'integer',
                 'description': 'Number of calls included in the summary.'
             },
+            'period_label': {
+                'type': 'string',
+                'description': 'Described the period for which the summary was obtained. Three formats: 2025-W14 for weeks, 2025-03 for months, 2025-Q1 for quarters.'
+            },
         },
-        'required': ['summary', 'summary_date', 'summary_call_count'],
+        'required': ['summary', 'summary_date', 'summary_call_count', 'period_label'],
         'example': {
             'summary': {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'},
             'summary_date': '2023-10-15T12:34:56Z',
-            'summary_call_count': 150
+            'summary_call_count': 150,
+            'period_label': '2023-10'
         }
     }
 )
@@ -121,25 +144,7 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
                 'properties': {
                     'summary': {
                         'type': ['object', 'null'],
-                        'description': 'Detailed summary data for the conversation topic.',
-                        'properties': {
-                            'Reasons for Calling': {'type': 'string'},
-                            'Stages of the Customer Journey': {'type': 'string'},
-                            'Call Resolution Rates': {'type': 'string'},
-                            'Churn Potential': {'type': 'string'},
-                            'Causes for Dissatisfaction': {'type': 'string'},
-                            'Causes for Engagement': {'type': 'string'},
-                            'Suggested Actions': {'type': 'string'},
-                        },
-                        'required': [
-                            'Reasons for Calling',
-                            'Stages of the Customer Journey',
-                            'Call Resolution Rates',
-                            'Churn Potential',
-                            'Causes for Dissatisfaction',
-                            'Causes for Engagement',
-                            'Suggested Actions'
-                        ]
+                        'description': 'Detailed summary data for the object.'
                     },
                     'summary_date': {
                         'type': 'string',
@@ -150,12 +155,16 @@ ALL_SUMMARIES_RESPONSE_SCHEMA = OpenApiResponse(
                         'type': 'integer',
                         'description': 'Number of calls included in the summary.'
                     },
-                    'name': {
+                    'period_label': {
                         'type': 'string',
-                        'description': 'Name of the conversation topic.'
+                        'description': 'Period over which recorded calls were taken'
+                    },
+                    'name': {
+                        'type': ['object', 'null'],
+                        'description': 'Name of the conversation topic, if the summary pertains to a topic'
                     },
                 },
-                'required': ['summary', 'summary_date', 'summary_call_count', 'name'],
+                'required': ['summary', 'summary_date', 'summary_call_count', 'period_label', 'name'],
             }
         },
         'additionalProperties': False,

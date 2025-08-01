@@ -281,6 +281,7 @@ class CallProcessingPipeline:
             fallback_exceptions = fallback_exceptions[transcription_method]
 
         # Hierarchy: file > chunk
+        # Note: If files are very big wrt chunks, might have to retain chunks instead of deleting them in failure cases
         if file_name.endswith('.wav'):
             target_paths = [file_name]
         else:
@@ -302,22 +303,24 @@ class CallProcessingPipeline:
             total_duration += file_duration
             total_size += len(file_data)
             chunk_count += len(recording_chunks)
+            file_transcript = ''
 
-            for i, chunk in enumerate(recording_chunks):
-                try:
-                    chunk_transcript, chunk_language = methods[transcription_method](chunk)
-                except fallback_exceptions:
-                    base_language = None
-                    full_transcript = ''
-                    go_to_fallback = True
-                    break
-                if not full_transcript:
-                    base_language = chunk_language
-                    full_transcript = chunk_transcript
-                else:
-                    if base_language != chunk_language:
-                        raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
-                    full_transcript += '\n' + chunk_transcript
+            if not go_to_fallback:
+                for i, chunk in enumerate(recording_chunks):
+                    try:
+                        chunk_transcript, chunk_language = methods[transcription_method](chunk)
+                    except fallback_exceptions:  # Main method failed, switch permanently to fallback
+                        base_language = None
+                        file_transcript = ''  # Delete whatever was transcribed for the current file
+                        go_to_fallback = True
+                        break
+                    if not file_transcript:
+                        base_language = chunk_language
+                        file_transcript = chunk_transcript
+                    else:
+                        if base_language != chunk_language:
+                            raise Warning(f'Language changed suddenly from {base_language} to {chunk_language}.')
+                        file_transcript += '\n' + chunk_transcript
 
             if go_to_fallback:
                 for i, chunk in enumerate(recording_chunks):
@@ -325,13 +328,18 @@ class CallProcessingPipeline:
                         chunk_transcript, chunk_language = methods[fallback_name](chunk)
                     except Exception as e:
                         raise RuntimeError(f'Could not proceed with fallback transcription method. Stack trace:\n{e}')
-                    if not full_transcript:
+                    if not file_transcript:
                         base_language = chunk_language
-                        full_transcript = chunk_transcript
+                        file_transcript = chunk_transcript
                     else:
                         if base_language != chunk_language:
-                            raise Warning(f'Detected language changed suddenly from {base_language} to {chunk_language}.')
-                        full_transcript += '\n' + chunk_transcript
+                            raise Warning(f'Language changed suddenly from {base_language} to {chunk_language}.')
+                        file_transcript += '\n' + chunk_transcript
+
+            if not full_transcript:
+                full_transcript = file_transcript
+            else:
+                full_transcript += '\n' + file_transcript
 
             if base_language is None:
                 base_language = "unknown"
@@ -393,7 +401,7 @@ class CallProcessingPipeline:
         Transcribes a single audio chunk using the Deepgram API, with exponential backoff on 429 responses.
 
         Decorated with @observe() so each chunk call is a child observation under the main trace.
-        This allows you to associate each chunk call to Deepgram with a separate observation in Langfuse.
+        This allows to associate each chunk call to Deepgram with a separate observation in Langfuse.
 
         Args:
             chunk_data (bytes): The raw binary data of the audio chunk.
@@ -452,7 +460,7 @@ class CallProcessingPipeline:
         Transcribes a single audio chunk using the Groq Speech API, with exponential backoff on 429 responses.
 
         Decorated with @observe() so each chunk call is a child observation under the main trace.
-        This allows you to associate each chunk call to Groq with a separate observation in Langfuse.
+        This allows to associate each chunk call to Groq with a separate observation in Langfuse.
 
         Args:
             chunk_data (bytes): The raw binary data of the audio chunk.

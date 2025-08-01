@@ -1,8 +1,10 @@
 import pytest
+import zoneinfo
+from datetime import datetime, timedelta
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Customer
+from call_miner.models import Customer, Conversation
 
 TREND_ACTIONS = ['conversations', 'trend', 'summary-data']
 
@@ -436,7 +438,7 @@ class TestCustomerActions:
         assert results[0]['topic_name'] == str(conversation.topics.all()[0])
         assert 'topic_id' in results[0]
 
-    def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer, conversation):
+    def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer, conversation_today):
         """
         Test that the 'summary-data' action for a customer retrieves the expected summary data.
         """
@@ -448,3 +450,89 @@ class TestCustomerActions:
             assert response.status_code == status.HTTP_200_OK
             assert 'summary' in response.data
             assert response.data['summary'] == 'Mocked summary text'
+            assert 'period_label' in response.data
+            assert response.data['period_label'] == 'Rolling90D'
+
+            for period in ['week', 'month', 'quarter']:
+                for rolling in [True, False]:
+                    response = client.get(url, {'period': period, 'rolling': rolling})
+                    assert response.status_code == status.HTTP_200_OK
+                    assert 'summary' in response.data
+                    assert response.data['summary'] == 'Mocked summary text'
+                    assert 'period_label' in response.data
+                    if rolling:
+                        days = {'week': 7, 'month': 30, 'quarter': 90}
+                        label = f'Rolling{days[period]}D'
+                    else:
+                        today = datetime.today()
+                        if period == 'week':
+                            label = today.strftime("%G-W%V")
+                        elif period == 'month':
+                            label = today.strftime("%Y-%m")
+                        else:
+                            label = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
+                    assert response.data['period_label'] == label
+
+    def test_all_summaries_respects_minimum_call_count_and_period(
+            self, client, organization_admin_user, agent, customer, topic, conversation_today
+    ):
+        """
+        • customer (with 1 call) → add a 2nd call so it qualifies
+        • low_customer  (1 call) → should be filtered out
+        • zero_customer (0 call) → should be filtered out
+        • period label must be quarterly
+        """
+        # make qualifying 2nd conversation for 'customer'
+        utc = zoneinfo.ZoneInfo("UTC")
+        Conversation.objects.create(
+            path="2nd",
+            date=datetime.now(tz=utc) - timedelta(hours=1),
+            duration=60,
+            title="2nd",
+            summary="x",
+            transcript="t",
+            sentiment=4.2,
+            agent=agent,
+            customer=customer,
+            input_tokens=10,
+            output_tokens=5,
+        ).topics.add(topic)
+
+        # low-customer: only 1 conversation
+        low_customer = Customer.objects.create(
+            external_id="low123",
+            organization=customer.organization,
+        )
+        Conversation.objects.create(
+            path="low",
+            date=datetime.now(tz=utc),
+            duration=30,
+            title="low",
+            summary="x",
+            transcript="t",
+            sentiment=3.5,
+            agent=agent,
+            customer=low_customer,
+            input_tokens=10,
+            output_tokens=5,
+        ).topics.add(topic)
+
+        # customer with zero calls
+        zero_customer = Customer.objects.create(
+            external_id="zero123",
+            organization=customer.organization,
+        )
+
+        client.force_authenticate(user=organization_admin_user)
+        resp = client.get(reverse("customer-all-summaries"))
+        assert resp.status_code == status.HTTP_200_OK
+
+        data = resp.data
+        # qualifying customer included
+        assert customer.id in data
+        # others excluded
+        assert low_customer.id not in data
+        assert zero_customer.id not in data
+
+        # correct period label (quarter)
+        assert data[customer.id]["period_label"] == 'Rolling90D'

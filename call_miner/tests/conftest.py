@@ -238,6 +238,34 @@ def conversation(agent, customer, topic):
 
 
 @pytest.fixture
+def conversation_today(agent, customer, topic):
+    """Create and return a conversation ocurring TODAY between the given agent and customer."""
+    utc = zoneinfo.ZoneInfo("UTC")
+    conv = Conversation.objects.create(
+        path='path/to/conversation',
+        date=datetime.now(tz=utc),
+        duration=123.45,
+        title='Test Conversation',
+        summary='Test summary',
+        transcript=f"""
+        <agent>: Hello, {agent.user.first_name} here. How can I assist you today?
+        <customer>: Hi, I have an issue with my product. It's acting weird.
+        <agent>: Could you describe the problem?
+        <customer>: Yes, it keeps making a strange noise and flashing red lights.
+        <agent>: That doesn't sound right. Let me look into that for you.
+        <customer>: Thank you, it's driving me crazy!
+        """ * 4,
+        sentiment=4.5,
+        agent=agent,
+        customer=customer,
+        input_tokens=100,
+        output_tokens=50
+    )
+    conv.topics.add(topic)
+    return conv
+
+
+@pytest.fixture
 def another_organization_conversation(another_organization_agent, another_organization_customer,
                                       another_organization_topic):
     """Create and return another conversation between the given agent and customer."""
