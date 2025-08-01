@@ -321,7 +321,8 @@ class CallProcessingPipeline:
                         if base_language != chunk_language:
                             raise Warning(f'Language changed suddenly from {base_language} to {chunk_language}.')
                         file_transcript += '\n' + chunk_transcript
-            else:
+
+            if go_to_fallback:
                 for i, chunk in enumerate(recording_chunks):
                     try:
                         chunk_transcript, chunk_language = methods[fallback_name](chunk)
