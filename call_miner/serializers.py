@@ -4,7 +4,7 @@ from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema_field
 from django.conf import settings
 from call_miner.models import (
-    Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Analyst, Customer, User
+    Conversation, Organization, OrganizationAPIKey, Topic, SuggestedTopic, Employee, Agent, Analyst, Customer, User
 )
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
 from call_miner.schemas import TOPIC_DATA_RESPONSE_SCHEMA
@@ -499,6 +499,40 @@ class TopicListSerializer(serializers.HyperlinkedModelSerializer):
         model = Topic
         fields = ['url', 'name', 'description', 'conversation_count', 'first_conversation_date',
                   'last_conversation_date', 'is_active', 'created', 'updated']
+
+
+class SuggestedTopicAcceptSerializer(serializers.Serializer):
+    """Non-model serializer for accepting suggested topics"""
+
+    def accept(self):
+        """Accept the suggested topic and return the new topic data"""
+        if not hasattr(self, 'instance') or self.instance is None:
+            raise serializers.ValidationError("No suggested topic instance provided")
+
+        # Validate that accepting this topic won't exceed the organization's limit
+        organization = self.instance.organization
+        current_topic_count = Topic.objects.filter(organization=organization).count()
+        if current_topic_count >= organization.max_topic_count:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Cannot add more topics to this organization; maximum topic count reached."]}
+            )
+
+        # Call the model's accept method
+        new_topic = self.instance.accept()
+
+        # Return serialized data of the new topic
+        return TopicListSerializer(new_topic, context=self.context).data
+
+
+class SuggestedTopicListSerializer(serializers.ModelSerializer):
+    """
+    This serializer is used to view instances of an organization's suggested topics
+    """
+
+    class Meta:
+        model = SuggestedTopic
+        fields = ['id', 'name', 'description', 'conversation_count', 'first_conversation_date',
+                  'last_conversation_date', 'created', 'updated']
 
 
 class AgentListSerializer(serializers.HyperlinkedModelSerializer):
