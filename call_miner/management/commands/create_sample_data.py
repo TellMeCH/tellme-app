@@ -6,7 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.core.management.base import BaseCommand, CommandError
 from firebase_admin import auth
-from call_miner.models import Organization, OrganizationAPIKey, Analyst, Agent, Topic, Customer, Conversation, User
+from call_miner.models import Organization, OrganizationAPIKey, Analyst, Agent, Topic, SuggestedTopic, Customer, Conversation, User
 
 COMMON_PASSWORD = 'tell_me_long'
 TOPIC_DATA = [
@@ -56,6 +56,16 @@ TOPIC_DATA = [
         "description": "Customers seeking recommendations or advice on how to style certain pieces, "
                        "outfit combinations, or accessorizing for specific occasions."
     },
+]
+SUGGESTED_TOPIC_DATA = [
+    {
+        "name": "Technical Support",
+        "description": "Calls related to technical issues with products, troubleshooting, and software or hardware problems that customers encounter."
+    },
+    {
+        "name": "Warranty Claims", 
+        "description": "Customer inquiries about warranty coverage, warranty claims, and requests for repairs or replacements under warranty terms."
+    }
 ]
 CONVERSATION_DATA = [
     {
@@ -469,6 +479,7 @@ CONVERSATION_DATA = [
                           <customer>: Thanks. Will I be notified when it’s fixed?
                           <agent>: Absolutely. You’ll receive an email as soon as the issue is resolved.""",
         "topics": ["6", "7"],
+        "suggested_topics": ["1"],
         "summary": "The customer experienced payment issues while placing an order. The agent identified a technical error and escalated it to the IT team for resolution."
     },
 {
@@ -479,6 +490,7 @@ CONVERSATION_DATA = [
                           <customer>: Thank you.
                           <agent>: You’re welcome.""",
         "topics": ["2", "8"],
+        "suggested_topics": ["2"],
         "summary": "The customer returned a sweater due to a material discrepancy. The agent provided a return label and explained the refund process."
     },
     {
@@ -539,6 +551,7 @@ CONVERSATION_DATA = [
                           <customer>: Thank you for resolving this quickly.
                           <agent>: Anytime!""",
         "topics": ["2", "8"],
+        "suggested_topics": ["2"],
         "summary": "The customer received damaged shoes and requested a replacement. The agent processed the replacement and ensured expedited shipping."
     },
     {
@@ -605,6 +618,24 @@ class Command(BaseCommand):
 
         except Exception as e:
             raise CommandError(f'Failed creation of Sample Topics: {e}')
+
+        try:
+            self.stdout.write('Creating 2 Sample Suggested Topics for ACME Org')
+
+            suggested_topics = []
+            for data in SUGGESTED_TOPIC_DATA:
+                suggested_topic = SuggestedTopic(
+                    name=data["name"],
+                    description=data["description"],
+                    organization=org
+                )
+                suggested_topic.save()
+                suggested_topics.append(suggested_topic)
+
+            self.stdout.write('Successfully created 2 Sample Suggested Topics for ACME Org')
+
+        except Exception as e:
+            raise CommandError(f'Failed creation of Sample Suggested Topics: {e}')
 
         try:
             self.stdout.write('Creating Organization Admin')
@@ -757,6 +788,11 @@ class Command(BaseCommand):
 
                 # Assign random topics
                 conversation.topics.add(*data['topics'])
+                
+                # Assign suggested topics if they exist in the data
+                if 'suggested_topics' in data and data['suggested_topics']:
+                    conversation.suggested_topics.add(*data['suggested_topics'])
+                
                 conversation.save()
         except Exception as e:
             raise CommandError(f'Failed creation of Conversations: {e}')
