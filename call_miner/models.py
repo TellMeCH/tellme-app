@@ -417,6 +417,46 @@ class Topic(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Conversati
         ]
 
 
+class SuggestedTopic(ConversationStatsAbstractModel):
+    """
+    Suggested Topic: Candidate to be one of the many topics that can be discussed in the customer calls, depending on
+     user approval. These are to be generated and assigned during call enrichment.
+    """
+    name = models.CharField(max_length=100, null=False)
+    description = models.TextField()
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='suggested_topics')
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        unique_together = ('name', 'organization')
+        indexes = [
+            models.Index(fields=['organization', 'name']),
+        ]
+
+    def accept(self):
+        """
+        Convert the current SuggestedTopic into an actual Topic.
+        """
+        # New Topic
+        topic = Topic.objects.create(
+            name=self.name,
+            description=self.description,
+            organization=self.organization,
+        )
+
+        # Transfer conversations
+        for conversation in self.conversations.all():
+            conversation.topics.add(topic)
+
+        # Delete the Suggested Topic
+        self.delete()
+        return topic
+
+
 class CustomUserManager(BaseUserManager):
     """
     This Model Manager is aimed at making sure that whenever a user is created, a Firebase User is associated to it
@@ -664,6 +704,7 @@ class Conversation(models.Model):
     input_tokens = models.IntegerField()
     output_tokens = models.IntegerField()
     topics = models.ManyToManyField(Topic, related_name='conversations')
+    suggested_topics = models.ManyToManyField(SuggestedTopic, related_name='conversations')
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='conversations')
     agent = models.ForeignKey(Agent, on_delete=models.PROTECT, related_name='conversations')
     created = models.DateTimeField(auto_now_add=True)
