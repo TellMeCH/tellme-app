@@ -442,8 +442,12 @@ class TestCallProcessingPipeline:
         assert not mock_vertexai.called
 
         # Basic schema checks
-        assert set(result).issuperset({"title", "summary", "sentiment", "topics", "transcript"})
+        assert set(result).issuperset(
+            {"title", "summary", "sentiment", "topics", "suggested_topics", "new_topics", "transcript"}
+        )
         assert isinstance(result["topics"], list)
+        assert isinstance(result["suggested_topics"], list)
+        assert isinstance(result["new_topics"], list)  # Fixed: should be list, not dict
         assert isinstance(result["sentiment"], (int, float))
         assert "<agent>" in result["transcript"] and "<customer>" in result["transcript"]
 
@@ -468,6 +472,139 @@ class TestCallProcessingPipeline:
         assert not mock_openai.chat.completions.create.called
 
         # Schema checks
-        assert set(result).issuperset({"title", "summary", "sentiment", "topics", "transcript"})
+        assert set(result).issuperset(
+            {"title", "summary", "sentiment", "topics", "suggested_topics", "new_topics", "transcript"}
+        )
         assert isinstance(result["topics"], list)
+        assert isinstance(result["suggested_topics"], list)
+        assert isinstance(result["new_topics"], list)
         assert isinstance(result["sentiment"], (int, float))
+
+    def test_enrichment_includes_suggested_topics_fields(self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse):
+        """
+        Test that enrichment response includes suggested_topics and new_topics fields.
+        """
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
+        
+        # Check all expected fields are present
+        assert "suggested_topics" in result
+        assert "new_topics" in result
+        assert isinstance(result["suggested_topics"], list)
+        assert isinstance(result["new_topics"], list)
+        
+        # Check structure of new_topics
+        if result["new_topics"]:
+            for topic in result["new_topics"]:
+                assert "name" in topic
+                assert "description" in topic
+
+    def test_enrichment_new_topics_structure_validation(self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse):
+        """
+        Test that new_topics have the correct structure with name and description.
+        """
+        result = pipeline(
+            file_name="test.wav", 
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
+        
+        # Verify new_topics structure
+        new_topics = result.get("new_topics", [])
+        for topic in new_topics:
+            assert isinstance(topic, dict)
+            assert "name" in topic
+            assert "description" in topic
+            assert isinstance(topic["name"], str)
+            assert isinstance(topic["description"], str)
+            assert len(topic["name"]) > 0
+            assert len(topic["description"]) > 0
+
+    def test_enrichment_suggested_topics_field_present(self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse):
+        """
+        Test that suggested_topics field is always present in enrichment response.
+        """
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123", 
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
+        
+        # Verify suggested_topics field
+        assert "suggested_topics" in result
+        assert isinstance(result["suggested_topics"], list)
+        # Should contain string topic names
+        for topic_name in result["suggested_topics"]:
+            assert isinstance(topic_name, str)
+
+    def test_enrichment_all_new_fields_schema_compliance(self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse):
+        """
+        Test that all enrichment fields comply with expected schema.
+        """
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
+        
+        # Test all required fields exist
+        required_fields = [
+            "agent_speaker_labels", "customer_speaker_labels", 
+            "topics", "suggested_topics", "new_topics", 
+            "summary", "title", "sentiment"
+        ]
+        for field in required_fields:
+            assert field in result, f"Missing required field: {field}"
+        
+        # Test field types
+        assert isinstance(result["agent_speaker_labels"], list)
+        assert isinstance(result["customer_speaker_labels"], list)
+        assert isinstance(result["topics"], list)
+        assert isinstance(result["suggested_topics"], list)
+        assert isinstance(result["new_topics"], list)
+        assert isinstance(result["summary"], str)
+        assert isinstance(result["title"], str)
+        assert isinstance(result["sentiment"], (int, float))
+        
+        # Test sentiment range
+        assert 1 <= result["sentiment"] <= 5
+
+    def test_enrichment_with_existing_topics_and_suggested_topics(
+        self, pipeline, mock_openai, mock_deepgram, mock_pydub, mock_langfuse, mock_db_handler
+    ):
+        """
+        Test enrichment process when organization has existing topics and suggested topics.
+        """
+        # Mock the topic retrieval functions to return sample data
+        mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        mock_obtain_active_topics.return_value = "Billing: Payment issues, Support: Technical help, "
+        mock_obtain_suggested_topics.return_value = "Warranty: Product warranty claims, "
+        
+        result = pipeline(
+            file_name="test.wav",
+            organization_id=1,
+            customer_id="CUST123",
+            agent_id=123,
+            timestamp="2024-01-01T12:00:00"
+        )
+        
+        # Verify functions were called
+        mock_obtain_active_topics.assert_called_once_with(1)
+        mock_obtain_suggested_topics.assert_called_once_with(1)
+        
+        # Result should still contain all expected fields
+        assert all(field in result for field in ["topics", "suggested_topics", "new_topics"])
+        assert isinstance(result["topics"], list)
+        assert isinstance(result["suggested_topics"], list) 
+        assert isinstance(result["new_topics"], list)
