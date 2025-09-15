@@ -1,8 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock, Mock
 import uuid
+from datetime import datetime
 from rest_framework.test import APIClient
-from call_miner.models import Organization, User, Agent, Topic, Customer, OrganizationAPIKey
+from call_miner.models import (
+    Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
+)
 from call_processing.utils.llm_configs import ENRICHMENT_CONFIG
 
 
@@ -161,10 +164,12 @@ def mock_vertexai():
         enrichment_json = """{
             "title": "Test Call",
             "summary": "Short summary",
-            "sentiment": 0.9, 
-            "topics": ["Sales"],
-            "agent_speaker_labels": ["Speaker 0:"],
-            "customer_speaker_labels": ["Speaker 1:"]
+            "sentiment": 4, 
+            "topics": ["Billing"],
+            "suggested_topics": ["Technical Support"],
+            "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
+            "agent_speaker_labels": ["Speaker 0"],
+            "customer_speaker_labels": ["Speaker 1"]
         }"""
 
         def gen_content_side_effect(*args, **kwargs):
@@ -216,10 +221,12 @@ def mock_openai():
                 content="""{
                 "title": "Test Call",
                 "summary": "Short summary",
-                "sentiment": 0.9, 
-                "topics": ["Sales"],
-                "agent_speaker_labels": ["Speaker 0:"],
-                "customer_speaker_labels": ["Speaker 1:"]
+                "sentiment": 4, 
+                "topics": ["Billing"],
+                "suggested_topics": ["Technical Support"],
+                "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
+                "agent_speaker_labels": ["Speaker 0"],
+                "customer_speaker_labels": ["Speaker 1"]
                 }"""
             ))
         ]
@@ -252,13 +259,34 @@ def setup_db(db):
     """
     Set up test database with some records. Yield them if you need to retrieve them in your tests.
     """
-    org = Organization.objects.create(id=1, name="Test Org")
+    org = Organization.objects.create(id=1, name="Test Org", max_topic_count=10)
     user = User.objects.create_user('agent@example.com', 'password', 'example', 'agent')
     agent = Agent.objects.create(id=123, organization=org, user=user)
-    topic = Topic.objects.create(name="Sales", description="Sales topic", organization=org, is_active=True)
+    topic = Topic.objects.create(name="Billing", description="Billing issues", organization=org, is_active=True)
+    suggested_topic = SuggestedTopic.objects.create(name="Technical Support", description="Tech support calls", organization=org)
     customer = Customer.objects.create(organization=org, external_id='customer_id')
     plain_key = OrganizationAPIKey.create_key(organization=org, name='Test Key')
-    return org, agent, topic, customer, plain_key
+    conversation = Conversation.objects.create(
+        path='path/to/conversation',
+        date=datetime.now(),
+        duration=123.45,
+        title='Test Conversation',
+        summary='Test summary',
+        transcript=f"""
+        <agent>: Hello, {agent.user.first_name} here. How can I assist you today?
+        <customer>: Hi, I have an issue with my product. It's acting weird.
+        <agent>: Could you describe the problem?
+        <customer>: Yes, it keeps making a strange noise and flashing red lights.
+        <agent>: That doesn't sound right. Let me look into that for you.
+        <customer>: Thank you, it's driving me crazy!
+        """ * 4,
+        sentiment=4.5,
+        agent=agent,
+        customer=customer,
+        input_tokens=100,
+        output_tokens=50
+    )
+    return org, agent, topic, suggested_topic, customer, plain_key, conversation
 
 
 @pytest.fixture(autouse=True)
@@ -303,3 +331,17 @@ def mock_processing_user():
         mock_user.email = "pipeline@example.com"
         mock_auth.return_value = (mock_user, None)
         yield mock_auth
+
+
+@pytest.fixture
+def mock_db_handler():
+    """
+    Mocks the db_handler functions for obtain_active_topics and obtain_suggested_topics.
+    """
+    with patch("call_processing.utils.db_handler.obtain_active_topics") as mock_active, \
+         patch("call_processing.utils.db_handler.obtain_suggested_topics") as mock_suggested:
+        
+        mock_active.return_value = "Billing: Payment and invoice issues, "
+        mock_suggested.return_value = "Technical Support: Hardware troubleshooting, "
+        
+        yield mock_active, mock_suggested
