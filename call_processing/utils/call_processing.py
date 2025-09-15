@@ -614,9 +614,10 @@ class CallProcessingPipeline:
         """
         # Retrieve relevant topic data
         topic_data = db_handler.obtain_active_topics(organization_id)
+        suggested_data = db_handler.obtain_suggested_topics(organization_id)
 
         # Prepare Prompt and Response Format
-        system_message = self.enrichment_prompt.compile(topics_string=topic_data)
+        system_message = self.enrichment_prompt.compile(topics_string=topic_data, suggested_string=suggested_data)
         if self.enrichment_prompt.is_fallback:
             enrichment_config = ENRICHMENT_CONFIG
         else:
