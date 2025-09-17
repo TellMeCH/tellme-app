@@ -99,6 +99,23 @@ TOPIC_DATA_RESPONSE_SCHEMA = {
     }
 }
 
+SUGGESTED_TOPIC_DATA_RESPONSE_SCHEMA = {
+    'type': 'array',
+    'items': {
+        'type': 'object',
+        'properties': {
+            'name': {'type': 'string', 'description': 'Name of the topic.'},
+            'description': {'type': 'string', 'description': 'Detailed description of the topic.'},
+            'conversation_count': {'type': 'integer', 'description': 'Conversations associated to the topic.'},
+        },
+        'example': {
+            'name': 'Customer Support',
+            'description': 'Support for customer queries and issues.',
+            'conversation_count': 4
+        },
+    }
+}
+
 SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',
