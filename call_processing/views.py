@@ -10,7 +10,7 @@ from call_processing.authentication import OrganizationAPIKeyAuthentication, Pro
 from call_processing.permissions import IsAuthenticatedOrganization
 from call_processing.utils import queue_utils
 from call_processing.utils.call_processing import CallProcessingPipeline
-from call_processing.utils.db_handler import create_conversation
+from call_processing.utils.db_handler import create_conversation, create_suggested_topics
 from call_processing.utils.webhook_processing import process_webhook_recordings
 
 logger = logging.getLogger('django')
@@ -154,8 +154,15 @@ class ProcessRecordingView(APIView):
         elapsed_time = (datetime.datetime.now() - processing_start).seconds
         logger.info(f"Processed file {file_name}, required {elapsed_time} seconds")
 
-        # Persist the conversation or any other records as needed
-        create_conversation(**enriched_data)
+        try:
+            # Persist the conversation or any other records as needed
+            create_conversation(**enriched_data)
+
+            # Handle new suggested topics
+            create_suggested_topics(enriched_data['new_topics'], file_name, organization_id)
+        except RuntimeError as exc:
+            logger.error(f"Could not store results of Processing Pipeline: {str(exc)}")
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
             {"message": "File processed and saved to DB."},

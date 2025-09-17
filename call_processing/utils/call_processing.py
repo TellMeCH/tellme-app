@@ -614,9 +614,10 @@ class CallProcessingPipeline:
         """
         # Retrieve relevant topic data
         topic_data = db_handler.obtain_active_topics(organization_id)
+        suggested_data = db_handler.obtain_suggested_topics(organization_id)
 
         # Prepare Prompt and Response Format
-        system_message = self.enrichment_prompt.compile(topics_string=topic_data)
+        system_message = self.enrichment_prompt.compile(topics_string=topic_data, suggested_string=suggested_data)
         if self.enrichment_prompt.is_fallback:
             enrichment_config = ENRICHMENT_CONFIG
         else:
@@ -633,7 +634,8 @@ class CallProcessingPipeline:
             configs[meth]['model'] = configs[meth]['model'][meth]
 
             if meth == 'openai':
-                configs[meth]['response_format']['json_schema']['schema']['additionalProperties'] = False
+                # OpenAI requires additionalProperties: false on all object schemas
+                self.add_additional_properties_false(configs[meth]['response_format']['json_schema']['schema'])
 
         if enrichment_method not in methods:
             raise ValueError(f'Provided enrichment_method is not supported ({enrichment_method})')
@@ -737,6 +739,28 @@ class CallProcessingPipeline:
         input_tokens = generation.usage_metadata.prompt_token_count
         output_tokens = generation.usage_metadata.candidates_token_count
         return json.loads(response), input_tokens, output_tokens
+
+    def add_additional_properties_false(self, schema):
+        """
+        Recursively add 'additionalProperties': false to all object schemas.
+        OpenAI's structured output requires this for strict mode.
+        """
+        if isinstance(schema, dict):
+            # If this is an object schema, add additionalProperties: false
+            if schema.get('type') == 'object' and 'properties' in schema:
+                schema['additionalProperties'] = False
+            
+            # Recursively process all values
+            for key, value in schema.items():
+                if isinstance(value, (dict, list)):
+                    self.add_additional_properties_false(value)
+        elif isinstance(schema, list):
+            # Recursively process list items
+            for item in schema:
+                if isinstance(item, (dict, list)):
+                    self.add_additional_properties_false(item)
+        
+        return schema
 
     @staticmethod
     def replace_speaker_labels(transcript: str, data: dict) -> dict:

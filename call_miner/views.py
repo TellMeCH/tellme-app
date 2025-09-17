@@ -6,13 +6,15 @@ from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
 from django.conf import settings
-from call_miner.models import Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Customer
+from call_miner.models import (
+    Conversation, Organization, OrganizationAPIKey, Topic, SuggestedTopic, Employee, Agent, Customer
+)
 from call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationSerializer, OrganizationAPIKeyListSerializer, OrganizationAPIKeyModifySerializer,
     ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer, TopicListSerializer,
-    AgentListSerializer, AgentDetailSerializer, CustomerModifySerializer, CustomerListSerializer,
-    EmployeeListSerializer, EmployeeModifySerializer
+    SuggestedTopicAcceptSerializer, SuggestedTopicListSerializer, AgentListSerializer, AgentDetailSerializer,
+    CustomerModifySerializer, CustomerListSerializer, EmployeeListSerializer, EmployeeModifySerializer
 )
 from call_miner.permissions import (ConversationPermission, OrganizationPermission, OrganizationAPIKeyPermission,
                                     TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
@@ -26,7 +28,7 @@ from call_miner.schemas import (
     ORGANIZATION_OVERVIEW_RESPONSE_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
     REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
-    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA
+    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA
 )
 
 
@@ -494,7 +496,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
-    summary_period = 'quarter'
+    summary_period = 'month'
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
     summary_rolling_window = True
@@ -527,7 +529,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
 
         # If the action is 'all_summaries' fetch only those topics that would contribute to the period's summary
         if self.action == 'all_summaries':
-            start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
+            start, end, label = period_bounds(self.summary_period)
             qs = qs.filter(last_conversation_date__gte=start)
 
         # If the action is 'list_active', also do the is_active filter:
@@ -572,6 +574,57 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     def overview(self, request, pk=None):
         # Override the inherited /overview action
         raise MethodNotAllowed("GET")
+
+
+class SuggestedTopicViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """
+    A ViewSet for the SuggestedTopic model.
+    A summary of the permissions:
+    - Accepting a suggested topic is allowed to superusers and analysts of the same organization
+    - Viewing is allowed to employees of the same organization (and superusers)
+    """
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [TopicPermission]
+    pagination_class = CustomListViewPaginator
+    cursor_ordering = ['-conversation_count', 'created']
+
+    def get_serializer_class(self):
+        if self.action == "accept":
+            return SuggestedTopicAcceptSerializer
+        elif self.action == "list":
+            return SuggestedTopicListSerializer
+        else:
+            raise MethodNotAllowed(self.action)
+
+    def get_queryset(self):
+        """
+        Return suggested topics that belong to the user's organization
+        """
+        if self.request.user.is_superuser:
+            qs = SuggestedTopic.objects.all()
+        elif self.request.user.employee.organization:
+            qs = SuggestedTopic.objects.filter(organization=self.request.user.employee.organization)
+        else:
+            qs = SuggestedTopic.objects.none()
+        return qs
+
+    @extend_schema(
+        description='Accepts an AI-suggested topic converting it into an actual topic.',
+        responses={
+            200: TOPIC_DATA_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        """Accept a suggested topic and convert it to a real topic."""
+        suggested_topic = self.get_object()
+
+        serializer = self.get_serializer(instance=suggested_topic)
+        topic_data = serializer.accept()
+        return response.Response(topic_data, status=status.HTTP_200_OK)
 
 
 class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
@@ -677,7 +730,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
 
         # Load only customers that have a minimum conversation count and would have a summary for the period
         if self.action == 'all_summaries':
-            start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
+            start, end, label = period_bounds(self.summary_period)
             qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT).filter(last_conversation_date__gte=start)
         return qs
 

@@ -1,7 +1,7 @@
 import datetime
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from call_miner.models import Agent, Conversation, Customer, Organization, Topic
+from call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic
 
 
 def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: datetime.datetime) -> (bool, str):
@@ -70,11 +70,28 @@ def obtain_active_topics(organization_id: int):
     return active_topics
 
 
+def obtain_suggested_topics(organization_id: int):
+    """
+    Query the call_miner data model to extract all suggested topics from the organization.
+
+    Args:
+        organization_id (int): ID of the organization to query
+
+    Returns:
+        str: A string enumerating the names and descriptions of all active topics
+    """
+    suggested_topics = ''
+    for topic in SuggestedTopic.objects.filter(organization=organization_id):
+        suggested_topics += f'{topic.name}: {topic.description}, '
+    return suggested_topics
+
+
 def create_conversation(
     customer_id: str,
     organization_id: int,
     agent_id: int,
     topics: list[str],
+    suggested_topics: list[str],
     file_name: str,
     timestamp: str,
     duration: float,
@@ -107,6 +124,12 @@ def create_conversation(
         missing = set(topics) - set(t.name for t in topics_qs)
         raise Warning(f"Some topics were not found in org {organization_id}: {missing}")
 
+    # Instantiate the SuggestedTopics based on their names, filtering by this org
+    suggested_topics_qs = SuggestedTopic.objects.filter(name__in=suggested_topics, organization=org)
+    if len(suggested_topics_qs) != len(suggested_topics):
+        missing = set(suggested_topics) - set(t.name for t in suggested_topics_qs)
+        raise Warning(f"Some suggested topics were not found in org {organization_id}: {missing}")
+
     # Convert date_str to a timezone-aware DateTime
     if timestamp is None:
         raise ValueError(f"Could not parse datetime from '{timestamp}'")
@@ -133,4 +156,103 @@ def create_conversation(
     )
     conversation.save()
     conversation.topics.set(topics_qs)
+    conversation.suggested_topics.set(suggested_topics_qs)
 
+
+def create_suggested_topics(
+        new_topics: list[dict[str, str]],
+        conversation_file_name: str,
+        organization_id: int
+):
+    """
+    Creates new SuggestedTopic instances while respecting organization limits.
+    
+    This function intelligently manages suggested topics by:
+    - Creating new topics when there's available space
+    - Replacing old, unpopular topics (conversation_count=1) when at capacity
+    - Avoiding duplicates with existing suggested topics and regular topics
+    - Maintaining the organization's max_topic_count limit
+    
+    The replacement strategy prioritizes oldest topics first (FIFO) and only
+    replaces topics that have exactly one linked conversation, preserving
+    popular suggested topics that are associated with multiple conversations.
+    
+    Args:
+        new_topics: List of dictionaries containing 'name' and 'description' keys
+        conversation_file_name: Path of the conversation that triggered these suggestions
+        organization_id: ID of the organization to create suggested topics for
+        
+    Returns:
+        None: Function performs database operations and returns nothing
+        
+    Example:
+        new_topics = [
+            {'name': 'Technical Support', 'description': 'Hardware troubleshooting calls'},
+            {'name': 'Billing Issues', 'description': 'Payment and invoice inquiries'}
+        ]
+        create_suggested_topics(new_topics, 'call_123.wav', organization_id=5)
+    """
+
+    # First off, retrieve the conversation that triggered these topics
+    conversation_qs = Conversation.objects.filter(path=conversation_file_name)
+    if len(conversation_qs) == 1:
+        conversation = conversation_qs.first()
+    elif len(conversation_qs) > 1:
+        raise ValueError(f"More than one Conversation instance matches path = {conversation_file_name}")
+    else:
+        raise ValueError(f"Could not find a Conversation instance with path = {conversation_file_name}")
+
+    # Then, retrieve the existing suggested topics
+    org = Organization.objects.get(id=organization_id)
+    existing_suggested = SuggestedTopic.objects.filter(organization=org)
+    existing_regular = Topic.objects.filter(organization=org)
+    
+    # Pre-filter new topics for duplicates and validation
+    valid_new_topics = []
+    existing_names = (
+        set(existing_suggested.values_list('name', flat=True)) |
+        set(existing_regular.values_list('name', flat=True))
+    )
+    
+    for topic in new_topics:
+        if not topic.get('name') or not topic.get('description'):
+            continue
+        if topic['name'] in existing_names:
+            continue  # Skip duplicates
+        valid_new_topics.append(topic)
+    
+    if not valid_new_topics:
+        return  # Nothing to create
+    
+    # Calculate how many we can create
+    current_count = len(existing_suggested)
+    available_space = max(0, org.max_topic_count - current_count)
+    can_replace = existing_suggested.filter(conversation_count=1).count()
+    max_creatable = min(len(valid_new_topics), available_space + can_replace)
+    
+    if max_creatable == 0:
+        return  # Can't create any
+    
+    # Determine how many to replace vs create in available space
+    to_create_count = min(max_creatable, len(valid_new_topics))
+    to_replace_count = max(0, to_create_count - available_space)
+    
+    # Get topics to replace (oldest first)
+    to_replace_candidates = existing_suggested.filter(conversation_count=1).order_by('created')[:to_replace_count]
+    
+    # Delete old topics first to avoid exceeding max
+    if to_replace_candidates:
+        # Convert sliced QuerySet to list of IDs, then delete by IDs
+        topic_ids_to_delete = list(to_replace_candidates.values_list('id', flat=True))
+        if topic_ids_to_delete:
+            SuggestedTopic.objects.filter(id__in=topic_ids_to_delete).delete()
+    
+    # Create new topics
+    for topic in valid_new_topics[:to_create_count]:
+        suggested_topic = SuggestedTopic(
+            name=topic["name"],
+            description=topic["description"],
+            organization=org
+        )
+        suggested_topic.save()
+        conversation.suggested_topics.add(suggested_topic)
