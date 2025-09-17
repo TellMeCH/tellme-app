@@ -86,7 +86,7 @@ The following schema contains:
 - sentiment: An integer that represents the overall sentiment of the call (1-5 scale)
 """
 ENRICHMENT_CONFIG = {
-    "model": {"openai": "gpt-4o-mini-2024-07-18", "vertexai": "gemini-2.0-flash-001"},
+    "model": {"openai": "gpt-4.1-mini", "vertexai": "gemini-2.5-flash"},
     "temperature": 0.2,
     "response_format": {
         "type": "json_schema",
@@ -130,7 +130,11 @@ ENRICHMENT_CONFIG = {
                                 "description": {
                                     "type": "string"
                                 }
-                            }
+                            },
+                            "required": [
+                                "name",
+                                "description"
+                            ]
                         }
                     },
                     "summary": {
