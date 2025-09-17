@@ -593,7 +593,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             self.stdout.write('Creating Sample Organizations')
-            org = Organization(name='ACME Org', max_user_count=20)
+            org = Organization(name='ACME Org', max_user_count=20, enrichment_method='vertexai')
             org.save()
 
             other_org = Organization(name='Competitors Inc.')
