@@ -737,7 +737,7 @@ class TestTopicSummary:
         assert response.data['summary_call_count'] == 1
         assert response.data['summary_date'].date() == conversation_today.date.date()
         assert 'period_label' in response.data
-        assert response.data['period_label'] == 'Rolling90D'
+        assert response.data['period_label'] == 'Rolling30D'
 
         for period in ['week', 'month', 'quarter']:
             for rolling in [True, False]:
@@ -777,7 +777,7 @@ class TestTopicSummary:
         assert response.data[topic.id]['summary_call_count'] == 1
         assert response.data[topic.id]['summary_date'].date() == conversation_today.date.date()
         assert response.data[topic.id]['name'] == topic.name
-        assert response.data[topic.id]['period_label'] == 'Rolling90D'
+        assert response.data[topic.id]['period_label'] == 'Rolling30D'
 
     def test_existing_period_summary_is_reutilized(
         self,

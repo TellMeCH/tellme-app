@@ -4,10 +4,10 @@ from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema_field
 from django.conf import settings
 from call_miner.models import (
-    Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Analyst, Customer, User
+    Conversation, Organization, OrganizationAPIKey, Topic, SuggestedTopic, Employee, Agent, Analyst, Customer, User
 )
 from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
-from call_miner.schemas import TOPIC_DATA_RESPONSE_SCHEMA
+from call_miner.schemas import TOPIC_DATA_RESPONSE_SCHEMA, SUGGESTED_TOPIC_DATA_RESPONSE_SCHEMA
 
 
 def paginate_queryset(queryset, request, ordering: list[str] = None):
@@ -244,11 +244,14 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
     topic_data = serializers.SerializerMethodField(
         help_text='List of associated topics, including their name, description, status, and link.'
     )
+    suggested_topic_data = serializers.SerializerMethodField(
+        help_text='Obtains a list of associated topic suggestions, with their name, description and conversation count.'
+    )
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'agent', 'agent_email',
-                  'customer', 'customer_id', 'input_tokens', 'output_tokens', 'created']
+        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'suggested_topic_data',
+                  'agent', 'agent_email', 'customer', 'customer_id', 'input_tokens', 'output_tokens', 'created']
 
     @extend_schema_field(TOPIC_DATA_RESPONSE_SCHEMA)
     def get_topic_data(self, obj):
@@ -265,6 +268,22 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
                     'url': self.context['request'].build_absolute_uri(
                         reverse('topic-detail', args=[topic.id])
                     ),
+                }
+            )
+        return topic_data
+
+    @extend_schema_field(SUGGESTED_TOPIC_DATA_RESPONSE_SCHEMA)
+    def get_suggested_topic_data(self, obj):
+        """
+        Obtains a list of associated topic suggestions, including their name, description and conversation count.
+        """
+        topic_data = []
+        for i, topic in enumerate(obj.suggested_topics.all()):
+            topic_data.append(
+                {
+                    'name': topic.name,
+                    'description': topic.description,
+                    'conversation_count': topic.conversation_count
                 }
             )
         return topic_data
@@ -290,9 +309,9 @@ class ConversationDetailSerializer(ConversationListSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data', 'agent',
-                  'agent_email', 'agent_first_name', 'agent_last_name', 'customer', 'customer_id', 'input_tokens',
-                  'output_tokens', 'created']
+        fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data',
+                  'suggested_topic_data', 'agent', 'agent_email', 'agent_first_name', 'agent_last_name', 'customer',
+                  'customer_id', 'input_tokens', 'output_tokens', 'created']
 
     def get_processed_transcript(self, obj):
         """
@@ -499,6 +518,40 @@ class TopicListSerializer(serializers.HyperlinkedModelSerializer):
         model = Topic
         fields = ['url', 'name', 'description', 'conversation_count', 'first_conversation_date',
                   'last_conversation_date', 'is_active', 'created', 'updated']
+
+
+class SuggestedTopicAcceptSerializer(serializers.Serializer):
+    """Non-model serializer for accepting suggested topics"""
+
+    def accept(self):
+        """Accept the suggested topic and return the new topic data"""
+        if not hasattr(self, 'instance') or self.instance is None:
+            raise serializers.ValidationError("No suggested topic instance provided")
+
+        # Validate that accepting this topic won't exceed the organization's limit
+        organization = self.instance.organization
+        current_topic_count = Topic.objects.filter(organization=organization).count()
+        if current_topic_count >= organization.max_topic_count:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Cannot add more topics to this organization; maximum topic count reached."]}
+            )
+
+        # Call the model's accept method
+        new_topic = self.instance.accept()
+
+        # Return serialized data of the new topic
+        return TopicListSerializer(new_topic, context=self.context).data
+
+
+class SuggestedTopicListSerializer(serializers.ModelSerializer):
+    """
+    This serializer is used to view instances of an organization's suggested topics
+    """
+
+    class Meta:
+        model = SuggestedTopic
+        fields = ['id', 'name', 'description', 'conversation_count', 'first_conversation_date',
+                  'last_conversation_date', 'created', 'updated']
 
 
 class AgentListSerializer(serializers.HyperlinkedModelSerializer):
