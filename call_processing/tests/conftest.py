@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock, Mock
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from rest_framework.test import APIClient
 from call_miner.models import (
     Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
@@ -268,7 +268,7 @@ def setup_db(db):
     plain_key = OrganizationAPIKey.create_key(organization=org, name='Test Key')
     conversation = Conversation.objects.create(
         path='path/to/conversation',
-        date=datetime.now(),
+        date=datetime.now() - timedelta(days=1),
         duration=123.45,
         title='Test Conversation',
         summary='Test summary',
