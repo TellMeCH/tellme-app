@@ -5,7 +5,7 @@ import zoneinfo
 from rest_framework.test import APIClient
 from datetime import timedelta, datetime
 from call_miner.models import (
-    Organization, Analyst, Agent, Customer, Conversation, Topic, User, Employee, OrganizationAPIKey
+    Organization, Analyst, Agent, Customer, Conversation, Topic, SuggestedTopic, User, Employee, OrganizationAPIKey
 )
 
 
@@ -206,7 +206,7 @@ def another_organization_customer(another_organization):
 
 
 @pytest.fixture
-def conversation(agent, customer, topic):
+def conversation(agent, customer, topic, suggested_topic):
     """Create and return a conversation between the given agent and customer."""
     utc = zoneinfo.ZoneInfo("UTC")
     conv_date = (
@@ -234,6 +234,7 @@ def conversation(agent, customer, topic):
         output_tokens=50
     )
     conv.topics.add(topic)
+    conv.suggested_topics.add(suggested_topic)
     return conv
 
 
@@ -310,6 +311,26 @@ def another_organization_topic(another_organization):
         description='Another test topic',
         organization=another_organization,
         is_active=True
+    )
+
+
+@pytest.fixture
+def suggested_topic(organization):
+    """Create and return a suggested topic associated with the given organization."""
+    return SuggestedTopic.objects.create(
+        name='Test Suggested Topic',
+        description='A test suggested topic',
+        organization=organization
+    )
+
+
+@pytest.fixture
+def another_organization_suggested_topic(another_organization):
+    """Create and return another suggested topic associated with another organization."""
+    return SuggestedTopic.objects.create(
+        name='Another Suggested Topic',
+        description='Another test suggested topic',
+        organization=another_organization
     )
 
 

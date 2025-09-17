@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timedelta
 from django.urls import reverse
 from rest_framework import status
 from call_miner.models import Conversation, OrganizationAPIKey
@@ -12,7 +13,7 @@ class TestQueueView:
         return {
             "customer_id": "CUST123",
             "agent_id": 123,
-            "timestamp": "2024-01-01T12:00:00",
+            "timestamp": datetime.now(),
             "file": SimpleUploadedFile(
                 "test.wav",
                 b"Fake File Bytes",
@@ -26,7 +27,7 @@ class TestQueueView:
         If the payload is valid, we should get a 202 response and a valid GCS URI in the response.
         A Cloud Task should also be created.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[4]}')
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
 
         url = reverse("queue")
         response = api_client.post(url, data=valid_payload, format="multipart")
@@ -51,7 +52,7 @@ class TestQueueView:
         """
         Agent does not exist in the DB, so the request is invalid.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[4]}')
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
 
         current_payload = valid_payload.copy()
         current_payload["agent_id"] = 99999
@@ -68,13 +69,13 @@ class TestQueueView:
         If the agent already has a conversation that hasn't ended by the time the new call starts,
         check_agent_validity() should fail.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[4]}')
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
 
         # Create a conversation that ends *after* 2024-01-01T12:00:00, such that the creation of a new one starting
         # at that time will be blocked
         overlapping_conv = Conversation.objects.create(
             agent=setup_db[1],
-            date="2024-01-01T11:59:00Z",
+            date=valid_payload['timestamp'] - timedelta(minutes=1),
             duration=120.0,
             transcript="...",
             sentiment=0.0,
@@ -83,7 +84,7 @@ class TestQueueView:
             path="old_file.wav",
             input_tokens=10,
             output_tokens=10,
-            customer=setup_db[3]
+            customer=setup_db[4]
         )
         overlapping_conv.save()
 
@@ -96,7 +97,7 @@ class TestQueueView:
         """
         If any required field is missing, the serializer should fail and return a 400.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[4]}')
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
 
         for field in ['customer_id', 'agent_id', 'timestamp', 'file']:
             current_payload = valid_payload.copy()
