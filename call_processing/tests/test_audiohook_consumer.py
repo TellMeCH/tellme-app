@@ -21,7 +21,7 @@ class TestAudioHookConsumer:
         5) Ensure GCS upload and Cloud Task creation happened.
         """
 
-        valid_api_key = setup_db[4]
+        valid_api_key = setup_db[5]
         communicator = WebsocketCommunicator(
             AudioHookConsumer.as_asgi(),
             "/testws/",
@@ -139,7 +139,7 @@ class TestAudioHookConsumer:
         The consumer should respond with 'disconnect' and close.
         """
 
-        valid_api_key = setup_db[4]
+        valid_api_key = setup_db[5]
         communicator = WebsocketCommunicator(
             AudioHookConsumer.as_asgi(),
             "/testws/",
@@ -189,7 +189,7 @@ class TestAudioHookConsumer:
         If we keep sending anything else (e.g. 'ping'), it will eventually
         finalize recording and close after MAXIMUM_ERROR_RETRIES times.
         """
-        valid_api_key = setup_db[4]
+        valid_api_key = setup_db[5]
         communicator = WebsocketCommunicator(
             AudioHookConsumer.as_asgi(),
             "/testws/",
