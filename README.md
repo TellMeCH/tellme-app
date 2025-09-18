@@ -30,12 +30,12 @@ gcloud auth application-default login
 3. Ask the development team for the remaining .env variables and append them to your .env
 4. Run the following to start the local environment, run migrations, and create sample data for experimentation
 ```bash
-./run-compose.sh --with-db-setup
+./bin/run-compose.sh --with-db-setup
 ```
 5. Enjoy!
 6. Make sure you stop the local environment normally, using Ctrl+C. Moreover, for subsequent executions, avoid running migrations and run:
 ```bash
-./run-compose.sh
+./bin/run-compose.sh
 ```
 
 ---
