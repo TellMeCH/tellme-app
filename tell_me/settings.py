@@ -79,8 +79,8 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'storages',
     'corsheaders',
-    'call_miner',
-    'call_processing'
+    'apps.call_miner',
+    'call_processing'  # TODO: move to apps.call_processing when ready
 ]
 
 MIDDLEWARE = [
@@ -235,7 +235,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
     'PAGE_SIZE': 15,
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'call_miner.authentication.FirebaseAuthentication',
+        'apps.call_miner.authentication.FirebaseAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -258,7 +258,7 @@ SPECTACULAR_SETTINGS = {
         },
     },
     'EXTENSIONS': [
-        'call_miner.authentication_extensions',
+        'apps.call_miner.authentication_extensions',
     ],
 }
 
@@ -269,7 +269,7 @@ AUTH_USER_MODEL = 'call_miner.User'
 FIREBASE_WEB_API_KEY = env('FIREBASE_WEB_API_KEY')
 
 # Authentication Backends (especially for Admin Login)
-AUTHENTICATION_BACKENDS = ['call_miner.backends.FirebaseEmailPasswordBackend']
+AUTHENTICATION_BACKENDS = ['apps.call_miner.backends.FirebaseEmailPasswordBackend']
 
 # Logging
 if TELLME_ENV != 'dev':

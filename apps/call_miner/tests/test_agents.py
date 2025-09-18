@@ -3,7 +3,7 @@ from datetime import datetime
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Agent, User
+from apps.call_miner.models import Agent, User
 
 TREND_ACTIONS = ['conversations', 'trend', 'overview']
 

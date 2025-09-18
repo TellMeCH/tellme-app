@@ -4,7 +4,7 @@ import zoneinfo
 from datetime import timedelta, datetime
 from django.db import IntegrityError
 from django.contrib.contenttypes.models import ContentType
-from call_miner.models import (
+from apps.call_miner.models import (
     Organization,
     Topic,
     Customer,
@@ -14,7 +14,7 @@ from call_miner.models import (
     Agent,
     PeriodSummary
 )
-from call_miner.utils.period_utils import period_bounds
+from apps.call_miner.utils.period_utils import period_bounds
 
 
 def get_topic_period_summary(topic, period="month"):

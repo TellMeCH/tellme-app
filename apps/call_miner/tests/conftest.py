@@ -4,7 +4,7 @@ import uuid
 import zoneinfo
 from rest_framework.test import APIClient
 from datetime import timedelta, datetime
-from call_miner.models import (
+from apps.call_miner.models import (
     Organization, Analyst, Agent, Customer, Conversation, Topic, User, Employee, OrganizationAPIKey
 )
 

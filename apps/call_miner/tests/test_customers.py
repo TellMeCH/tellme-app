@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Customer, Conversation
+from apps.call_miner.models import Customer, Conversation
 
 TREND_ACTIONS = ['conversations', 'trend', 'summary-data']
 

@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Conversation, User
+from apps.call_miner.models import Conversation, User
 
 
 @pytest.mark.django_db

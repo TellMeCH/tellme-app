@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock, Mock
 import uuid
 from rest_framework.test import APIClient
-from call_miner.models import Organization, User, Agent, Topic, Customer, OrganizationAPIKey
+from apps.call_miner.models import Organization, User, Agent, Topic, Customer, OrganizationAPIKey
 from call_processing.utils.llm_configs import ENRICHMENT_CONFIG
 
 

@@ -6,20 +6,20 @@ from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
 from django.conf import settings
-from call_miner.models import Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Customer
-from call_miner.serializers import (
+from apps.call_miner.models import Conversation, Organization, OrganizationAPIKey, Topic, Employee, Agent, Customer
+from apps.call_miner.serializers import (
     ConversationModifySerializer, ConversationListSerializer, ConversationDetailSerializer,
     OrganizationSerializer, OrganizationAPIKeyListSerializer, OrganizationAPIKeyModifySerializer,
     ConversationTrendsSerializer, MetaSummarySerializer, TopicModifySerializer, TopicListSerializer,
     AgentListSerializer, AgentDetailSerializer, CustomerModifySerializer, CustomerListSerializer,
     EmployeeListSerializer, EmployeeModifySerializer
 )
-from call_miner.permissions import (ConversationPermission, OrganizationPermission, OrganizationAPIKeyPermission,
+from apps.call_miner.permissions import (ConversationPermission, OrganizationPermission, OrganizationAPIKeyPermission,
                                     TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
-from call_miner.utils.paginators import CustomListViewPaginator
-from call_miner.utils.period_utils import period_bounds
-from call_miner.authentication import FirebaseAuthentication
-from call_miner.schemas import (
+from apps.call_miner.utils.paginators import CustomListViewPaginator
+from apps.call_miner.utils.period_utils import period_bounds
+from apps.call_miner.authentication import FirebaseAuthentication
+from apps.call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA,
     SUMMARY_DATA_RESPONSE_SCHEMA, ALL_SUMMARIES_RESPONSE_SCHEMA, CONVERSATIONS_RESPONSE_SCHEMA, TREND_RESPONSE_SCHEMA,
     ORGANIZATION_TREND_RESPONSE_SCHEMA, TREND_PERIOD_PARAMETER_SCHEMA, OVERVIEW_RESPONSE_SCHEMA,

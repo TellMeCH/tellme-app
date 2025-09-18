@@ -4,7 +4,7 @@ from rest_framework import authentication, exceptions
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.conf import settings
-from call_miner.models import OrganizationAPIKey
+from apps.call_miner.models import OrganizationAPIKey
 
 logger = logging.getLogger(__name__)
 

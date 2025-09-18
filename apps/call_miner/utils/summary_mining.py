@@ -5,7 +5,7 @@ import random
 from langfuse import openai, Langfuse
 import tiktoken
 from django.conf import settings
-from call_miner.utils.fallback_prompt import SUMMARIZER_PROMPTS, PROMPT_CONFIGS
+from apps.call_miner.utils.fallback_prompt import SUMMARIZER_PROMPTS, PROMPT_CONFIGS
 
 
 logger = logging.getLogger("django")

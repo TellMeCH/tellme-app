@@ -1,8 +1,8 @@
 import json
 import pytest
 from unittest.mock import patch, MagicMock
-from call_miner.utils.summary_mining import count_tokens, condense_summaries
-from call_miner.utils.fallback_prompt import PROMPT_CONFIGS
+from apps.call_miner.utils.summary_mining import count_tokens, condense_summaries
+from apps.call_miner.utils.fallback_prompt import PROMPT_CONFIGS
 
 
 def _build_openai_stub():

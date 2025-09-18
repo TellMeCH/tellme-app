@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Conversation, OrganizationAPIKey
+from apps.call_miner.models import Conversation, OrganizationAPIKey
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 

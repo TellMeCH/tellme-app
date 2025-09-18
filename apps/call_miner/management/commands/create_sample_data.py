@@ -6,7 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.core.management.base import BaseCommand, CommandError
 from firebase_admin import auth
-from call_miner.models import Organization, OrganizationAPIKey, Analyst, Agent, Topic, Customer, Conversation, User
+from apps.call_miner.models import Organization, OrganizationAPIKey, Analyst, Agent, Topic, Customer, Conversation, User
 
 COMMON_PASSWORD = 'tell_me_long'
 TOPIC_DATA = [
