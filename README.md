@@ -54,7 +54,7 @@ For local testing, proceed as follows:
    ```
 5. Finally, run the following:
     ```bash
-    poetry run pytest -v --ignore=./call_processing/tests/test_smoke_remote.py
+    poetry run pytest -v --ignore=./apps/call_processing/tests/test_smoke_remote.py
     ```
 
 ---

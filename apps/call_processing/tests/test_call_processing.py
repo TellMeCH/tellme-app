@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from call_processing.utils.call_processing import CallProcessingPipeline
+from apps.call_processing.utils.call_processing import CallProcessingPipeline
 
 
 @pytest.mark.django_db

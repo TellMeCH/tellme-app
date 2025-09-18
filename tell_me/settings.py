@@ -80,7 +80,7 @@ INSTALLED_APPS = [
     'storages',
     'corsheaders',
     'apps.call_miner',
-    'call_processing'
+    'apps.call_processing'
 ]
 
 MIDDLEWARE = [

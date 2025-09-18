@@ -3,8 +3,8 @@ import requests
 from datetime import datetime
 from django.conf import settings
 from pydub import AudioSegment
-from call_processing.utils.gcs_utils import upload_to_gcs
-from call_processing.utils.queue_utils import create_storage_path
+from apps.call_processing.utils.gcs_utils import upload_to_gcs
+from apps.call_processing.utils.queue_utils import create_storage_path
 
 
 def parse_created_date(rec):

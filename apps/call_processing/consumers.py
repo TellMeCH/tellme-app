@@ -8,7 +8,7 @@ from channels.generic.websocket import WebsocketConsumer
 from rest_framework import exceptions
 from django.utils import timezone
 from apps.call_miner.models import OrganizationAPIKey
-from call_processing.utils import audio_utils, queue_utils
+from apps.call_processing.utils import audio_utils, queue_utils
 
 logger = logging.getLogger('django')
 

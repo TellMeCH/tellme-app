@@ -340,7 +340,7 @@ def mock_langfuse():
     Mocks out such that Langfuse() constructor becomes a MagicMock
     """
 
-    with patch("call_processing.utils.call_processing.Langfuse") as mock_lf_class:
+    with patch("apps.call_processing.utils.call_processing.Langfuse") as mock_lf_class:
         # The Langfuse constructor will return a MagicMock
         mock_lf_instance = MagicMock()
         mock_lf_class.return_value = mock_lf_instance

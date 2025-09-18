@@ -5,7 +5,7 @@ from google.protobuf import timestamp_pb2
 import grpc
 from django.conf import settings
 from rest_framework import status
-from call_processing.utils import gcs_utils, db_handler
+from apps.call_processing.utils import gcs_utils, db_handler
 
 
 def create_storage_path(organization_id: int, customer_id: str, agent_id: int, call_timestamp: datetime.datetime):
