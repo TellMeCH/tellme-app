@@ -1,7 +1,7 @@
 import json
 import pytest
 from channels.testing import WebsocketCommunicator
-from call_processing.consumers import AudioHookConsumer
+from tell_me.call_processing.consumers import AudioHookConsumer
 
 
 @pytest.mark.django_db(transaction=True)

@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 from django.utils import timezone
 from tell_me.call_miner.models import SuggestedTopic, Topic, Conversation, Organization, Customer
-from call_processing.utils import db_handler
+from tell_me.call_processing.utils import db_handler
 
 
 @pytest.mark.django_db

@@ -86,7 +86,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          poetry run pytest -v --ignore=./call_processing/tests/test_smoke_remote.py
+          poetry run pytest -v --ignore=./tell_me/call_processing/tests/test_smoke_remote.py
         env:
           TELLME_ENV: dev
 

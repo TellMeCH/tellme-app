@@ -15,7 +15,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from tell_me.call_miner.utils.period_utils import period_bounds
 from tell_me.call_miner.utils.summary_mining import condense_summaries
 import tell_me.call_miner.utils.email_utils as email
-from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
+from tell_me.call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
 
 
 class PeriodSummary(models.Model):

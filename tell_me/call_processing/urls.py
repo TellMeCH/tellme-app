@@ -1,6 +1,6 @@
 from django.urls import path
 from django.http import JsonResponse
-from call_processing.views import QueueRecordingView, ProcessRecordingView
+from tell_me.call_processing.views import QueueRecordingView, ProcessRecordingView
 
 
 def root_view(request):

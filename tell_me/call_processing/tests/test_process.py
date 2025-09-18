@@ -61,8 +61,8 @@ class TestProcessRecordingView:
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert "is empty" in response.data["error"]
 
-    @patch("call_processing.views.create_conversation")
-    @patch("call_processing.views.create_suggested_topics")
+    @patch("tell_me.call_processing.views.create_conversation")
+    @patch("tell_me.call_processing.views.create_suggested_topics")
     def test_process_success(
             self, mock_create_suggested_topics, mock_create_conversation, api_client, valid_task_payload, setup_db,
             mock_gcs_utils, mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
@@ -122,7 +122,7 @@ class TestProcessRecordingView:
         assert first_suggested.description is not None
         assert first_suggested.organization == conv.agent.organization
 
-    @patch("call_processing.views.create_suggested_topics")
+    @patch("tell_me.call_processing.views.create_suggested_topics")
     def test_new_topics_trigger_suggested_topics_creation(
         self, mock_create_suggested_topics, api_client, setup_db, valid_task_payload,
         mock_gcs_utils, mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
@@ -147,7 +147,7 @@ class TestProcessRecordingView:
         assert conversation_file_arg == valid_task_payload["file_name"]
         assert org_id_arg == valid_task_payload["organization_id"]
 
-    @patch("call_processing.views.create_suggested_topics")
+    @patch("tell_me.call_processing.views.create_suggested_topics")
     def test_process_with_empty_new_topics(
         self, mock_create_suggested_topics, api_client, setup_db, valid_task_payload, mock_gcs_utils, 
         mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
@@ -180,7 +180,7 @@ class TestProcessRecordingView:
             [], valid_task_payload["file_name"], valid_task_payload["organization_id"]
         )
 
-    @patch("call_processing.views.create_suggested_topics")
+    @patch("tell_me.call_processing.views.create_suggested_topics")
     def test_process_with_multiple_new_topics(
         self, mock_create_suggested_topics, api_client, setup_db, valid_task_payload, mock_gcs_utils, 
         mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
@@ -216,7 +216,7 @@ class TestProcessRecordingView:
         assert new_topics_arg[1]["name"] == "Order Status"
         assert new_topics_arg[2]["name"] == "Shipping Issue"
 
-    @patch("call_processing.views.create_suggested_topics")
+    @patch("tell_me.call_processing.views.create_suggested_topics")
     def test_create_suggested_topics_error_handling(
         self, mock_create_suggested_topics, api_client, setup_db, valid_task_payload,
         mock_gcs_utils, mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
@@ -238,7 +238,7 @@ class TestProcessRecordingView:
         assert conv is not None
         assert conv.path == valid_task_payload["file_name"]
 
-    @patch("call_processing.views.create_suggested_topics")
+    @patch("tell_me.call_processing.views.create_suggested_topics")
     def test_process_with_all_topic_types(
         self, mock_create_suggested_topics, api_client, setup_db, valid_task_payload, mock_gcs_utils, 
         mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user

@@ -4,14 +4,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from call_processing.serializers import (WebhookProcessingSerializer, QueueRecordingSerializer,
+from tell_me.call_processing.serializers import (WebhookProcessingSerializer, QueueRecordingSerializer,
                                          ProcessRecordingSerializer)
-from call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
-from call_processing.permissions import IsAuthenticatedOrganization
-from call_processing.utils import queue_utils
-from call_processing.utils.call_processing import CallProcessingPipeline
-from call_processing.utils.db_handler import create_conversation, create_suggested_topics
-from call_processing.utils.webhook_processing import process_webhook_recordings
+from tell_me.call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
+from tell_me.call_processing.permissions import IsAuthenticatedOrganization
+from tell_me.call_processing.utils import queue_utils
+from tell_me.call_processing.utils.call_processing import CallProcessingPipeline
+from tell_me.call_processing.utils.db_handler import create_conversation, create_suggested_topics
+from tell_me.call_processing.utils.webhook_processing import process_webhook_recordings
 
 logger = logging.getLogger('django')
 

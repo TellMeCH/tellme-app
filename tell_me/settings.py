@@ -21,7 +21,7 @@ from google.cloud import secretmanager
 from sentry_sdk.integrations.django import DjangoIntegration
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
 
 # Trying to locate .env
 project_root = BASE_DIR
@@ -86,7 +86,7 @@ INSTALLED_APPS = [
     'storages',
     'corsheaders',
     'tell_me.call_miner',
-    'call_processing'
+    'tell_me.call_processing'
 ]
 
 MIDDLEWARE = [

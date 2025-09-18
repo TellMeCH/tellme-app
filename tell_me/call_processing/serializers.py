@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
+from tell_me.call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
 
 
 class WebhookProcessingSerializer(serializers.Serializer):

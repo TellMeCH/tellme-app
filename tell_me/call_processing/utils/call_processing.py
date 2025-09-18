@@ -16,10 +16,10 @@ from langfuse import openai, Langfuse
 from langfuse.decorators import observe, langfuse_context
 from deepgram.clients.common.v1.errors import DeepgramApiError
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
-from call_processing.utils.llm_configs import (
+from tell_me.call_processing.utils.llm_configs import (
     TRANSCRIPTION_METHOD_CHOICES, DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
 )
-from call_processing.utils import gcs_utils, db_handler
+from tell_me.call_processing.utils import gcs_utils, db_handler
 
 # Transcription costs in dollars per second
 DEEPGRAM_COSTS = {
