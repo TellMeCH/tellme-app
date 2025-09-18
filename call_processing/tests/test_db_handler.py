@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
 from django.utils import timezone
-from call_miner.models import SuggestedTopic, Topic, Conversation, Organization, Customer
+from apps.call_miner.models import SuggestedTopic, Topic, Conversation, Organization, Customer
 from call_processing.utils import db_handler
 
 

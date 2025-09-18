@@ -3,7 +3,7 @@ import json
 from unittest.mock import patch, Mock
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Conversation, User, Organization, Topic, SuggestedTopic
+from apps.call_miner.models import Conversation, User, Organization, Topic, SuggestedTopic
 
 
 @pytest.mark.django_db

@@ -1,8 +1,8 @@
 import json
 import pytest
 from unittest.mock import patch, MagicMock
-from call_miner.utils.summary_mining import count_tokens, condense_summaries
-from call_miner.utils.fallback_prompt import PROMPT_CONFIGS
+from apps.call_miner.utils.summary_mining import count_tokens, condense_summaries
+from apps.call_miner.utils.fallback_prompt import PROMPT_CONFIGS
 
 
 def _build_openai_stub():
@@ -64,7 +64,7 @@ def test_count_tokens_invalid_model():
         count_tokens(text, model_name)
 
 
-@patch('call_miner.utils.summary_mining.openai.OpenAI')
+@patch('apps.call_miner.utils.summary_mining.openai.OpenAI')
 def test_condense_summaries_success(mock_openai):
     """
     Test the condense_summaries function for successful execution.
@@ -104,7 +104,7 @@ def test_condense_summaries_success(mock_openai):
     mock_client_instance.chat.completions.create.assert_called_once()
 
 
-@patch('call_miner.utils.summary_mining.openai.OpenAI')
+@patch('apps.call_miner.utils.summary_mining.openai.OpenAI')
 def test_condense_summaries_api_exception(mock_openai):
     """
     Test the condense_summaries function's handling of API exceptions.
@@ -132,9 +132,9 @@ def test_condense_summaries_no_summaries():
     assert response is None
 
 
-@patch('call_miner.utils.summary_mining.count_tokens', return_value=1)
-@patch('call_miner.utils.summary_mining.openai.OpenAI')
-@patch('call_miner.utils.summary_mining.Langfuse')
+@patch('apps.call_miner.utils.summary_mining.count_tokens', return_value=1)
+@patch('apps.call_miner.utils.summary_mining.openai.OpenAI')
+@patch('apps.call_miner.utils.summary_mining.Langfuse')
 def test_prompt_category_for_customer(mock_langfuse, mock_openai, _mock_count_tokens):
     """
     Verifies that a Customer object triggers the **customer_summary** prompt (and nothing else).
@@ -157,9 +157,9 @@ def test_prompt_category_for_customer(mock_langfuse, mock_openai, _mock_count_to
     assert lf_inst.get_prompt.call_args[0][0] == "customer_summary"
 
 
-@patch('call_miner.utils.summary_mining.count_tokens', return_value=1)
-@patch('call_miner.utils.summary_mining.openai.OpenAI')
-@patch('call_miner.utils.summary_mining.Langfuse')
+@patch('apps.call_miner.utils.summary_mining.count_tokens', return_value=1)
+@patch('apps.call_miner.utils.summary_mining.openai.OpenAI')
+@patch('apps.call_miner.utils.summary_mining.Langfuse')
 def test_prompt_category_for_agent(mock_langfuse, mock_openai, _mock_count_tokens):
     """
     Verifies that an Agent object triggers the **agent_summary** prompt.
@@ -182,9 +182,9 @@ def test_prompt_category_for_agent(mock_langfuse, mock_openai, _mock_count_token
     assert lf_inst.get_prompt.call_args[0][0] == "agent_summary"
 
 
-@patch('call_miner.utils.summary_mining.count_tokens', return_value=1)
-@patch('call_miner.utils.summary_mining.openai.OpenAI')
-@patch('call_miner.utils.summary_mining.Langfuse')
+@patch('apps.call_miner.utils.summary_mining.count_tokens', return_value=1)
+@patch('apps.call_miner.utils.summary_mining.openai.OpenAI')
+@patch('apps.call_miner.utils.summary_mining.Langfuse')
 def test_fallback_config_is_used(mock_langfuse, mock_openai, _mock_count_tokens):
     """
     When Langfuse returns a *fallback* prompt, condense_summaries must fall back
@@ -210,7 +210,7 @@ def test_fallback_config_is_used(mock_langfuse, mock_openai, _mock_count_tokens)
     assert "langfuse_prompt" not in kwargs  # only used in NON-fallback paths
 
 
-@patch('call_miner.utils.summary_mining.count_tokens', return_value=1)
+@patch('apps.call_miner.utils.summary_mining.count_tokens', return_value=1)
 def test_invalid_object_type_raises(_mock_count_tokens):
     """
     An unknown object type in trace_data should raise a ValueError.
@@ -222,7 +222,7 @@ def test_invalid_object_type_raises(_mock_count_tokens):
         )
 
 
-@patch('call_miner.utils.summary_mining.openai.OpenAI')
+@patch('apps.call_miner.utils.summary_mining.openai.OpenAI')
 def test_condense_summaries_token_cutoff(mock_openai):
     """
     Test the condense_summaries function when the token cutoff is reached.

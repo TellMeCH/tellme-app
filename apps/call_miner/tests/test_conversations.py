@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Conversation
+from apps.call_miner.models import Conversation
 from datetime import datetime
 
 

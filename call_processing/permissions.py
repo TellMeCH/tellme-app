@@ -1,5 +1,5 @@
 from rest_framework.permissions import BasePermission
-from call_miner.models import Organization
+from apps.call_miner.models import Organization
 
 
 class IsAuthenticatedOrganization(BasePermission):

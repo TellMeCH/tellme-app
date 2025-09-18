@@ -1,7 +1,7 @@
 import datetime
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic
+from apps.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic
 
 
 def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: datetime.datetime) -> (bool, str):

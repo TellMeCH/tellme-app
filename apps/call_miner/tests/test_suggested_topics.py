@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Topic, SuggestedTopic
+from apps.call_miner.models import Topic, SuggestedTopic
 
 
 @pytest.mark.django_db

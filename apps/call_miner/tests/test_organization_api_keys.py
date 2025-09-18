@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import OrganizationAPIKey
+from apps.call_miner.models import OrganizationAPIKey
 
 ERROR_MESSAGES = {
     'max_keys_reached': "Cannot add more API keys to this organization; max key count reached.",
