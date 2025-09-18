@@ -15,7 +15,7 @@ services:
 
   firebase:
     build:
-      context: ./tell_me/emulators/firebase
+      context: ./tellme/emulators/firebase
     ports:
       - "9099:9099"
     networks:

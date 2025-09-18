@@ -61,7 +61,7 @@ jobs:
         with:
           filters: |
             migrations:
-              - 'call_miner/migrations/**'
+              - 'tellme/call_miner/migrations/**'
 
       - name: Print TELLME_ENV
         run: |
@@ -194,7 +194,7 @@ jobs:
           name: ${{ vars.MONITORING_FUNCTION }}
           runtime: python312
           region: ${{ secrets.GCP_PROJECT_REGION }}
-          source_dir: ./monitoring_functions/langfuse_exporter
+          source_dir: ./tellme/jobs/langfuse_exporter
           entry_point: export_from_langfuse
           memory: 1024M
           service_timeout: 300s
@@ -287,8 +287,8 @@ jobs:
       - name: Build Audiohook emulator image
         run: |
           docker build -t genesys_audiohook_emulator:latest \
-            -f ./genesys_audiohook_emulator/Dockerfile \
-            ./genesys_audiohook_emulator
+            -f ./tellme/emulators/genesys_audiohook/Dockerfile \
+            ./tellme/emulators/genesys_audiohook
 
 
       - name: Run Remote Smoke Tests
@@ -311,4 +311,4 @@ jobs:
           CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.url }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         run: |
-          poetry run pytest -v ./tell_me/call_processing/tests/test_smoke_remote.py
+          poetry run pytest -v ./tellme/call_processing/tests/test_smoke_remote.py
