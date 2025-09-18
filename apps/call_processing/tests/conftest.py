@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock, Mock
 import uuid
 from rest_framework.test import APIClient
 from apps.call_miner.models import Organization, User, Agent, Topic, Customer, OrganizationAPIKey
-from call_processing.utils.llm_configs import ENRICHMENT_CONFIG
+from apps.call_processing.utils.llm_configs import ENRICHMENT_CONFIG
 
 
 @pytest.fixture(autouse=True)
@@ -39,9 +39,9 @@ def mock_gcs_utils():
     Mocks out the GCS upload_to_gcs and download_from_gcs functions.
     We'll patch them globally wherever they are imported.
     """
-    with (patch("call_processing.utils.gcs_utils.upload_to_gcs") as mock_upload,
-          patch("call_processing.utils.gcs_utils.download_from_gcs") as mock_download,
-          patch("call_processing.utils.gcs_utils.list_files_in_gcs") as mock_list):
+    with (patch("apps.call_processing.utils.gcs_utils.upload_to_gcs") as mock_upload,
+          patch("apps.call_processing.utils.gcs_utils.download_from_gcs") as mock_download,
+          patch("apps.call_processing.utils.gcs_utils.list_files_in_gcs") as mock_list):
         mock_upload.return_value = "gs://mocked_bucket/mocked_blob"
         mock_download.return_value = b"FakeAudioBytes"
         mock_list.return_value = ['/mocked_folder/mocked_blob.wav']
@@ -53,7 +53,7 @@ def mock_cloud_tasks():
     """
     Mocks out the Google Cloud Tasks create_task call.
     """
-    with patch("call_processing.utils.queue_utils.create_task") as mock_create:
+    with patch("apps.call_processing.utils.queue_utils.create_task") as mock_create:
         mock_create.return_value = None
         yield mock_create
 
@@ -240,7 +240,7 @@ def mock_pydub():
     Mocks pydub's AudioSegment.from_file so we can control the length (ms) of the audio.
     This helps us test single vs multiple chunks in the pipeline.
     """
-    with patch("call_processing.utils.call_processing.AudioSegment.from_file") as mock_from_file:
+    with patch("apps.call_processing.utils.call_processing.AudioSegment.from_file") as mock_from_file:
         mock_audio_segment = MagicMock()
         mock_audio_segment.__len__.return_value = 600000  # 10 min in ms (2 chunks)
         mock_from_file.return_value = mock_audio_segment
@@ -277,9 +277,9 @@ def mock_langfuse():
 
         return decorator
 
-    with patch("call_processing.utils.call_processing.observe", new=no_op_decorator), \
-            patch("call_processing.utils.call_processing.langfuse_context", new=MagicMock()), \
-            patch("call_processing.utils.call_processing.Langfuse") as mock_lf_class:
+    with patch("apps.call_processing.utils.call_processing.observe", new=no_op_decorator), \
+            patch("apps.call_processing.utils.call_processing.langfuse_context", new=MagicMock()), \
+            patch("apps.call_processing.utils.call_processing.Langfuse") as mock_lf_class:
         # The Langfuse constructor will return a MagicMock
         mock_lf_instance = MagicMock()
         mock_lf_class.return_value = mock_lf_instance
@@ -297,7 +297,7 @@ def mock_processing_user():
     """
     Mocks the ProcessingKeyAuthentication by patching it to always return a mock user.
     """
-    with patch("call_processing.views.ProcessingKeyAuthentication.authenticate") as mock_auth:
+    with patch("apps.call_processing.views.ProcessingKeyAuthentication.authenticate") as mock_auth:
         mock_user = MagicMock()
         mock_user.is_authenticated = True
         mock_user.email = "pipeline@example.com"

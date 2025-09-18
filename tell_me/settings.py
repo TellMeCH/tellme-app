@@ -80,7 +80,7 @@ INSTALLED_APPS = [
     'storages',
     'corsheaders',
     'apps.call_miner',
-    'call_processing'  # TODO: move to apps.call_processing when ready
+    'apps.call_processing'
 ]
 
 MIDDLEWARE = [

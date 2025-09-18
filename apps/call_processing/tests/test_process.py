@@ -60,7 +60,7 @@ class TestProcessRecordingView:
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert "is empty" in response.data["error"]
 
-    @patch("call_processing.views.create_conversation")
+    @patch("apps.call_processing.views.create_conversation")
     def test_process_success(
             self, mock_create_conversation, api_client, valid_task_payload, setup_db, mock_gcs_utils,
             mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
