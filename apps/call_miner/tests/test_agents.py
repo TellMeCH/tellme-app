@@ -754,7 +754,7 @@ class TestAgentSummary:
         """
         Test that the 'summary-data' action for an agent retrieves the expected summary data.
         """
-        with patch('call_miner.models.condense_summaries') as mock_condense_summaries:
+        with patch('apps.call_miner.models.condense_summaries') as mock_condense_summaries:
             mock_condense_summaries.return_value = 'Mocked summary text'
             client.force_authenticate(user=agent.user)
             url = reverse('agent-summary-data', args=[agent.id])

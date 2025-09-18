@@ -41,7 +41,7 @@ def mock_condense_summaries():
     """
     Mocking the call to OpenAI API for re-summarization. Making it autouse to avoid any unexpected costs.
     """
-    with patch('call_miner.models.condense_summaries') as mock:
+    with patch('apps.call_miner.models.condense_summaries') as mock:
         mock.return_value = {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'}
         yield mock
 
@@ -52,8 +52,8 @@ def mock_user_email_sending():
     Mocks out User's send_onboarding_email() and send_verification_email()
     methods so that no real email logic is triggered.
     """
-    with patch('call_miner.models.User.send_onboarding_email') as mock_onboarding, \
-         patch('call_miner.models.User.send_verification_email') as mock_verification:
+    with patch('apps.call_miner.models.User.send_onboarding_email') as mock_onboarding, \
+         patch('apps.call_miner.models.User.send_verification_email') as mock_verification:
         # You can further control return values or side effects if needed.
         mock_onboarding.return_value = None
         mock_verification.return_value = None
@@ -319,7 +319,7 @@ def mock_langfuse():
     Mocks out such that Langfuse() constructor becomes a MagicMock
     """
 
-    with patch("call_processing.utils.call_processing.Langfuse") as mock_lf_class:
+    with patch("apps.call_processing.utils.call_processing.Langfuse") as mock_lf_class:
         # The Langfuse constructor will return a MagicMock
         mock_lf_instance = MagicMock()
         mock_lf_class.return_value = mock_lf_instance

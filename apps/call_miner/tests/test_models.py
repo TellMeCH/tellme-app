@@ -94,7 +94,7 @@ class TestMetaSummaryAbstractModel:
         """
         Test that get_or_create_summary method creates a summary for the Topic.
         """
-        mock_condense = mocker.patch('call_miner.models.condense_summaries', return_value="Mocked Summary")
+        mock_condense = mocker.patch('apps.call_miner.models.condense_summaries', return_value="Mocked Summary")
         topic.get_or_create_summary()
         mock_condense.assert_called_once()
         ps = get_topic_period_summary(topic)
@@ -112,7 +112,7 @@ class TestMetaSummaryAbstractModel:
         ps.last_call_at = conversation_today.date
         ps.save()
 
-        mock_condense = mocker.patch('call_miner.models.condense_summaries')
+        mock_condense = mocker.patch('apps.call_miner.models.condense_summaries')
         topic.get_or_create_summary()
         mock_condense.assert_not_called()
 
@@ -123,7 +123,7 @@ class TestMetaSummaryAbstractModel:
         """
         Test that get_or_create_summary does nothing when there are no conversations.
         """
-        mock_condense = mocker.patch('call_miner.models.condense_summaries', return_value=None)
+        mock_condense = mocker.patch('apps.call_miner.models.condense_summaries', return_value=None)
         topic.get_or_create_summary()
         assert not mock_condense.called
 
