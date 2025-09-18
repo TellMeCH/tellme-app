@@ -12,9 +12,9 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from firebase_admin import auth
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
-from call_miner.utils.period_utils import period_bounds
-from call_miner.utils.summary_mining import condense_summaries
-import call_miner.utils.email_utils as email
+from tell_me.call_miner.utils.period_utils import period_bounds
+from tell_me.call_miner.utils.summary_mining import condense_summaries
+import tell_me.call_miner.utils.email_utils as email
 from call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
 
 

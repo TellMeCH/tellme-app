@@ -1,6 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from call_miner.models import Employee, Analyst, Agent, User
+from tell_me.call_miner.models import Employee, Analyst, Agent, User
 
 
 class EmployeeCreationForm(forms.ModelForm):

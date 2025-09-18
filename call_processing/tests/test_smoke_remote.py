@@ -256,7 +256,7 @@ class TestSmokeTestCloudRunWithLogs:
         self.unique_log_identifier = f"smoke_test_{int(time.time())}"
 
         # Load sample recording
-        sample_recording_path = os.path.join("./data", "sample_recording.wav")
+        sample_recording_path = os.path.join("./data", "sample_recording.wav")  # TODO: Change path
         with open(sample_recording_path, "rb") as f:
             self.sample_file = BytesIO(f.read())
             self.sample_file.name = "sample_recording.wav"

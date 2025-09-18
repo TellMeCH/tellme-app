@@ -23,12 +23,18 @@ from sentry_sdk.integrations.django import DjangoIntegration
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-env = environ.Env(DEBUG=(bool, False))
-env_file = os.path.join(BASE_DIR, ".env")
+# Trying to locate .env
+project_root = BASE_DIR
+while project_root.parent != project_root:
+    if (project_root / "manage.py").exists():
+        break
+    project_root = project_root.parent
+env_file = project_root / ".env"
 
+env = environ.Env(DEBUG=(bool, False))
 if env('TELLME_ENV') == 'dev':  # Local environment: .env is expected
-    if os.path.isfile(env_file):
-        env.read_env(env_file)
+    if env_file.exists():
+        env.read_env(str(env_file))
     else:
         raise Exception('Local execution can only run with a .env file')
 else:
@@ -79,7 +85,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'storages',
     'corsheaders',
-    'call_miner',
+    'tell_me.call_miner',
     'call_processing'
 ]
 
@@ -235,7 +241,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
     'PAGE_SIZE': 15,
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'call_miner.authentication.FirebaseAuthentication',
+        'tell_me.call_miner.authentication.FirebaseAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -258,7 +264,7 @@ SPECTACULAR_SETTINGS = {
         },
     },
     'EXTENSIONS': [
-        'call_miner.authentication_extensions',
+        'tell_me.call_miner.authentication_extensions',
     ],
 }
 
@@ -269,7 +275,7 @@ AUTH_USER_MODEL = 'call_miner.User'
 FIREBASE_WEB_API_KEY = env('FIREBASE_WEB_API_KEY')
 
 # Authentication Backends (especially for Admin Login)
-AUTHENTICATION_BACKENDS = ['call_miner.backends.FirebaseEmailPasswordBackend']
+AUTHENTICATION_BACKENDS = ['tell_me.call_miner.backends.FirebaseEmailPasswordBackend']
 
 # Logging
 if TELLME_ENV != 'dev':

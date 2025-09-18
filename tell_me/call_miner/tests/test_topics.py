@@ -3,7 +3,7 @@ import pytest
 from django.urls import reverse
 from rest_framework import status
 from datetime import timedelta, datetime
-from call_miner.models import Topic, Conversation, PeriodSummary
+from tell_me.call_miner.models import Topic, Conversation, PeriodSummary
 
 TREND_ACTIONS = ['conversations', 'trend']
 

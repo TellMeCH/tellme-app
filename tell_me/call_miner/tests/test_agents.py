@@ -3,7 +3,7 @@ from datetime import datetime
 from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Agent, User
+from tell_me.call_miner.models import Agent, User
 
 TREND_ACTIONS = ['conversations', 'trend', 'overview']
 
@@ -754,7 +754,7 @@ class TestAgentSummary:
         """
         Test that the 'summary-data' action for an agent retrieves the expected summary data.
         """
-        with patch('call_miner.models.condense_summaries') as mock_condense_summaries:
+        with patch('tell_me.call_miner.models.condense_summaries') as mock_condense_summaries:
             mock_condense_summaries.return_value = 'Mocked summary text'
             client.force_authenticate(user=agent.user)
             url = reverse('agent-summary-data', args=[agent.id])

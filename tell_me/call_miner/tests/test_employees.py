@@ -2,7 +2,7 @@ import pytest
 from rest_framework import status
 from django.urls import reverse
 from django.conf import settings
-from call_miner.models import Employee, Agent, User
+from tell_me.call_miner.models import Employee, Agent, User
 
 ERROR_MESSAGES = {
     'org_admins_organization': "Org Admins should not provide an organization when modifying an Employee.",

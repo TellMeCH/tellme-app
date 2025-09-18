@@ -3,11 +3,11 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema_field
 from django.conf import settings
-from call_miner.models import (
+from tell_me.call_miner.models import (
     Conversation, Organization, OrganizationAPIKey, Topic, SuggestedTopic, Employee, Agent, Analyst, Customer, User
 )
-from call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
-from call_miner.schemas import TOPIC_DATA_RESPONSE_SCHEMA, SUGGESTED_TOPIC_DATA_RESPONSE_SCHEMA
+from tell_me.call_miner.utils.paginators import CustomFieldCursorPaginator, ListCursorPagination
+from tell_me.call_miner.schemas import TOPIC_DATA_RESPONSE_SCHEMA, SUGGESTED_TOPIC_DATA_RESPONSE_SCHEMA
 
 
 def paginate_queryset(queryset, request, ordering: list[str] = None):

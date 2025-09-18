@@ -2,7 +2,7 @@ import pytz
 import pytest
 from django.urls import reverse
 from rest_framework import status
-from call_miner.models import Organization, Conversation, Topic
+from tell_me.call_miner.models import Organization, Conversation, Topic
 from datetime import datetime, timedelta
 import zoneinfo
 

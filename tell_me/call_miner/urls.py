@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from call_miner import views
+from tell_me.call_miner import views
 
 # Create a router and register our ViewSets with it.
 router = DefaultRouter()

@@ -4,7 +4,7 @@ from google.cloud import secretmanager
 from django.core.management.base import BaseCommand, CommandError
 from firebase_admin import auth
 from django.conf import settings
-from call_miner.models import User
+from tell_me.call_miner.models import User
 
 env = environ.Env()
 

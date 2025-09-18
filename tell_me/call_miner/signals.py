@@ -1,6 +1,6 @@
 from django.db.models.signals import post_save, pre_delete, post_delete, m2m_changed
 from django.dispatch import receiver
-from call_miner.models import Conversation
+from tell_me.call_miner.models import Conversation
 
 
 @receiver(post_save, sender=Conversation)

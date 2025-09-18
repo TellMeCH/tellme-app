@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock, Mock
 import uuid
 from datetime import datetime, timedelta
 from rest_framework.test import APIClient
-from call_miner.models import (
+from tell_me.call_miner.models import (
     Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
 )
 from call_processing.utils.llm_configs import ENRICHMENT_CONFIG
