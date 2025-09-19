@@ -33,14 +33,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Poetry
+      - name: Install uv
         run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          export PATH="$HOME/.local/bin:$PATH"
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Dependencies
         run: |
-          poetry install --with dev --sync
+          uv sync --dev
 
       - name: Wait for PostgreSQL to be ready
         run: |
@@ -74,19 +74,19 @@ jobs:
 
       - name: Make Migrations
         run: |
-          poetry run python manage.py makemigrations
+          uv run python manage.py makemigrations
         env:
           TELLME_ENV: dev
 
       - name: Run Migrations
         run: |
-          poetry run python manage.py migrate
+          uv run python manage.py migrate
         env:
           TELLME_ENV: dev
 
       - name: Run Tests
         run: |
-          poetry run pytest -v --ignore=./tellme/call_processing/tests/test_smoke_remote.py
+          uv run pytest -v --ignore=./tellme/call_processing/tests/test_smoke_remote.py
         env:
           TELLME_ENV: dev
 

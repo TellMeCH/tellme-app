@@ -1,47 +1,50 @@
-[tool.poetry]
-name = "tell-me"
+[project]
+name = "tellme"
 version = "0.1.0"
 description = ""
-authors = ["altogi <altogi@alumni.ie.edu>"]
+authors = [{name = "altogi", email = "alvaro.tomasgil@tell-me.ch"}]
 readme = "README.md"
+requires-python = ">3.10,<4.0"
 
-[tool.poetry.dependencies]
-python = ">3.10,<4.0"
-django = "5.1.2"
-djangorestframework = "^3.15.2"
-psycopg2-binary = "^2.9.10"
-firebase-admin = "^6.5.0"
-sentry-sdk = {extras = ["django"], version = "^2.17.0"}
-openai = "^1.53.0"
-drf-spectacular = "^0.27.2"
-langfuse = "^2.54.1"
-tiktoken = "^0.8.0"
-django-environ = "^0.11.2"
-django-storages = "^1.14.4"
-google-cloud-secret-manager = "^2.21.1"
-google-cloud-tasks = "^2.18.0"
-deepgram-sdk = "^3.7.7"
-pydub = "^0.25.1"
-gunicorn = "^23.0.0"
-tenacity = "^9.0.0"
-google-cloud-dlp = "^3.26.0"
-channels = "^4.2.0"
-daphne = "^4.1.2"
-django-cors-headers = "^4.6.0"
-groq = "^0.16.0"
-google-genai = "^1.0.0"
-mailersend = "^0.5.8"
-python-dateutil = "^2.9.0.post0"
+dependencies = [
+    "django==5.1.2",
+    "djangorestframework>=3.15.2",
+    "psycopg2-binary>=2.9.10",
+    "firebase-admin>=6.5.0",
+    "sentry-sdk[django]>=2.17.0",
+    "openai>=1.53.0",
+    "drf-spectacular>=0.27.2",
+    "langfuse>=2.54.1",
+    "tiktoken>=0.8.0",
+    "django-environ>=0.11.2",
+    "django-storages>=1.14.4",
+    "google-cloud-secret-manager>=2.21.1",
+    "google-cloud-tasks>=2.18.0",
+    "deepgram-sdk>=3.7.7",
+    "pydub>=0.25.1",
+    "gunicorn>=23.0.0",
+    "tenacity>=9.0.0",
+    "google-cloud-dlp>=3.26.0",
+    "channels>=4.2.0",
+    "daphne>=4.1.2",
+    "django-cors-headers>=4.6.0",
+    "groq>=0.16.0",
+    "google-genai>=1.0.0",
+    "mailersend>=0.5.8",
+    "python-dateutil>=2.9.0.post0",
+]
 
 
-[tool.poetry.group.dev.dependencies]
-pytest-django = "^4.9.0"
-pytest-mock = "^3.14.0"
-pytz = "^2024.2"
-google-cloud-logging = "^3.11.3"
-pytest-asyncio = "^0.25.2"
+[project.optional-dependencies]
+dev = [
+    "pytest-django>=4.9.0",
+    "pytest-mock>=3.14.0",
+    "pytz>=2024.2",
+    "google-cloud-logging>=3.11.3",
+    "pytest-asyncio>=0.25.2",
+]
 
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
