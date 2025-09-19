@@ -1,8 +1,8 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    POETRY_VERSION=1.4.2 \
-    POETRY_VIRTUALENVS_CREATE=false \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
     PATH="/root/.local/bin:$PATH"
 
 RUN apt-get update && apt-get install -y \
@@ -13,20 +13,18 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -sSL https://install.python-poetry.org | python3 -
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock /app/
+COPY pyproject.toml uv.lock* /app/
 
-RUN pip install --upgrade pip setuptools
-
-RUN poetry install
+RUN uv sync --frozen --no-cache
 
 COPY . /app/
 
 EXPOSE 8080
 
-ENV DJANGO_SETTINGS_MODULE=tell_me.settings
+ENV DJANGO_SETTINGS_MODULE=tellme.settings
 
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8080", "tell_me.asgi:application"]
+CMD ["uv", "run", "daphne", "-b", "0.0.0.0", "-p", "8080", "tellme.asgi:application"]
