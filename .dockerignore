@@ -1,0 +1,43 @@
+# Test resources that shouldn't be in production image
+tellme/call_processing/tests/resources/
+tellme/*/tests/resources/
+
+# Development files
+.env
+.env.*
+*.log
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Documentation
+README.md
+docs/
+
+# CI/CD
+.github/
+
+# Test outputs
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments (shouldn't be copied anyway)
+.venv/
+venv/
