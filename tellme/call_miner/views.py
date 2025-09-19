@@ -496,7 +496,7 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
-    summary_period = 'month'
+    summary_period = 'quarter'
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
     summary_rolling_window = True
