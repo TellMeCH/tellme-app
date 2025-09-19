@@ -1,1 +1,1 @@
-default_app_config = 'call_miner.apps.CallMinerConfig'
+default_app_config = 'tellme.call_miner.apps.CallMinerConfig'
