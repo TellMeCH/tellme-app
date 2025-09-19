@@ -98,7 +98,7 @@ def test_condense_summaries_success(mock_openai):
         'Customer reported problem B.',
         'Customer inquired about service C.',
     ]
-    response = condense_summaries(summaries, {'metadata': {'object': "<class 'call_miner.models.Topic'>"}})
+    response = condense_summaries(summaries, {'metadata': {'object': "<class 'tellme.call_miner.models.Topic'>"}})
 
     assert response == {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'}
     mock_client_instance.chat.completions.create.assert_called_once()
@@ -117,7 +117,7 @@ def test_condense_summaries_api_exception(mock_openai):
 
     summaries = ['Customer called about issue A.']
     with pytest.raises(Exception) as exc_info:
-        condense_summaries(summaries, {'metadata': {'object': "<class 'call_miner.models.Topic'>"}})
+        condense_summaries(summaries, {'metadata': {'object': "<class 'tellme.call_miner.models.Topic'>"}})
     assert 'API error' in str(exc_info.value)
 
 
@@ -128,7 +128,7 @@ def test_condense_summaries_no_summaries():
     Verifies that the function returns the appropriate message for no summaries.
     """
     summaries = []
-    response = condense_summaries(summaries, {'metadata': {'object': "<class 'call_miner.models.Topic'>"}})
+    response = condense_summaries(summaries, {'metadata': {'object': "<class 'tellme.call_miner.models.Topic'>"}})
     assert response is None
 
 
@@ -151,7 +151,7 @@ def test_prompt_category_for_customer(mock_langfuse, mock_openai, _mock_count_to
 
     condense_summaries(
         ["dummy summary"],
-        {"metadata": {"object": "<class 'call_miner.models.Customer'>"}}
+        {"metadata": {"object": "<class 'tellme.call_miner.models.Customer'>"}}
     )
     lf_inst.get_prompt.assert_called_once()
     assert lf_inst.get_prompt.call_args[0][0] == "customer_summary"
@@ -175,7 +175,7 @@ def test_prompt_category_for_agent(mock_langfuse, mock_openai, _mock_count_token
 
     condense_summaries(
         ["dummy"],
-        {"metadata": {"object": "<class 'call_miner.models.Agent'>"}}
+        {"metadata": {"object": "<class 'tellme.call_miner.models.Agent'>"}}
     )
 
     lf_inst.get_prompt.assert_called_once()
@@ -201,7 +201,7 @@ def test_fallback_config_is_used(mock_langfuse, mock_openai, _mock_count_tokens)
 
     condense_summaries(
         ["dummy"],
-        {"metadata": {"object": "<class 'call_miner.models.Customer'>"}}
+        {"metadata": {"object": "<class 'tellme.call_miner.models.Customer'>"}}
     )
 
     # Inspect what went to the OpenAI stub
@@ -218,7 +218,7 @@ def test_invalid_object_type_raises(_mock_count_tokens):
     with pytest.raises(ValueError):
         condense_summaries(
             ["whatever"],
-            {"metadata": {"object": "<class 'call_miner.models.Unknown'>"}}
+            {"metadata": {"object": "<class 'tellme.call_miner.models.Unknown'>"}}
         )
 
 
@@ -250,6 +250,6 @@ def test_condense_summaries_token_cutoff(mock_openai):
     mock_client_instance.chat.completions.create.return_value = mock_completion
 
     summaries = ['a' * 100000] * 13
-    response = condense_summaries(summaries, {'metadata': {'object': "<class 'call_miner.models.Topic'>"}})
+    response = condense_summaries(summaries, {'metadata': {'object': "<class 'tellme.call_miner.models.Topic'>"}})
     assert response == {'Reasons for Calling': 'Billing issues and account setup inquiries are common.'}
     mock_client_instance.chat.completions.create.assert_called_once()

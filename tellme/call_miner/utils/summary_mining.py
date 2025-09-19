@@ -12,9 +12,9 @@ logger = logging.getLogger("django")
 openai.api_key = settings.OPENAI_API_KEY
 TOKEN_CUTOFF = 120000
 PROMPT_MAPPING = {
-    "<class 'call_miner.models.Topic'>": "summary_mining",
-    "<class 'call_miner.models.Customer'>": "customer_summary",
-    "<class 'call_miner.models.Agent'>": "agent_summary",
+    "<class 'tellme.call_miner.models.Topic'>": "summary_mining",
+    "<class 'tellme.call_miner.models.Customer'>": "customer_summary",
+    "<class 'tellme.call_miner.models.Agent'>": "agent_summary",
 }
 
 
