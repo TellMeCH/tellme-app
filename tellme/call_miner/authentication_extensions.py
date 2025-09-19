@@ -5,7 +5,7 @@ class FirebaseAuthenticationScheme(OpenApiAuthenticationExtension):
     """
     Authentication Extension used only for documentation purposes (hence the OpenAPI)
     """
-    target_class = 'call_miner.authentication.FirebaseAuthentication'
+    target_class = 'tellme.call_miner.authentication.FirebaseAuthentication'
     name = 'BearerAuth'
 
     def get_security_definition(self, auto_schema):
