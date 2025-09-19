@@ -256,7 +256,7 @@ class TestSmokeTestCloudRunWithLogs:
         self.unique_log_identifier = f"smoke_test_{int(time.time())}"
 
         # Load sample recording
-        sample_recording_path = os.path.join("./tellme/call_processing/tests/resources", "sample_recording.wav")
+        sample_recording_path = os.path.join("tellme/call_processing/tests/resources", "sample_recording.wav")
         with open(sample_recording_path, "rb") as f:
             self.sample_file = BytesIO(f.read())
             self.sample_file.name = "sample_recording.wav"
@@ -398,7 +398,7 @@ class TestSmokeTestCloudRunWithLogs:
         emulator_image = "genesys_audiohook_emulator:latest"
         docker_cmd = [
             "docker", "run", "-i", "--rm",
-            "-v", f"{os.getcwd()}/data:/app/data",
+            "-v", f"{os.getcwd()}/tellme/call_processing/tests/resources:/app/data",
             "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
             "-e", f"WAV_FILE=/app/data/sample_recording.wav",
             "-e", f"API_KEY={self.__api_key_plain}",
