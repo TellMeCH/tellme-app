@@ -42,7 +42,7 @@ gcloud auth application-default login
 
 ## Testing
 For local testing, proceed as follows:
-1. Create a poetry environment has been created with the required packages (see pyproject.toml)
+1. Ensure a uv environment has been created with the required packages (see pyproject.toml)
 2. Run the local instance of the application (see above)
 3. In a new terminal, import .env as follows:
    ```bash
@@ -54,7 +54,7 @@ For local testing, proceed as follows:
    ```
 5. Finally, run the following:
     ```bash
-    poetry run pytest -v --ignore=./call_processing/tests/test_smoke_remote.py
+    uv run pytest -v --ignore=./tellme/call_processing/tests/test_smoke_remote.py
     ```
 
 ---
