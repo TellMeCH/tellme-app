@@ -62,8 +62,7 @@ class AudioHookConsumer(WebsocketConsumer):
             raise exceptions.AuthenticationFailed("No Authorization header found.")
 
         logger.debug("Got API key from scope headers.")
-
-        hashed_key = hashlib.sha256(settings.HASH_KEY + api_key.encode('utf-8') + settings.HASH_KEY).hexdigest()
+        hashed_key = hashlib.sha256((settings.HASH_KEY + api_key + settings.HASH_KEY).encode('utf-8')).hexdigest()
         try:
             org_api_key = OrganizationAPIKey.objects.get(hashed_api_key=hashed_key)
         except OrganizationAPIKey.DoesNotExist:

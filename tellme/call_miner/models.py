@@ -457,7 +457,7 @@ class OrganizationAPIKey(models.Model):
 
         # Generate and hash an API key
         plain_key = secrets.token_urlsafe(43)
-        hashed_key = hashlib.sha256(settings.HASH_KEY + plain_key.encode('utf-8') + settings.HASH_KEY).hexdigest()
+        hashed_key = hashlib.sha256((settings.HASH_KEY + plain_key + settings.HASH_KEY).encode('utf-8')).hexdigest()
 
         # Create the database entry with the hashed key
         api_key = cls.objects.create(
