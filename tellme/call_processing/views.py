@@ -32,10 +32,10 @@ class WebhookProcessingView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        call_sid = data["call_sid"]
-        customer_id = data["customer_id"]
-        agent_id = data["agent_id"]
-        timestamp = data["timestamp"]
+        call_sid = data.get("call_sid")
+        customer_id = data.get("customer_id")
+        agent_id = data.get("agent_id")
+        timestamp = data.get("timestamp")
         call_status = data.get("call_status", "").lower()
 
         organization = request.user
@@ -89,11 +89,11 @@ class QueueRecordingView(APIView):
         if serializer.is_valid():
             data = serializer.validated_data
             organization_id = request.user.id
-            customer_id = data['customer_id']
-            agent_id = data['agent_id']
-            timestamp = data['timestamp']
-            file_obj = data['file']
-            file_name = f"{organization_id}/{customer_id}_{agent_id}_{timestamp.isoformat()}.wav"
+            customer_id = data.get('customer_id')
+            agent_id = data.get('agent_id')
+            timestamp = data.get('timestamp')
+            file_obj = data.get('file')
+            file_name = queue_utils.create_storage_path(organization_id, customer_id, agent_id, timestamp)
 
             logger.info(f'Execution Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
             logger.info(f"Created: {timestamp}")
@@ -126,7 +126,7 @@ class ProcessRecordingView(APIView):
         serializer.is_valid(raise_exception=True)
 
         # Extract validated data
-        file_name = serializer.validated_data["file_name"]
+        file_name = serializer.validated_data.get("file_name")
         organization_id = serializer.validated_data.get("organization_id")
         customer_id = serializer.validated_data.get("customer_id")
         agent_id = serializer.validated_data.get("agent_id")
@@ -139,13 +139,13 @@ class ProcessRecordingView(APIView):
 
         try:
             enriched_data = self.pipeline(
-                file_name,
-                organization_id,
-                customer_id,
-                agent_id,
-                timestamp,
-                transcription_method,
-                enrichment_method
+                file_name=file_name,
+                organization_id=organization_id,
+                customer_id=customer_id,
+                agent_id=agent_id,
+                timestamp=timestamp,
+                transcription_method=transcription_method,
+                enrichment_method=enrichment_method
             )
         except RuntimeError as exc:
             logger.error(f"Processing Pipeline Failed: {str(exc)}")

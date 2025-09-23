@@ -9,7 +9,8 @@ from tellme.call_processing.utils import gcs_utils, db_handler
 
 
 def create_storage_path(organization_id: int, customer_id: str, agent_id: int, call_timestamp: datetime.datetime):
-    return f"{organization_id}/{customer_id}_{agent_id}_{call_timestamp.isoformat()}"
+    customer_part = customer_id if customer_id is not None else "Unknown"
+    return f"{organization_id}/{customer_part}_{agent_id}_{call_timestamp.isoformat()}"
 
 
 def create_task(
