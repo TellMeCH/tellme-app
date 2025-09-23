@@ -74,8 +74,6 @@ CONVERSATIONS = [
             "revenue": "162.4"
         }
     },
-]
-_ = [
     {
         "input": {
             "file_name": "pkz_2.wav",
