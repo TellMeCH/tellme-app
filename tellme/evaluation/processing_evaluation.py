@@ -671,25 +671,28 @@ class CallProcessingEvaluator:
         numeric_metrics = [
             'topics_precision', 'topics_recall',
             'suggested_topics_precision', 'suggested_topics_recall',
-            'sentiment_diff', 'summary_similarity',
-            'transcript_length_ratio', 'title_similarity'
+            'sentiment_diff',
+            'revenue_diff', 'revenue_relative_diff',
+            'summary_similarity', 'title_similarity', 'transcript_similarity',
+            'new_topics_similarity', 'search_query_similarity', 'overall_quality'
         ]
 
         for metric in numeric_metrics:
-            values = [r.get(metric, 0) for r in successful_results if metric in r]
+            values = [r.get(metric, 0) for r in successful_results if metric in r and r.get(metric) is not None]
             if values:
                 summary[f'avg_{metric}'] = sum(values) / len(values)
 
         # Calculate percentage of exact matches
         boolean_metrics = [
-            'topics_exact_match', 'suggested_topics_exact_match',
+            'topics_exact_match',
+            'suggested_topics_exact_match',
             'sentiment_exact_match', 'sentiment_close_match',
-            'customer_id_match', 'summary_similar',
-            'transcript_length_similar'
+            'customer_id_match',
+            'revenue_match'
         ]
 
         for metric in boolean_metrics:
-            values = [r.get(metric, False) for r in successful_results if metric in r]
+            values = [r.get(metric, False) for r in successful_results if metric in r and r.get(metric) is not None]
             if values:
                 summary[f'pct_{metric}'] = sum(values) / len(values) * 100
 
@@ -790,13 +793,61 @@ def main():
         print(f"  Pipeline hash:         {evaluator.pipeline_hash}")
         print()
 
-        # Performance metrics
+        # Performance metrics in organized groups
         print("Performance Metrics:")
-        for key, value in results['summary'].items():
-            if isinstance(value, float):
-                print(f"  {key:33}: {value:.3f}")
-            else:
-                print(f"  {key:33}: {value}")
+
+        # General evaluation stats
+        general_metrics = ['total_conversations', 'successful_evaluations', 'success_rate']
+        for metric in general_metrics:
+            if metric in results['summary']:
+                value = results['summary'][metric]
+                if isinstance(value, float):
+                    print(f"  {metric:33}: {value:.3f}")
+                else:
+                    print(f"  {metric:33}: {value}")
+
+        print("\n  Topics Performance:")
+        topic_metrics = ['avg_topics_precision', 'avg_topics_recall', 'pct_topics_exact_match']
+        for metric in topic_metrics:
+            if metric in results['summary']:
+                value = results['summary'][metric]
+                print(f"  {metric:33}: {value:.3f}")
+
+        print("\n  Suggested Topics Performance:")
+        suggested_metrics = ['avg_suggested_topics_precision', 'avg_suggested_topics_recall', 'pct_suggested_topics_exact_match']
+        for metric in suggested_metrics:
+            if metric in results['summary']:
+                value = results['summary'][metric]
+                print(f"  {metric:33}: {value:.3f}")
+
+        print("\n  Sentiment Performance:")
+        sentiment_metrics = ['avg_sentiment_diff', 'pct_sentiment_exact_match', 'pct_sentiment_close_match']
+        for metric in sentiment_metrics:
+            if metric in results['summary']:
+                value = results['summary'][metric]
+                print(f"  {metric:33}: {value:.3f}")
+
+        print("\n  Customer ID Performance:")
+        customer_metrics = ['pct_customer_id_match']
+        for metric in customer_metrics:
+            if metric in results['summary']:
+                value = results['summary'][metric]
+                print(f"  {metric:33}: {value:.3f}")
+
+        print("\n  Revenue Performance:")
+        revenue_metrics = ['avg_revenue_diff', 'avg_revenue_relative_diff', 'pct_revenue_match']
+        for metric in revenue_metrics:
+            if metric in results['summary']:
+                value = results['summary'][metric]
+                print(f"  {metric:33}: {value:.3f}")
+
+        print("\n  LLM Similarity Scores:")
+        similarity_metrics = ['avg_summary_similarity', 'avg_title_similarity', 'avg_transcript_similarity',
+                            'avg_new_topics_similarity', 'avg_search_query_similarity', 'avg_overall_quality']
+        for metric in similarity_metrics:
+            if metric in results['summary']:
+                value = results['summary'][metric]
+                print(f"  {metric:33}: {value:.3f}")
 
         print(f"\nDetailed results saved to: {evaluator.results_csv_path}")
         print("Evaluation completed successfully!")
