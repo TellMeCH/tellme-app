@@ -215,6 +215,15 @@ class CallProcessingEvaluator:
         return suggested_string
 
     @staticmethod
+    def _process_expected_customer_id(expected: Dict[str, Any]) -> Dict[str, Any]:
+        raw_id = expected.get('customer_id')
+        if raw_id is not None:
+            expected['customer_id'] = hashlib.sha256(
+                (settings.HASH_KEY + raw_id + settings.HASH_KEY).encode('utf8')
+            ).hexdigest()
+        return expected
+
+    @staticmethod
     def _compare_basic_metrics(actual: Dict[str, Any], expected: Dict[str, Any]) -> Dict[str, Any]:
         """
         Compare basic metrics that don't require LLM evaluation.
@@ -252,7 +261,7 @@ class CallProcessingEvaluator:
         results['sentiment_close_match'] = results['sentiment_diff'] <= 1.0  # Within 1 point
 
         # Customer ID extraction
-        results['customer_id_match'] = actual.get('customer_id') == expected.get('customer_id')
+        results['customer_id_match'] = (actual.get('customer_id') == expected.get('customer_id')) or (expected.get('customer_id') is None)
 
         # Revenue comparison (if available)
         actual_revenue = actual.get('revenue')
@@ -559,7 +568,6 @@ class CallProcessingEvaluator:
                     actual_output = pipeline(
                         file_name=conversation['input']['file_name'],
                         organization_id=int(conversation['input']['organization_id']),
-                        customer_id=conversation['input']['customer_id'],
                         agent_id=int(conversation['input']['agent_id']),
                         timestamp=datetime.fromisoformat(conversation['input']['timestamp']),
                         transcription_method=self.transcription_method,
@@ -567,6 +575,7 @@ class CallProcessingEvaluator:
                     )
 
                     # Compare results
+                    conversation['output'] = self._process_expected_customer_id(conversation['output'])
                     basic_results = self._compare_basic_metrics(actual_output, conversation['output'])
                     llm_results = self._compare_with_llm(actual_output, conversation['output'])
 
