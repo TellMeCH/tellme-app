@@ -2,6 +2,10 @@ import time
 import hashlib
 import json
 import copy
+from collections import defaultdict
+import dateparser
+import nameparser
+import re
 from datetime import datetime
 from io import BytesIO
 from django.conf import settings
@@ -63,6 +67,8 @@ class CallProcessingPipeline:
         Multiplier for exponential back-off.
     DLP_ENTITY_TYPES : list[str]
         Sensitive entities that should be redacted via DLP.
+    MINIMUM_CALLER_AGE: int
+        Minimum expected age of the caller, to identify the birth date
     """
     CHUNK_SIZE: float = 5
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
@@ -70,7 +76,8 @@ class CallProcessingPipeline:
     API_MAX_RETRIES: int = 5
     API_BASE_DELAY: float = 5.0
     API_BACKOFF_FACTOR: int = 2
-    DLP_ENTITY_TYPES: list[str] = ["EMAIL_ADDRESS", "PERSON_NAME", "PHONE_NUMBER", "CREDIT_CARD_NUMBER", "LOCATION", "IBAN_CODE", "PASSPORT"]
+    DLP_ENTITY_TYPES: list[str] = ["EMAIL_ADDRESS", "PERSON_NAME", "PHONE_NUMBER", "CREDIT_CARD_NUMBER", "LOCATION", "IBAN_CODE", "PASSPORT", "DATE"]
+    MINIMUM_CALLER_AGE: int = 16
 
     def __init__(self) -> None:
         """
@@ -122,7 +129,7 @@ class CallProcessingPipeline:
         # Configuration for DLP
         self.dlp_client = google.cloud.dlp_v2.DlpServiceClient()
         self.dlp_config = {
-            "parent": f"projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/global",
+            "parent": f"projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}",
             "deidentify_config": {
                 "info_type_transformations": {
                     "transformations": [
@@ -135,14 +142,14 @@ class CallProcessingPipeline:
 
     @observe()
     def __call__(
-            self,
-            file_name: str,
-            organization_id: int,
-            customer_id: str,
-            agent_id: int,
-            timestamp: datetime,
-            transcription_method: str = 'deepgram',
-            enrichment_method: str = 'openai'
+        self,
+        file_name: str,
+        organization_id: int,
+        agent_id: int,
+        timestamp: datetime,
+        transcription_method: str = 'deepgram',
+        enrichment_method: str = 'openai',
+        customer_id: str = None,
     ) -> dict:
         """
         Executes the full call processing pipeline for a given audio file and call metadata.
@@ -190,13 +197,20 @@ class CallProcessingPipeline:
         if transcription_method not in [method[0] for method in TRANSCRIPTION_METHOD_CHOICES]:
             raise ValueError(f'Invalid Transcription Method ({transcription_method})')
 
+        if customer_id is None:
+            extract_customer_id = True
+        else:
+            extract_customer_id = False
+
         file_metadata = {
             "file_name": file_name,
             "organization_id": organization_id,
-            "customer_id": customer_id,
             "agent_id": agent_id,
             "timestamp": timestamp
         }
+        if not extract_customer_id:
+            file_metadata['customer_id'] = customer_id
+
         langfuse_context.update_current_trace(
             name="Call Processing",
             user_id='Cloud Task Manager',
@@ -212,7 +226,10 @@ class CallProcessingPipeline:
             raise RuntimeError('Call Processing: Produced transcript is empty.')
 
         # Redact sensitive information
-        transcript = self.redact_transcript(transcript)
+        transcript, customer_id = self.redact_transcript(transcript, extract_customer_id)
+
+        if extract_customer_id:
+            file_metadata['customer_id'] = customer_id
 
         # Obtain additional information from the transcript
         enriched_data, input_tokens, output_tokens = self.enrich_recording(
@@ -569,7 +586,7 @@ class CallProcessingPipeline:
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
     )
-    def redact_transcript(self, transcript: str) -> str:
+    def redact_transcript(self, transcript: str, extract_customer_id: bool = False) -> str:
         """
         Remove sensitive information from the obtained transcript using the Google Cloud DLP API
 
@@ -597,7 +614,109 @@ class CallProcessingPipeline:
             output={"redacted_transcript": redacted_transcript},
             model=f'dlp-service-client'
         )
-        return redacted_transcript
+
+        if extract_customer_id:
+            customer_id = self.extract_customer_id(transcript, redacted_transcript)
+        else:
+            customer_id = None
+        return redacted_transcript, customer_id
+
+    def extract_customer_id(self, transcript: str, redacted_transcript: str) -> str:
+        """
+        Extracts a unique customer identifier from original and redacted transcripts.
+
+        This method uses regex pattern matching to align the original transcript with its
+        redacted counterpart, extracting DLP-replaced entities. It generates a customer ID
+        based on the first person name found and the first birth date (determined by being
+        more than MINIMUM_CALLER_AGE years in the past).
+
+        Args:
+            transcript (str): The original, unredacted transcript text.
+            redacted_transcript (str): The DLP-redacted transcript with [ENTITY_TYPE] placeholders.
+
+        Returns:
+            str: A SHA-256 hashed customer ID based on extracted name and birth date,
+                 or a time-based fallback ID if extraction fails.
+
+        Raises:
+            ValueError: If the original and redacted transcripts cannot be aligned.
+        """
+        # Tokenize redacted text into alternating LITERAL/TAG parts
+        tag_pattern = re.compile(r"\[([A-Z][A-Z0-9_]+)\]")
+        tokens = []
+        last_pos = 0
+
+        for match in tag_pattern.finditer(redacted_transcript):
+            # Add literal text before the tag
+            if match.start() > last_pos:
+                tokens.append(("LITERAL", redacted_transcript[last_pos:match.start()]))
+            # Add the tag
+            tokens.append(("TAG", match.group(1)))
+            last_pos = match.end()
+
+        # Add remaining literal text after the last tag
+        if last_pos < len(redacted_transcript):
+            tokens.append(("LITERAL", redacted_transcript[last_pos:]))
+
+        # Build regex pattern that mirrors the redacted text structure
+        regex_parts = []
+        group_mapping = []
+        tag_counters = defaultdict(int)
+
+        for token_type, value in tokens:
+            if token_type == "LITERAL":
+                regex_parts.append(re.escape(value))
+            else:  # TAG
+                tag_counters[value] += 1
+                group_name = f"{value}__{tag_counters[value]}"
+                regex_parts.append(f"(?P<{group_name}>.+?)")  # Non-greedy capture
+                group_mapping.append((value, group_name))
+
+        # Compile full pattern and match against original transcript
+        pattern = re.compile(f"^{''.join(regex_parts)}$", re.DOTALL)
+        match = pattern.fullmatch(transcript)
+
+        if not match:
+            raise ValueError("Original and redacted transcripts do not align.")
+
+        # Group extracted values by tag type
+        extracted_entities = defaultdict(list)
+        for tag, group_name in group_mapping:
+            extracted_entities[tag].append(match.group(group_name))
+
+        # Extract customer name (first PERSON_NAME found)
+        raw_customer_name = extracted_entities['PERSON_NAME'][0] if extracted_entities['PERSON_NAME'] else ''
+
+        # Find first valid birth date (more than MINIMUM_CALLER_AGE years in the past)
+        birth_date = ''
+        today = datetime.now()
+        minimum_birth_date = datetime(today.year - self.MINIMUM_CALLER_AGE, today.month, today.day)
+
+        for date_str in extracted_entities['DATE']:
+            try:
+                parsed_date = dateparser.parse(date_str.strip())
+                if parsed_date and parsed_date < minimum_birth_date:
+                    birth_date = date_str.strip()
+                    break
+            except (ValueError, TypeError):
+                continue
+
+        # Generate raw ID for hashing
+        raw_id = str(time.time())  # Fallback to timestamp-based ID if no name found
+        if raw_customer_name:
+            parsed_name = nameparser.HumanName(raw_customer_name)
+
+            if parsed_name.last:
+                name_component = f'{parsed_name.first}{parsed_name.last}'
+
+                if birth_date:
+                    date_component = dateparser.parse(birth_date).strftime("%d/%m/%Y")
+                    raw_id = f'{name_component}{date_component}'
+                else:
+                    raw_id = name_component
+
+        # Return salted hash of the raw ID
+        return hashlib.sha256((settings.HASH_KEY + raw_id + settings.HASH_KEY).encode('utf8')).hexdigest()
 
     @observe
     def enrich_recording(self, transcript: str, enrichment_method: str, organization_id: int):
