@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 from tellme.call_miner.models import (
     Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
 )
-from tellme.call_processing.utils.llm_configs import ENRICHMENT_CONFIG
+from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
 
 
 @pytest.fixture(autouse=True)
@@ -247,7 +247,7 @@ def mock_pydub():
     Mocks pydub's AudioSegment.from_file so we can control the length (ms) of the audio.
     This helps us test single vs multiple chunks in the pipeline.
     """
-    with patch("tellme.call_processing.utils.call_processing.AudioSegment.from_file") as mock_from_file:
+    with patch("tellme.call_processing.processors.call_transcriber.AudioSegment.from_file") as mock_from_file:
         mock_audio_segment = MagicMock()
         mock_audio_segment.__len__.return_value = 600000  # 10 min in ms (2 chunks)
         mock_from_file.return_value = mock_audio_segment
@@ -305,16 +305,21 @@ def mock_langfuse():
 
         return decorator
 
-    with patch("tellme.call_processing.utils.call_processing.observe", new=no_op_decorator), \
-            patch("tellme.call_processing.utils.call_processing.langfuse_context", new=MagicMock()), \
-            patch("tellme.call_processing.utils.call_processing.Langfuse") as mock_lf_class:
-        # The Langfuse constructor will return a MagicMock
+    with patch("langfuse.decorators.observe", new=no_op_decorator), \
+            patch("langfuse.decorators.langfuse_context", new=MagicMock()), \
+            patch("langfuse.Langfuse") as mock_lf_class:
+
+        # Mock Langfuse instance
         mock_lf_instance = MagicMock()
         mock_lf_class.return_value = mock_lf_instance
 
+        # Mock prompts
         mock_prompt = MagicMock()
         mock_prompt.is_fallback = False
-        mock_prompt.config = ENRICHMENT_CONFIG
+        mock_prompt.config = ENRICHMENT_PIPELINE[0]['config'] if ENRICHMENT_PIPELINE else {}
+        mock_prompt.prompt = "Mock prompt text"
+        mock_prompt.compile = MagicMock(return_value="Compiled mock prompt")
+
         mock_lf_instance.get_prompt.return_value = mock_prompt
 
         yield mock_lf_instance

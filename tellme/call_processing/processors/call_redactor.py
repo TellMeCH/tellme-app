@@ -1,5 +1,5 @@
 """
-CallRedacter handles PII redaction and customer identification.
+CallRedactor handles PII redaction and customer identification.
 
 This module contains all redaction-related functionality including:
 - PII redaction via Google Cloud DLP
@@ -29,7 +29,7 @@ class CallRedactor:
 
     def __init__(self, minimum_caller_age=16, max_retries=5, base_delay=5.0, backoff_factor=2):
         """
-        Initialize the CallRedacter with necessary clients and configuration.
+        Initialize the CallRedactor with necessary clients and configuration.
 
         Args:
             minimum_caller_age (int): Minimum expected age for birth date identification

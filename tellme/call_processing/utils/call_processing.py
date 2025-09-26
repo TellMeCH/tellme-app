@@ -5,7 +5,7 @@ from django.conf import settings
 from langfuse.decorators import observe, langfuse_context
 
 from tellme.call_processing.utils.llm_configs import (
-    TRANSCRIPTION_METHOD_CHOICES, CUSTOMER_IDENTIFICATION_METHOD_CHOICES, ENRICHMENT_PIPELINE
+    TRANSCRIPTION_METHOD_CHOICES, CUSTOMER_IDENTIFICATION_METHOD_CHOICES
 )
 from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher
 
@@ -54,7 +54,7 @@ class CallProcessingPipeline:
     API_BACKOFF_FACTOR: int = 2
     MINIMUM_CALLER_AGE: int = 16
 
-    def __init__(self) -> None:
+    def __init__(self):
         """
         Initializes the call processing pipeline with specialized processor modules.
 
