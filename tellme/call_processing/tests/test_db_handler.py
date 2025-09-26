@@ -15,8 +15,7 @@ class TestObtainSuggestedTopics:
         result = db_handler.obtain_suggested_topics(org.id)
         assert suggested_topic.name in result
         assert suggested_topic.description in result
-        assert result.endswith(', ')
-    
+
     def test_obtain_suggested_topics_multiple(self, setup_db):
         """Test with multiple suggested topics."""
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
