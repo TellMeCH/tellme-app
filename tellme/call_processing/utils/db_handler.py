@@ -64,9 +64,9 @@ def obtain_active_topics(organization_id: int):
     Returns:
         str: A string enumerating the names and descriptions of all active topics
     """
-    active_topics = ''
+    active_topics = '\n'
     for topic in Topic.objects.filter(organization=organization_id, is_active=True):
-        active_topics += f'{topic.name}: {topic.description}, '
+        active_topics += f'\t - {topic.name}: {topic.description}\n'
     return active_topics
 
 
@@ -80,9 +80,9 @@ def obtain_suggested_topics(organization_id: int):
     Returns:
         str: A string enumerating the names and descriptions of all active topics
     """
-    suggested_topics = ''
+    suggested_topics = '\n'
     for topic in SuggestedTopic.objects.filter(organization=organization_id):
-        suggested_topics += f'{topic.name}: {topic.description}, '
+        suggested_topics += f'\t - {topic.name}: {topic.description}\n'
     return suggested_topics
 
 

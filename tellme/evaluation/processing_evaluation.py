@@ -193,9 +193,9 @@ class CallProcessingEvaluator:
         Returns:
             str: Formatted string of active topics
         """
-        topics_string = ""
+        topics_string = "\n"
         for topic in TOPICS:
-            topics_string += f"{topic['name']}: {topic['description']}, "
+            topics_string += f"\t - {topic['name']}: {topic['description']}\n"
         return topics_string
 
     @staticmethod
@@ -209,9 +209,9 @@ class CallProcessingEvaluator:
         Returns:
             str: Formatted string of suggested topics
         """
-        suggested_string = ""
+        suggested_string = "\n"
         for topic in SUGGESTED_TOPICS:
-            suggested_string += f"{topic['name']}: {topic['description']}, "
+            suggested_string += f"\t - {topic['name']}: {topic['description']}\n"
         return suggested_string
 
     @staticmethod
