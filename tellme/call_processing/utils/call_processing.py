@@ -3,6 +3,8 @@ import hashlib
 import json
 import copy
 from collections import defaultdict
+from pickle import FALSE
+
 import dateparser
 import nameparser
 import re
@@ -21,7 +23,8 @@ from langfuse.decorators import observe, langfuse_context
 from deepgram.clients.common.v1.errors import DeepgramApiError
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception, retry_if_exception_type
 from tellme.call_processing.utils.llm_configs import (
-    TRANSCRIPTION_METHOD_CHOICES, DIARIZATION_PROMPT, DIARIZATION_CONFIG, ENRICHMENT_PROMPT, ENRICHMENT_CONFIG
+    TRANSCRIPTION_METHOD_CHOICES, CUSTOMER_IDENTIFICATION_METHOD_CHOICES, DIARIZATION_PROMPT, DIARIZATION_CONFIG,
+    ENRICHMENT_PROMPT, ENRICHMENT_CONFIG, ENRICHMENT_STEPS
 )
 from tellme.call_processing.utils import gcs_utils, db_handler
 
@@ -69,6 +72,8 @@ class CallProcessingPipeline:
         Sensitive entities that should be redacted via DLP.
     MINIMUM_CALLER_AGE: int
         Minimum expected age of the caller, to identify the birth date
+    ENRICHMENT_STEPS: int
+        Number of steps involved in the call enrichment. Determines the number of prompts / configs to load
     """
     CHUNK_SIZE: float = 5
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
@@ -78,6 +83,7 @@ class CallProcessingPipeline:
     API_BACKOFF_FACTOR: int = 2
     DLP_ENTITY_TYPES: list[str] = ["EMAIL_ADDRESS", "PERSON_NAME", "PHONE_NUMBER", "CREDIT_CARD_NUMBER", "LOCATION", "IBAN_CODE", "PASSPORT", "DATE"]
     MINIMUM_CALLER_AGE: int = 16
+    ENRICHMENT_STEPS: int = 2
 
     def __init__(self) -> None:
         """
@@ -120,11 +126,14 @@ class CallProcessingPipeline:
             label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
             fallback=DIARIZATION_PROMPT
         )
-        self.enrichment_prompt = Langfuse().get_prompt(
-            'call_enrichment',
-            label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
-            fallback=ENRICHMENT_PROMPT
-        )
+        self.enrichment_prompts = []
+        for i in range(self.ENRICHMENT_STEPS):
+            prompt = Langfuse().get_prompt(
+                f'enrichment_{i}',
+                label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
+                fallback=ENRICHMENT_PROMPT[i]
+            )
+            self.enrichment_prompts.append(prompt)
 
         # Configuration for DLP
         self.dlp_client = google.cloud.dlp_v2.DlpServiceClient()
@@ -150,6 +159,7 @@ class CallProcessingPipeline:
         transcription_method: str = 'deepgram',
         enrichment_method: str = 'openai',
         customer_id: str = None,
+        customer_identification_method: str = 'enrichment',
     ) -> dict:
         """
         Executes the full call processing pipeline for a given audio file and call metadata.
@@ -196,6 +206,8 @@ class CallProcessingPipeline:
 
         if transcription_method not in [method[0] for method in TRANSCRIPTION_METHOD_CHOICES]:
             raise ValueError(f'Invalid Transcription Method ({transcription_method})')
+        if customer_identification_method not in [method[0] for method in CUSTOMER_IDENTIFICATION_METHOD_CHOICES]:
+            raise ValueError(f'Invalid Customer Identification Method ({customer_identification_method})')
 
         if customer_id is None:
             extract_customer_id = True
@@ -226,20 +238,19 @@ class CallProcessingPipeline:
             raise RuntimeError('Call Processing: Produced transcript is empty.')
 
         # Redact sensitive information
-        transcript, customer_id = self.redact_transcript(transcript, extract_customer_id)
+        customer_from_redaction = extract_customer_id and (customer_identification_method == 'redaction')
+        redacted_transcript, customer_id = self.redact_transcript(transcript, customer_from_redaction)
 
-        if extract_customer_id:
+        if customer_from_redaction:
             file_metadata['customer_id'] = customer_id
 
         # Obtain additional information from the transcript
         enriched_data, input_tokens, output_tokens = self.enrich_recording(
             transcript,
+            redacted_transcript,
             enrichment_method,
             file_metadata['organization_id']
         )
-
-        # Replace speaker labels
-        enriched_data = self.replace_speaker_labels(transcript, enriched_data)
 
         enriched_data['language'] = language
         enriched_data['input_tokens'] = input_tokens
@@ -533,7 +544,7 @@ class CallProcessingPipeline:
         case_2 = isinstance(error, errors.ClientError) and error.code == 429
         return case_1 or case_2
 
-    @observe(as_type="generation")
+    @observe(as_type="generation", capture_output=False, capture_input=False)
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
@@ -616,12 +627,12 @@ class CallProcessingPipeline:
         )
 
         if extract_customer_id:
-            customer_id = self.extract_customer_id(transcript, redacted_transcript)
+            customer_id = self.extract_customer_id_from_redaction(transcript, redacted_transcript)
         else:
             customer_id = None
         return redacted_transcript, customer_id
 
-    def extract_customer_id(self, transcript: str, redacted_transcript: str) -> str:
+    def extract_customer_id_from_redaction(self, transcript: str, redacted_transcript: str) -> str:
         """
         Extracts a unique customer identifier from original and redacted transcripts.
 
@@ -701,10 +712,15 @@ class CallProcessingPipeline:
             except (ValueError, TypeError):
                 continue
 
+        customer_id = self.create_customer_id(raw_customer_name, birth_date)
+        return customer_id
+
+    @staticmethod
+    def create_customer_id(full_name: str, birth_date: str) -> str:
         # Generate raw ID for hashing
         raw_id = str(time.time())  # Fallback to timestamp-based ID if no name found
-        if raw_customer_name:
-            parsed_name = nameparser.HumanName(raw_customer_name)
+        if full_name:
+            parsed_name = nameparser.HumanName(full_name)
 
             if parsed_name.last:
                 name_component = f'{parsed_name.first}{parsed_name.last}'
@@ -718,8 +734,8 @@ class CallProcessingPipeline:
         # Return salted hash of the raw ID
         return hashlib.sha256((settings.HASH_KEY + raw_id + settings.HASH_KEY).encode('utf8')).hexdigest()
 
-    @observe
-    def enrich_recording(self, transcript: str, enrichment_method: str, organization_id: int):
+    @observe(capture_input=False)
+    def enrich_recording(self, transcript: str, redacted_transcript: str, enrichment_method: str, organization_id: int):
         """
         Produce structured analytics for the call (`summary`, `topics`, …).
 
@@ -731,69 +747,98 @@ class CallProcessingPipeline:
             input_tokens: int
             output_tokens: int
         """
-        # Retrieve relevant topic data
-        topic_data = db_handler.obtain_active_topics(organization_id)
-        suggested_data = db_handler.obtain_suggested_topics(organization_id)
-
-        # Prepare Prompt and Response Format
-        system_message = self.enrichment_prompt.compile(topics_string=topic_data, suggested_string=suggested_data)
-        if self.enrichment_prompt.is_fallback:
-            enrichment_config = ENRICHMENT_CONFIG
-        else:
-            enrichment_config = {'langfuse_prompt': self.enrichment_prompt}
-            enrichment_config.update(self.enrichment_prompt.config)
-
+        go_to_fallback = False
+        input_tokens, output_tokens = None, None
+        enriched_response = {}
         fallback_exceptions = (ValueError, httpx.HTTPError, errors.ClientError)
         methods = {'openai': self.enrich_recording_with_openai, 'vertexai': self.enrich_recording_with_vertexai}
-
-        # Define enrichment configs per provider
-        configs = {}
-        for meth in methods.keys():
-            configs[meth] = copy.deepcopy(enrichment_config)
-            configs[meth]['model'] = configs[meth]['model'][meth]
-
-            if meth == 'openai':
-                # OpenAI requires additionalProperties: false on all object schemas
-                self.add_additional_properties_false(configs[meth]['response_format']['json_schema']['schema'])
 
         if enrichment_method not in methods:
             raise ValueError(f'Provided enrichment_method is not supported ({enrichment_method})')
         else:
             fallback_name = [m for m in methods.keys() if m != enrichment_method][0]
 
-        go_to_fallback = False
-        response = None
-        input_tokens = None
-        output_tokens = None
-        try:
-            response, input_tokens, output_tokens = methods[enrichment_method](
-                transcript,
-                system_message,
-                configs[enrichment_method]
-            )
-        except fallback_exceptions:
-            go_to_fallback = True
+        # Retrieve relevant topic data
+        compile_data = {
+            "topics_string": db_handler.obtain_active_topics(organization_id),
+            "suggested_string": db_handler.obtain_suggested_topics(organization_id)
+        }
 
-        if go_to_fallback:
+        # Go through every enrichment step
+        for i, step in enumerate(ENRICHMENT_STEPS):
+            if step['uses_redacted']:
+                conversation = redacted_transcript
+            else:
+                conversation = transcript
+
+            # Prepare Prompt and Response Format
+            relevant_data = {key: compile_data[key] for key in step['to_compile'] if key in compile_data}
+            system_message = self.enrichment_prompts[i].compile(**relevant_data)
+
+            if self.enrichment_prompts[i].is_fallback:
+                enrichment_config = ENRICHMENT_CONFIG[i]
+            else:
+                enrichment_config = {'langfuse_prompt': self.enrichment_prompts[i]}
+                enrichment_config.update(self.enrichment_prompts[i].config)
+
+            # Define enrichment configs per provider
+            configs = {}
+            for meth in methods.keys():
+                configs[meth] = copy.deepcopy(enrichment_config)
+                configs[meth]['model'] = configs[meth]['model'][meth]
+
+                if meth == 'openai':
+                    # OpenAI requires additionalProperties: false on all object schemas
+                    self.add_additional_properties_false(configs[meth]['response_format']['json_schema']['schema'])
+
+            # Obtain the response paying attention to sticking to the fallback method if necessary
+            response = None
             try:
-                response, input_tokens, output_tokens = methods[fallback_name](
-                    transcript,
+                response, input_tokens, output_tokens = methods[enrichment_method](
+                    conversation,
                     system_message,
-                    configs[fallback_name]
+                    configs[enrichment_method],
+                    i
                 )
-            except Exception as e:
-                raise RuntimeError(f'Could not proceed with fallback enrichment method {fallback_name}. Trace:\n{e}')
+            except fallback_exceptions:
+                go_to_fallback = True
 
-        return response, input_tokens, output_tokens
+            if go_to_fallback:
+                try:
+                    response, input_tokens, output_tokens = methods[fallback_name](
+                        conversation,
+                        system_message,
+                        configs[fallback_name],
+                        i
+                    )
+                except Exception as e:
+                    raise RuntimeError(f'Could not proceed with fallback enrichment method {fallback_name}. Trace:\n{e}')
 
-    @observe(as_type="generation")
+            # As soon as they are known, identify speakers in the conversation
+            if ('agent_speaker_labels' in response) and ('customer_speaker_labels' in response):
+                response = self.replace_speaker_labels(redacted_transcript, response)
+                redacted_transcript = response['transcript']
+
+            # Complete the base dictionary
+            enriched_response.update(response)
+
+        # Finally, make sure customer information is not found in the method output (it will end up in Langfuse)
+        enriched_response['customer_id'] = self.create_customer_id(
+            enriched_response['customer_info']['full_name'],
+            enriched_response['customer_info']['birth_date']
+        )
+        del enriched_response['customer_info']
+
+        return enriched_response, input_tokens, output_tokens
+
+    @observe(as_type="generation", capture_input=False, capture_output=False)
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception_type(httpx.HTTPError)
     )
-    def enrich_recording_with_openai(self, transcript: str, system_message: str, config: dict) -> (dict, int, int):
+    def enrich_recording_with_openai(self, transcript: str, system_message: str, config: dict, step: int) -> (dict, int, int):
         """
         Internal helper that calls the OpenAI Chat Completions endpoint in JSON schema mode.
 
@@ -802,7 +847,7 @@ class CallProcessingPipeline:
         """
         langfuse_context.update_current_observation(
             name="enrichment_openai",
-            prompt=self.enrichment_prompt
+            prompt=self.enrichment_prompts[step]
         )
         completion = self.openai.chat.completions.create(
             messages=[
@@ -817,14 +862,14 @@ class CallProcessingPipeline:
         output_tokens = completion.usage.completion_tokens
         return json.loads(response.content), input_tokens, output_tokens
 
-    @observe(as_type="generation")
+    @observe(as_type="generation", capture_input=False, capture_output=False)
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(vertexai_retry_logic)
     )
-    def enrich_recording_with_vertexai(self, transcript: str, system_message: str, config: dict) -> (dict, int, int):
+    def enrich_recording_with_vertexai(self, transcript: str, system_message: str, config: dict, step: int) -> (dict, int, int):
         """
         Same enrichment as above but executed on Gemini (Vertex AI).
 
@@ -845,7 +890,7 @@ class CallProcessingPipeline:
         # Send observation data to Langfuse
         langfuse_context.update_current_observation(
             name="enrichment_vertexai",
-            prompt=self.enrichment_prompt,
+            prompt=self.enrichment_prompts[step],
             model=config['model'],
             usage={
                 "promptTokens": generation.usage_metadata.prompt_token_count,
