@@ -99,10 +99,41 @@ class TestQueueView:
         """
         api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
 
-        for field in ['customer_id', 'agent_id', 'timestamp', 'file']:
+        for field in ['agent_id', 'timestamp', 'file']:
             current_payload = valid_payload.copy()
             del current_payload[field]
             url = reverse("queue")
             response = api_client.post(url, data=current_payload, format="multipart")
             assert response.status_code == status.HTTP_400_BAD_REQUEST
             mock_cloud_tasks.create_task.assert_not_called()
+
+    def test_queue_without_customer_id_succeeds(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks, setup_db):
+        """
+        Test that queue endpoint works correctly when customer_id is not provided.
+        The pipeline should be able to generate a customer_id during processing.
+        """
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+
+        # Remove customer_id from payload to test without it
+        payload_without_customer = valid_payload.copy()
+        del payload_without_customer["customer_id"]
+
+        url = reverse("queue")
+        response = api_client.post(url, data=payload_without_customer, format="multipart")
+
+        # Should succeed even without customer_id
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert "file_name" in response.data
+
+        # Verify file was uploaded to GCS
+        mock_gcs_utils[0].assert_called_once()
+
+        # Verify Cloud Task was created for processing
+        mock_cloud_tasks.assert_called_once()
+
+        # Verify the task arguments - customer_id should be None (will be generated during processing)
+        task_call_args = mock_cloud_tasks.call_args
+        customer_id = task_call_args[0][3]
+
+        assert customer_id is None
+

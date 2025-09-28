@@ -1,5 +1,6 @@
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
 ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
+CUSTOMER_IDENTIFICATION_METHOD_CHOICES = [('enrichment', 'Enrichment'), ('redaction', 'Redaction')]
 
 DIARIZATION_PROMPT = """
     You are a helpful diarization assistant, working with transcribed calls between TWO speakers.
@@ -24,141 +25,180 @@ DIARIZATION_CONFIG = {
     "temperature": 0.2
 }
 
-ENRICHMENT_PROMPT = """
-You have the task of summarizing and classifying transcribed calls between two speakers.
-One of the speakers in the call is an agent for a company, and the other speaker is a customer. 
-The different speakers are indicated by 'Speaker 0' and 'Speaker 1'.
-Follow these steps:
+ENRICHMENT_PIPELINE = [
+    {
+        "name": "speaker_identification",
+        "prompt": """
+            You have the task of analyzing a transcribed call between a company agent and a customer.
+            The speakers are labeled as 'Speaker 0', 'Speaker 1', etc.
+            Follow these steps:
 
-STEP 1: SPEAKER IDENTIFICATION
-Read through the transcribed dialogue. Identify which of the speakers is the company's agent (usually 
-'Speaker 0') and which one is the customer. For extra speaker labels (f.e. 'Speaker 2') that may be present in 
-the transcript, assume they are either the customer or the agent. Keep track of the speaker labels that 
-correspond to the agent and to the customer.
+            STEP 1: SPEAKER IDENTIFICATION
+            Read through the transcribed dialogue and identify which speaker is the company agent and which is the customer.
+            The agent typically introduces the company, asks verification questions, provides solutions, or follows company procedures.
+            The customer typically seeks help, provides personal information, expresses concerns, or asks questions about services.
+            If additional speaker labels appear (e.g., 'Speaker 2'), assign them to either the agent or customer role based on their behavior.
 
-STEP 2: ACTIVE TOPIC CLASSIFICATION
-These are the company's ESTABLISHED TOPICS for call classification:
-{topics_string}
+            STEP 2: CUSTOMER INFORMATION EXTRACTION
+            From the customer's statements, extract any personal information mentioned during the call:
+            - Full name (first and last name if available)
+            - Address or location details
+            - Birth date, age, or date-related information
+            - Phone number or other contact information
+            Use empty strings for any information not mentioned in the call.
 
-Review the conversation and identify which of these established topics apply. Present a list containing the associated
-topic names. If none of these topics match, simply return an empty list. Do not invent topics!
-
-STEP 3: SUGGESTED TOPIC CLASSIFICATION
-These are PENDING TOPIC SUGGESTIONS that may become official topics:
-{suggested_string}
-
-Check if the conversation matches any of these suggested topics. Present a list 
-containing the associated topic names. If none of these topics match, simply return an empty list. Do not invent 
-topics!
-
-STEP 4: NEW TOPIC DISCOVERY
-Identify any conversation themes NOT covered by the established or suggested topics above. Think about what this call is really about and what category would help classify similar future calls. Present them as a list of dictionaries
-with keys "name" and "description". The complete list of existing topics is: {topics_string}, {suggested_string}.
-
-STEP 5: CALL SUMMARY
-Summarize the call paying attention to: the reason for the call, the topics discussed during the call, and
-the agreed upon next steps as a result of the call. Try to keep this summary to six sentences. Do not include 
-the names of customers or agents.
-
-STEP 6: CALL TITLE
-Define a title that briefly captures the content of the call. Do not include names of customers or agents.
-
-STEP 7: SATISFACTION RATING
-Represent probability of customer churn in a scale from 1 to 5, 1 being a customer who will certainly never
-interact with the company again, and 5 being a customer that is completely satisfied with the product or service
-in question. This is a proxy of the call sentiment.
-
-STEP 8: OUTPUT FORMAT
-The output must strictly be in a JSON format with keys "agent_speaker_labels", "customer_speaker_labels", 
-"topics", "suggested_topics", "new_topics", "summary", "title", and "sentiment". Do not add any text before or after 
-the json.
-"""
-
-"""
-The following schema contains:
-- agent_speaker_labels: A list of speaker label strings that identify the agent in the conversation
-- customer_speaker_labels: A list of speaker label strings that identify the customer in the conversation
-- topics: A list of established topic strings that match the conversation
-- suggested_topics: A list of pending suggested topic strings that match the conversation
-- new_topics: A list of objects with "name" and "description" keys for newly discovered topics
-- summary: A string summarizing the key points of the conversation
-- title: A string that represents the content of the call
-- sentiment: An integer that represents the overall sentiment of the call (1-5 scale)
-"""
-ENRICHMENT_CONFIG = {
-    "model": {"openai": "gpt-4.1-mini", "vertexai": "gemini-2.5-flash"},
-    "temperature": 0.2,
-    "response_format": {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "enrichment_response",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "agent_speaker_labels": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "customer_speaker_labels": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "topics": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "suggested_topics": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "new_topics": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {
-                                    "type": "string"
+            STEP 3: OUTPUT FORMAT
+            The output must be in JSON format with the following structure:
+            {
+                "agent_speaker_labels": ["Speaker 0"],
+                "customer_speaker_labels": ["Speaker 1"],
+                "customer_info": {
+                    "full_name": "extracted name or empty string",
+                    "address": "extracted address or empty string",
+                    "birth_date": "extracted birth date or empty string",
+                    "phone_number": "extracted phone number or empty string"
+                }
+            }
+            Do not add any text before or after the JSON.
+            """,
+        "uses_redacted": False,
+        "to_compile": [],
+        "config": {
+            "model": {"openai": "gpt-4o-mini", "vertexai": "gemini-2.0-flash-001"},
+            "temperature": 0.2,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "speaker_identification_response",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "agent_speaker_labels": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "customer_speaker_labels": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "customer_info": {
+                                "type": "object",
+                                "properties": {
+                                    "full_name": {"type": "string"},
+                                    "address": {"type": "string"},
+                                    "birth_date": {"type": "string"},
+                                    "phone_number": {"type": "string"}
                                 },
-                                "description": {
-                                    "type": "string"
+                                "required": ["full_name", "address", "birth_date", "phone_number"]
+                            }
+                        },
+                        "required": ["agent_speaker_labels", "customer_speaker_labels", "customer_info"],
+                        "strict": True
+                    }
+                }
+            }
+        }
+    },
+    {
+        "name": "topic_analysis",
+        "prompt": """
+            You have the task of analyzing and classifying a transcribed call between a company agent and a customer.
+            The speakers are identified as <agent> and <customer> in the transcript.
+            Follow these steps:
+
+            STEP 1: ESTABLISHED TOPIC CLASSIFICATION
+            These are the company's ESTABLISHED TOPICS for call classification:
+            {{topics_string}}
+
+            Review the conversation and identify which established topics apply. Return a list of matching
+            topic names. If no topics match, return an empty list. Do not invent new topics in this step.
+
+            STEP 2: SUGGESTED TOPIC CLASSIFICATION
+            These are PENDING TOPIC SUGGESTIONS that may become official topics:
+            {{suggested_string}}
+
+            Check if the conversation matches any suggested topics. Return a list of matching topic names.
+            If no suggested topics match, return an empty list. Do not invent new topics in this step.
+
+            STEP 3: NEW TOPIC DISCOVERY
+            Identify conversation themes NOT covered by established or suggested topics above. Consider what
+            this call is fundamentally about and what categories would help classify similar future calls.
+            Present new topics as objects with "name" and "description" keys. Be specific and actionable
+            in your topic definitions.
+
+            STEP 4: CALL SUMMARY
+            Summarize the call focusing on: the reason for the call, main topics discussed, and any agreed-upon
+            next steps. Keep the summary to approximately six sentences. Use generic terms like "the customer"
+            or "the agent" rather than specific names.
+
+            STEP 5: CALL TITLE
+            Create a concise title that captures the essence of the call. Focus on the primary purpose or
+            outcome. Do not include customer or agent names.
+
+            STEP 6: SATISFACTION ASSESSMENT
+            Evaluate the likelihood of customer churn on a scale of 1-5:
+            - 1: Customer will definitely not continue with the company (very dissatisfied)
+            - 2: Customer is dissatisfied and likely to leave
+            - 3: Customer is neutral, outcome uncertain
+            - 4: Customer is satisfied and likely to remain
+            - 5: Customer is highly satisfied and will definitely continue
+
+            STEP 7: OUTPUT FORMAT
+            The output must be in JSON format with the following structure:
+            {
+                "topics": ["list of matching established topics"],
+                "suggested_topics": ["list of matching suggested topics"],
+                "new_topics": [{"name": "topic name", "description": "topic description"}],
+                "summary": "call summary text",
+                "title": "call title",
+                "sentiment": 3
+            }
+            Do not add any text before or after the JSON.
+            """,
+        "uses_redacted": True,
+        "to_compile": ["topics_string", "suggested_string"],
+        "config": {
+            "model": {"openai": "gpt-4o-mini", "vertexai": "gemini-2.0-flash-001"},
+            "temperature": 0.2,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "topic_analysis_response",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "topics": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "suggested_topics": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "new_topics": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "description": {"type": "string"}
+                                    },
+                                    "required": ["name", "description"]
                                 }
                             },
-                            "required": [
-                                "name",
-                                "description"
-                            ]
-                        }
-                    },
-                    "summary": {
-                        "type": "string"
-                    },
-                    "title": {
-                        "type": "string"
-                    },
-                    "sentiment": {
-                        "type": "integer"
+                            "summary": {"type": "string"},
+                            "title": {"type": "string"},
+                            "sentiment": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment"],
+                        "strict": True
                     }
-                },
-                "required": [
-                    "agent_speaker_labels",
-                    "customer_speaker_labels",
-                    "topics",
-                    "suggested_topics",
-                    "new_topics", 
-                    "summary",
-                    "title",
-                    "sentiment"
-                ]
-            },
-            "strict": True
+                }
+            }
         }
     }
-}
+]

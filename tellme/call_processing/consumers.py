@@ -7,6 +7,7 @@ import hashlib
 from channels.generic.websocket import WebsocketConsumer
 from rest_framework import exceptions
 from django.utils import timezone
+from django.conf import settings
 from tellme.call_miner.models import OrganizationAPIKey
 from tellme.call_processing.utils import audio_utils, queue_utils
 
@@ -61,8 +62,7 @@ class AudioHookConsumer(WebsocketConsumer):
             raise exceptions.AuthenticationFailed("No Authorization header found.")
 
         logger.debug("Got API key from scope headers.")
-
-        hashed_key = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+        hashed_key = hashlib.sha256((settings.HASH_KEY + api_key + settings.HASH_KEY).encode('utf-8')).hexdigest()
         try:
             org_api_key = OrganizationAPIKey.objects.get(hashed_api_key=hashed_key)
         except OrganizationAPIKey.DoesNotExist:

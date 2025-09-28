@@ -48,6 +48,12 @@ services:
     build: .
     command: >
       bash -c "
+        echo 'Ensuring uv environment is properly set up...'
+        if [ ! -f .venv/bin/python3 ]; then
+          echo 'Python interpreter not found, installing...'
+          uv python install 3.12
+          uv sync --frozen
+        fi
         until curl -s http://firebase:9099/; do
           echo 'Waiting for Firebase Emulator...';
           sleep 1;
@@ -72,6 +78,7 @@ services:
       "
     volumes:
       - .:/app
+      - /app/.venv
       - ${GOOGLE_APPLICATION_CREDENTIALS}:/tmp/gcp-credentials.json:ro
     ports:
       - "8080:8080"

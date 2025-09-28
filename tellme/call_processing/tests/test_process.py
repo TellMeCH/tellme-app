@@ -290,14 +290,72 @@ class TestProcessRecordingView:
         # Initial stats should be zero
         assert topic.conversation_count == 0
         assert suggested_topic.conversation_count == 0
-        
+
         url = reverse("process")
         response = api_client.post(url, data=valid_task_payload, format="json")
         assert response.status_code == status.HTTP_200_OK
-        
+
         # Stats should be updated after processing
         topic.refresh_from_db()
         suggested_topic.refresh_from_db()
-        
+
         assert topic.conversation_count == 1
         assert suggested_topic.conversation_count == 1
+
+    def test_process_without_customer_id_generates_new_customer(
+        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        mock_groq, mock_openai, mock_pydub, mock_processing_user, mock_dlp
+    ):
+        """
+        Test that processing runs smoothly when customer_id is not provided,
+        and that a conversation is created with a generated customer_id.
+        """
+        # Remove customer_id from the payload to test customer ID generation
+        payload_without_customer = valid_task_payload.copy()
+        del payload_without_customer["customer_id"]
+
+        # Modify the DLP mock to return a transcript with redacted customer info
+        mock_dlp.deidentify_content.return_value.item.value = """
+            Speaker 0: My name is [PERSON_NAME] and I was born on [DATE].
+            Speaker 1: What? My phone number is [PHONE_NUMBER]
+        """
+
+        # Modify the OpenAI mock to include customer_info in the response
+        mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
+            "agent_speaker_labels": ["Speaker 0"],
+            "customer_speaker_labels": ["Speaker 1"],
+            "topics": ["Billing"],
+            "suggested_topics": ["Technical Support"],
+            "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
+            "customer_info": {
+                "full_name": "John Doe",
+                "birth_date": "1990-01-15"
+            },
+            "summary": "Short summary",
+            "title": "Test Call",
+            "sentiment": 4
+        })
+
+        url = reverse("process")
+        response = api_client.post(url, data=payload_without_customer, format="json")
+
+        # Verify processing succeeds
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["message"] == "File processed and saved to DB."
+
+        # Verify conversation was created
+        conv = Conversation.objects.last()
+        assert conv is not None
+        assert conv.path == payload_without_customer["file_name"]
+        assert conv.agent.id == payload_without_customer["agent_id"]
+
+        # Verify customer was created with generated customer_id
+        assert conv.customer is not None
+        assert conv.customer.external_id is not None
+        assert len(conv.customer.external_id) == 64  # SHA-256 hash length
+
+        # Verify other conversation details
+        assert conv.transcript is not None
+        assert conv.title == "Test Call"
+        assert conv.summary == "Short summary"
+        assert conv.sentiment == 4
