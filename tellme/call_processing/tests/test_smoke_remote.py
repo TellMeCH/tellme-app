@@ -330,7 +330,11 @@ class TestSmokeTestCloudRunWithLogs:
         resp = requests.get(conversations[0]['customer'], headers=self.superuser_headers)
         resp.raise_for_status()
         customer = resp.json()
-        assert customer['external_id'] == self.customer_id
+
+        if exclude_customer_id:
+            assert len(customer["external_id"]) == 64
+        else:
+            assert customer['external_id'] == self.customer_id
 
         self.conversation_url = conversations[0]['url']
         logger.info(f"Verified conversation creation: {conversations}")
