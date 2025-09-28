@@ -261,7 +261,7 @@ class TestSmokeTestCloudRunWithLogs:
             self.sample_file = BytesIO(f.read())
             self.sample_file.name = "sample_recording.wav"
 
-    def test_smoke_post_with_logs(self):
+    def test_smoke_post_with_logs(self, exclude_customer_id=False):
         """
         Trigger the /queue endpoint, using X-API-KEY
         """
@@ -269,11 +269,13 @@ class TestSmokeTestCloudRunWithLogs:
         trigger_timestamp = timezone.now().isoformat()
 
         data = {
-            "customer_id": self.customer_id,
             "agent_id": self.agent_id,
             "timestamp": trigger_timestamp
         }
         files = {"file": (self.sample_file.name, self.sample_file, "audio/wav")}
+
+        if not exclude_customer_id:
+            data["customer_id"] = self.customer_id
 
         response = requests.post(
             queue_url,
@@ -328,7 +330,11 @@ class TestSmokeTestCloudRunWithLogs:
         resp = requests.get(conversations[0]['customer'], headers=self.superuser_headers)
         resp.raise_for_status()
         customer = resp.json()
-        assert customer['external_id'] == self.customer_id
+
+        if exclude_customer_id:
+            assert len(customer["external_id"]) == 64
+        else:
+            assert customer['external_id'] == self.customer_id
 
         self.conversation_url = conversations[0]['url']
         logger.info(f"Verified conversation creation: {conversations}")
@@ -344,6 +350,14 @@ class TestSmokeTestCloudRunWithLogs:
             if task.http_request.url == f"{self.cloud_run_host}/processing/v1/process/":
                 test_tasks.append(task)
         assert len(test_tasks) == 0, f"Expected 1 task in queue, found {len(test_tasks)}."
+
+    def test_smoke_post_with_logs_excluding_customer_id(self):
+        """
+        Trigger the /queue endpoint using X-API-KEY, without specifying a customer ID in the /queue endpoint
+        """
+
+        # Reuse the standard smoke test logic
+        self.test_smoke_post_with_logs(exclude_customer_id=True)
 
     def test_smoke_post_with_logs_groq(self):
         """

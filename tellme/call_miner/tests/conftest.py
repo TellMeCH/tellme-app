@@ -333,21 +333,3 @@ def another_organization_suggested_topic(another_organization):
         organization=another_organization
     )
 
-
-@pytest.fixture(autouse=True)
-def mock_langfuse():
-    """
-    Mocks out such that Langfuse() constructor becomes a MagicMock
-    """
-
-    with patch("tellme.call_processing.utils.call_processing.Langfuse") as mock_lf_class:
-        # The Langfuse constructor will return a MagicMock
-        mock_lf_instance = MagicMock()
-        mock_lf_class.return_value = mock_lf_instance
-
-        mock_prompt = MagicMock()
-        mock_prompt.is_fallback = False
-        mock_lf_instance.get_prompt.return_value = mock_prompt
-
-        yield mock_lf_instance
-

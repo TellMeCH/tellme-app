@@ -32,7 +32,7 @@ class OrganizationAPIKeyAuthentication(authentication.BaseAuthentication):
         logger.debug(f"Got API Key")
 
         # Check whether there is a matching key in the DB
-        hashed_key = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+        hashed_key = hashlib.sha256((settings.HASH_KEY + api_key + settings.HASH_KEY).encode('utf-8')).hexdigest()
         try:
             org_api_key = OrganizationAPIKey.objects.get(hashed_api_key=hashed_key)
             logger.debug('Successfully matched API Key with Organization')

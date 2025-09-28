@@ -8,8 +8,20 @@ from rest_framework import status
 from tellme.call_processing.utils import gcs_utils, db_handler
 
 
-def create_storage_path(organization_id: int, customer_id: str, agent_id: int, call_timestamp: datetime.datetime):
-    return f"{organization_id}/{customer_id}_{agent_id}_{call_timestamp.isoformat()}"
+def create_storage_path(
+        organization_id: int,
+        customer_id: str,
+        agent_id: int,
+        call_timestamp: datetime.datetime,
+        format: str = None
+):
+    customer_part = customer_id if customer_id is not None else "Unknown"
+    if format is not None:
+        if format not in ['.wav', '.mp3']:
+            raise ValueError(f'Invalid file format "{format}" - must be .wav or .mp3')
+    else:
+        format = ''
+    return f"{organization_id}/{customer_part}_{agent_id}_{call_timestamp.isoformat()}{format}"
 
 
 def create_task(
