@@ -29,7 +29,7 @@ class ProcessRecordingSerializer(serializers.Serializer):
     """
     file_name = serializers.CharField(required=True)
     organization_id = serializers.IntegerField(required=True)
-    customer_id = serializers.CharField(required=False)
+    customer_id = serializers.CharField(required=False, allow_null=True)
     agent_id = serializers.IntegerField(required=True)
     timestamp = serializers.DateTimeField(required=True)
     transcription_method = serializers.ChoiceField(choices=TRANSCRIPTION_METHOD_CHOICES, required=True)
