@@ -143,7 +143,15 @@ ENRICHMENT_PIPELINE = [
             - 4: Customer is satisfied and likely to remain
             - 5: Customer is highly satisfied and will definitely continue
 
-            STEP 7: OUTPUT FORMAT
+            STEP 7: REVENUE SEARCH QUERY
+            Based on the conversation content, generate a specific search query that would
+            help identify the products or services being discussed. This should be a realistic product search
+            query that could be used on a fashion retail website. Focus on specific product categories, styles,
+            or types mentioned in the call. Examples of valid queries: "men sneakers", "women dresses",
+            "men sweatshirts", "leather jackets", "running shoes". If the conversation doesn't relate to
+            fashion products, return an empty string.
+
+            STEP 8: OUTPUT FORMAT
             The output must be in JSON format with the following structure:
             {
                 "topics": ["list of matching established topics"],
@@ -151,7 +159,8 @@ ENRICHMENT_PIPELINE = [
                 "new_topics": [{"name": "topic name", "description": "topic description"}],
                 "summary": "call summary text",
                 "title": "call title",
-                "sentiment": 3
+                "sentiment": 3,
+                "revenue_search_query": "product search query or empty string"
             }
             Do not add any text before or after the JSON.
             """,
@@ -192,9 +201,10 @@ ENRICHMENT_PIPELINE = [
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 5
-                            }
+                            },
+                            "revenue_search_query": {"type": "string"}
                         },
-                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment"],
+                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "revenue_search_query"],
                         "strict": True
                     }
                 }
