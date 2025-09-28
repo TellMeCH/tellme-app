@@ -54,6 +54,20 @@ def retrieve_organization_processing_methods(organization_id: int) -> (str, str)
     return org.transcription_method, org.enrichment_method
 
 
+def retrieve_organization_search_prefix(organization_id: int) -> str:
+    """
+    Returns the organization's revenue search prefix
+
+    Args:
+        organization_id (int): ID of the organization to query
+
+    Returns:
+        str: The search prefix for revenue queries (e.g., 'pkz.ch/de/')
+    """
+    org = Organization.objects.get(id=organization_id)
+    return org.revenue_search_prefix
+
+
 def obtain_active_topics(organization_id: int):
     """
     Query the call_miner data model to extract all active topics from the organization.
@@ -101,6 +115,7 @@ def create_conversation(
     title: str,
     input_tokens: int,
     output_tokens: int,
+    revenue_at_stake: float = None,
     **kwargs
 ):
     """
@@ -151,6 +166,7 @@ def create_conversation(
         title=title,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        revenue_at_stake=revenue_at_stake,
         customer=customer,
         agent=agent
     )
