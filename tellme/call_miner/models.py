@@ -406,6 +406,7 @@ class Organization(models.Model, ConversationTrendMixin):
     updated = models.DateTimeField(auto_now=True)
     transcription_method = models.CharField(choices=TRANSCRIPTION_METHOD_CHOICES, default='deepgram')
     enrichment_method = models.CharField(choices=ENRICHMENT_METHOD_CHOICES, default='openai')
+    revenue_search_prefix = models.CharField(max_length=255, null=True)
 
     def __str__(self):
         return self.name
@@ -779,6 +780,7 @@ class Conversation(models.Model):
     title = models.TextField()
     input_tokens = models.IntegerField()
     output_tokens = models.IntegerField()
+    revenue_at_stake = models.FloatField(null=True)
     topics = models.ManyToManyField(Topic, related_name='conversations')
     suggested_topics = models.ManyToManyField(SuggestedTopic, related_name='conversations')
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='conversations')
