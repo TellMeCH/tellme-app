@@ -64,8 +64,8 @@ class CallRedactor:
     @observe(as_type="generation")
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=2, exp_base=2, min=5.0),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
+        stop=stop_after_attempt(self.max_retries),
         retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
     )
     def redact_transcript(self, transcript: str, extract_customer_id: bool = False) -> tuple[str, str | None]:

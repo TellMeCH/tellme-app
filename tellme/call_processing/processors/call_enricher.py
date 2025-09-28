@@ -177,8 +177,8 @@ class CallEnricher:
     @observe(as_type="generation", capture_input=False, capture_output=False)
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=2, exp_base=2, min=5.0),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
+        stop=stop_after_attempt(self.max_retries),
         retry=retry_if_exception_type(httpx.HTTPError)
     )
     def enrich_recording_with_openai(self, transcript: str, system_message: str,
@@ -216,8 +216,8 @@ class CallEnricher:
     @observe(as_type="generation", capture_input=False, capture_output=False)
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=2, exp_base=2, min=5.0),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
+        stop=stop_after_attempt(self.max_retries),
         retry=retry_if_exception(vertexai_retry_logic)
     )
     def enrich_recording_with_vertexai(self, transcript: str, system_message: str,

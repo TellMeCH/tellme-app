@@ -7,7 +7,7 @@ from langfuse.decorators import observe, langfuse_context
 from tellme.call_processing.utils.llm_configs import (
     TRANSCRIPTION_METHOD_CHOICES, CUSTOMER_IDENTIFICATION_METHOD_CHOICES
 )
-from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher
+from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher, CallValuer
 
 
 
@@ -53,6 +53,8 @@ class CallProcessingPipeline:
     API_BASE_DELAY: float = 5.0
     API_BACKOFF_FACTOR: int = 2
     MINIMUM_CALLER_AGE: int = 16
+    MINIMUM_EXPECTED_PRICE: float = 1.0
+    MAXIMUM_EXPECTED_PRICE: flo
 
     def __init__(self):
         """
@@ -83,6 +85,14 @@ class CallProcessingPipeline:
         )
 
         self.enricher = CallEnricher(
+            max_retries=self.API_MAX_RETRIES,
+            base_delay=self.API_BASE_DELAY,
+            backoff_factor=self.API_BACKOFF_FACTOR
+        )
+
+        self.valuer = CallValuer(
+            minimum_price=self.MINIMUM_EXPECTED_PRICE,
+            maximum_price=self.MAXIMUM_EXPECTED_PRICE,
             max_retries=self.API_MAX_RETRIES,
             base_delay=self.API_BASE_DELAY,
             backoff_factor=self.API_BACKOFF_FACTOR
@@ -191,10 +201,16 @@ class CallProcessingPipeline:
             file_metadata['organization_id']
         )
 
+        # Calculate revenue at stake
+        revenue_at_stake = None
+        if 'revenue_search_query' in enriched_data:
+            revenue_at_stake = self.valuer(enriched_data['revenue_search_query'], file_metadata['organization_id'])
+
         enriched_data['language'] = language
         enriched_data['input_tokens'] = input_tokens
         enriched_data['output_tokens'] = output_tokens
         enriched_data['duration'] = total_duration
+        enriched_data['revenue_at_stake'] = revenue_at_stake
         enriched_data.update(file_metadata)
         return enriched_data
 
