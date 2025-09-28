@@ -359,3 +359,32 @@ class TestProcessRecordingView:
         assert conv.title == "Test Call"
         assert conv.summary == "Short summary"
         assert conv.sentiment == 4
+
+    def test_process_mp3_file_success(
+        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        mock_groq, mock_openai, mock_pydub, mock_processing_user
+    ):
+        """
+        Test that the process endpoint correctly handles MP3 files and processes them successfully.
+        """
+        # Create payload with MP3 file
+        mp3_payload = valid_task_payload.copy()
+        mp3_payload["file_name"] = "1/CUST123_123_2024-01-01T12:00:00.mp3"
+
+        url = reverse("process")
+        response = api_client.post(url, data=mp3_payload, format="json")
+
+        # Verify processing succeeds with MP3 file
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["message"] == "File processed and saved to DB."
+
+        # Verify conversation was created with correct path
+        conv = Conversation.objects.last()
+        assert conv is not None
+        assert conv.path == mp3_payload["file_name"]
+        assert conv.path.endswith('.mp3')
+        assert conv.agent.id == mp3_payload["agent_id"]
+        assert conv.customer.external_id == mp3_payload["customer_id"]
+        assert conv.transcript is not None
+        assert conv.title == "Test Call"
+        assert conv.summary == "Short summary"
