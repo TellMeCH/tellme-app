@@ -38,7 +38,6 @@ CONVERSATIONS = [
         "input": {
             "file_name": "pkz_1.wav",
             "organization_id": "1",
-            "customer_id": "1",
             "agent_id": "1",
             "timestamp": "2025-09-22T08:25:00+02:00"
         },
@@ -74,13 +73,10 @@ CONVERSATIONS = [
             "revenue": "162.4"
         }
     },
-]
-_ = [
     {
         "input": {
             "file_name": "pkz_2.wav",
             "organization_id": "1",
-            "customer_id": "2",
             "agent_id": "2",
             "timestamp": "2025-09-22T08:27:00+02:00"
         },
@@ -116,7 +112,6 @@ _ = [
         "input": {
             "file_name": "pkz_3.wav",
             "organization_id": "1",
-            "customer_id": "3",
             "agent_id": "3",
             "timestamp": "2025-09-22T08:40:00+02:00"
         },
@@ -151,7 +146,6 @@ _ = [
         "input": {
             "file_name": "pkz_4.wav",
             "organization_id": "1",
-            "customer_id": "4",
             "agent_id": "4",
             "timestamp": "2025-09-22T08:46:00+02:00"
         },
@@ -193,7 +187,6 @@ _ = [
         "input": {
             "file_name": "pkz_5.wav",
             "organization_id": "1",
-            "customer_id": "5",
             "agent_id": "5",
             "timestamp": "2025-09-22T09:07:00+02:00"
         },
@@ -231,7 +224,6 @@ _ = [
         "input": {
             "file_name": "pkz_6.wav",
             "organization_id": "1",
-            "customer_id": "6",
             "agent_id": "6",
             "timestamp": "2025-09-22T09:13:00+02:00"
         },
@@ -265,7 +257,6 @@ _ = [
         "input": {
             "file_name": "pkz_7.wav",
             "organization_id": "1",
-            "customer_id": "7",
             "agent_id": "7",
             "timestamp": "2025-09-22T09:18:00+02:00"
         },
@@ -299,7 +290,6 @@ _ = [
         "input": {
             "file_name": "pkz_8.wav",
             "organization_id": "1",
-            "customer_id": "8",
             "agent_id": "8",
             "timestamp": "2025-09-22T09:25:00+02:00"
         },
@@ -335,7 +325,6 @@ _ = [
         "input": {
             "file_name": "pkz_9.wav",
             "organization_id": "1",
-            "customer_id": "9",
             "agent_id": "9",
             "timestamp": "2025-09-22T09:29:00+02:00"
         },
@@ -367,7 +356,6 @@ _ = [
         "input": {
             "file_name": "pkz_10.wav",
             "organization_id": "1",
-            "customer_id": "10",
             "agent_id": "10",
             "timestamp": "2025-09-22T09:32:00+02:00"
         },
