@@ -36,6 +36,8 @@ GROQ_COSTS = {
     'whisper-large-v3-turbo': 0.04 / 3600
 }
 
+SUPPORTED_FILE_FORMATS = ['wav', 'mp3']
+
 
 class CallTranscriber:
     """
@@ -140,11 +142,13 @@ class CallTranscriber:
         fallback_name = [m for m in methods.keys() if m != transcription_method][0]
         fallback_exceptions = fallback_exceptions[transcription_method]
 
-        # Determine target files
-        if file_name.endswith('.wav'):
+        # Determine target files and extract format
+        if file_name.endswith(tuple(SUPPORTED_FILE_FORMATS)):
             target_paths = [file_name]
         else:
-            target_paths = gcs_utils.list_files_in_gcs(file_name, '*.wav')
+            # For directory processing, support both formats
+            glob_pattern = '*.{' + ','.join(SUPPORTED_FILE_FORMATS) + '}'
+            target_paths = gcs_utils.list_files_in_gcs(file_name, glob_pattern)
 
         total_duration = 0
         total_size = 0
@@ -159,7 +163,10 @@ class CallTranscriber:
             if len(file_data) == 0:
                 raise RuntimeError(f'File {path} is empty')
 
-            recording_chunks, file_duration = self.cut_into_chunks(file_data)
+            # Extract format for individual files, or detect from path
+            file_format = path.split('.')[-1]
+
+            recording_chunks, file_duration = self.cut_into_chunks(file_data, file_format)
             total_duration += file_duration
             total_size += len(file_data)
             chunk_count += len(recording_chunks)
@@ -219,17 +226,21 @@ class CallTranscriber:
 
         return full_transcript, base_language, total_duration / 1000
 
-    def cut_into_chunks(self, file_data: bytes) -> tuple[list[bytes], int]:
+    def cut_into_chunks(self, file_data: bytes, audio_format: str = "wav") -> tuple[list[bytes], int]:
         """
         Split audio data into chunks for processing.
 
         Args:
             file_data (bytes): Raw audio file data
+            audio_format (str): Audio format ('wav', 'mp3', etc.)
 
         Returns:
             tuple[list[bytes], int]: List of audio chunks and original duration in milliseconds
         """
-        audio = AudioSegment.from_file(BytesIO(file_data), format="wav")
+        if audio_format not in SUPPORTED_FILE_FORMATS:
+            raise ValueError(f"Unsupported audio format: {audio_format}. Only {SUPPORTED_FILE_FORMATS} are supported.")
+
+        audio = AudioSegment.from_file(BytesIO(file_data), format=audio_format)
         chunk_length_ms = int(self.chunk_size * 60 * 1000)
         chunks = []
 

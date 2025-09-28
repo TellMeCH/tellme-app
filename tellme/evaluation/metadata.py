@@ -75,7 +75,7 @@ CONVERSATIONS = [
     },
     {
         "input": {
-            "file_name": "pkz_2.wav",
+            "file_name": "pkz_2.mp3",
             "organization_id": "1",
             "agent_id": "2",
             "timestamp": "2025-09-22T08:27:00+02:00"
