@@ -93,7 +93,8 @@ class QueueRecordingView(APIView):
             agent_id = data.get('agent_id')
             timestamp = data.get('timestamp')
             file_obj = data.get('file')
-            file_name = queue_utils.create_storage_path(organization_id, customer_id, agent_id, timestamp)
+            file_name = queue_utils.create_storage_path(organization_id, customer_id, agent_id, timestamp, '.wav')
+            # Note: In the future, file format will be specified in the queue request
 
             logger.info(f'Execution Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
             logger.info(f"Created: {timestamp}")
