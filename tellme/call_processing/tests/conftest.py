@@ -307,7 +307,9 @@ def mock_langfuse():
 
     with patch("langfuse.decorators.observe", new=no_op_decorator), \
             patch("langfuse.decorators.langfuse_context", new=MagicMock()), \
-            patch("langfuse.Langfuse") as mock_lf_class:
+            patch("langfuse.Langfuse") as mock_lf_class, \
+            patch("tellme.call_processing.processors.call_transcriber.Langfuse", mock_lf_class), \
+            patch("tellme.call_processing.processors.call_enricher.Langfuse", mock_lf_class):
 
         # Mock Langfuse instance
         mock_lf_instance = MagicMock()
