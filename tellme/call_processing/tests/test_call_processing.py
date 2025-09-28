@@ -240,6 +240,41 @@ class TestCallTranscriber:
         assert language
         assert duration > 0
 
+    def test_transcription_method_mp3_file(
+        self, transcriber, mock_deepgram, mock_groq, mock_gcs_utils, mock_pydub
+    ):
+        """
+        Ensure Deepgram is used as the primary transcription method when explicitly specified.
+        """
+        transcript, language, duration = transcriber.transcribe("test.mp3", "deepgram")
+
+        assert mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert not mock_groq.audio.transcriptions.create.called
+        assert transcript
+        assert language
+        assert duration > 0
+
+    def test_transcribe_directory_multiple_formats(
+        self, transcriber, mock_deepgram, mock_gcs_utils, mock_pydub
+    ):
+        """
+        If a folder path is passed, and multiple files of varied formats exist,
+        the transcriber should download and transcribe each of them.
+        """
+        _, mock_download, mock_list = mock_gcs_utils
+
+        mock_list.return_value = [
+            "folder/part1.wav",
+            "folder/part2.mp3"
+        ]
+
+        transcript, language, duration = transcriber.transcribe("folder/", "deepgram")
+
+        assert mock_download.call_count == 2
+        assert transcript.strip() != ""
+        assert language
+        assert duration > 0
+
 
 @pytest.mark.django_db
 class TestCallRedactor:

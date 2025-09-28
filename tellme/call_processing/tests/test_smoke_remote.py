@@ -255,13 +255,18 @@ class TestSmokeTestCloudRunWithLogs:
         self.logging_client = logging_v2.Client()
         self.unique_log_identifier = f"smoke_test_{int(time.time())}"
 
-        # Load sample recording
+        # Load sample recordings
         sample_recording_path = os.path.join("tellme/call_processing/tests/resources", "sample_recording.wav")
         with open(sample_recording_path, "rb") as f:
-            self.sample_file = BytesIO(f.read())
-            self.sample_file.name = "sample_recording.wav"
+            self.sample_file_wav = BytesIO(f.read())
+            self.sample_file_wav.name = "sample_recording.wav"
 
-    def test_smoke_post_with_logs(self, exclude_customer_id=False):
+        sample_recording_path = os.path.join("tellme/call_processing/tests/resources", "sample_recording.mp3")
+        with open(sample_recording_path, "rb") as f:
+            self.sample_file_mp3 = BytesIO(f.read())
+            self.sample_file_mp3.name = "sample_recording.mp3"
+
+    def test_smoke_post_with_logs(self, exclude_customer_id=False, sample_file='wav'):
         """
         Trigger the /queue endpoint, using X-API-KEY
         """
@@ -272,10 +277,15 @@ class TestSmokeTestCloudRunWithLogs:
             "agent_id": self.agent_id,
             "timestamp": trigger_timestamp
         }
-        files = {"file": (self.sample_file.name, self.sample_file, "audio/wav")}
-
         if not exclude_customer_id:
             data["customer_id"] = self.customer_id
+
+        if sample_file == 'wav':
+            files = {"file": (self.sample_file_wav.name, self.sample_file_wav, "audio/wav")}
+        elif sample_file == 'mp3':
+            files = {"file": (self.sample_file_mp3.name, self.sample_file_mp3, "audio/mp3")}
+        else:
+            raise NotImplementedError('sample_file must be either wav or mp3')
 
         response = requests.post(
             queue_url,
@@ -358,6 +368,14 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs(exclude_customer_id=True)
+
+    def test_smoke_post_with_logs_mp3_file(self):
+        """
+        Trigger the /queue endpoint using X-API-KEY, now for the mp3 sample file
+        """
+
+        # Reuse the standard smoke test logic
+        self.test_smoke_post_with_logs(sample_file='mp3')
 
     def test_smoke_post_with_logs_groq(self):
         """
