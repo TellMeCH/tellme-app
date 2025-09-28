@@ -137,3 +137,34 @@ class TestQueueView:
 
         assert customer_id is None
 
+    def test_queue_mp3_file_success(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks, setup_db):
+        """
+        Test that the queue endpoint correctly handles MP3 files and preserves the .mp3 extension.
+        """
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+
+        # Create payload with MP3 file
+        mp3_payload = valid_payload.copy()
+        mp3_payload["file"] = SimpleUploadedFile(
+            "test.mp3",
+            b"Fake MP3 File Bytes",
+            content_type="audio/mpeg"
+        )
+
+        url = reverse("queue")
+        response = api_client.post(url, data=mp3_payload, format="multipart")
+
+        # Should succeed with MP3 file
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert "file_name" in response.data
+
+        # Verify the file name has .mp3 extension
+        file_name = response.data["file_name"]
+        assert file_name.endswith('.mp3')
+
+        # Verify file was uploaded to GCS
+        mock_gcs_utils[0].assert_called_once()
+
+        # Verify Cloud Task was created for processing
+        mock_cloud_tasks.assert_called_once()
+
