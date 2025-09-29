@@ -407,6 +407,7 @@ class Organization(models.Model, ConversationTrendMixin):
     transcription_method = models.CharField(choices=TRANSCRIPTION_METHOD_CHOICES, default='deepgram')
     enrichment_method = models.CharField(choices=ENRICHMENT_METHOD_CHOICES, default='openai')
     revenue_search_prefix = models.CharField(max_length=255, null=True)
+    language = models.CharField(max_length=2, default='en')
 
     def __str__(self):
         return self.name
