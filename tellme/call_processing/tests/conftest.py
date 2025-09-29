@@ -164,12 +164,13 @@ def mock_vertexai():
         enrichment_json = """{
             "title": "Test Call",
             "summary": "Short summary",
-            "sentiment": 4, 
+            "sentiment": 4,
             "topics": ["Billing"],
             "suggested_topics": ["Technical Support"],
             "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
             "agent_speaker_labels": ["Speaker 0"],
-            "customer_speaker_labels": ["Speaker 1"]
+            "customer_speaker_labels": ["Speaker 1"],
+            "revenue_search_query": "men leather jackets"
         }"""
 
         def gen_content_side_effect(*args, **kwargs):
@@ -221,12 +222,13 @@ def mock_openai():
                 content="""{
                 "title": "Test Call",
                 "summary": "Short summary",
-                "sentiment": 4, 
+                "sentiment": 4,
                 "topics": ["Billing"],
                 "suggested_topics": ["Technical Support"],
                 "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
                 "agent_speaker_labels": ["Speaker 0"],
-                "customer_speaker_labels": ["Speaker 1"]
+                "customer_speaker_labels": ["Speaker 1"],
+                "revenue_search_query": "men leather jackets"
                 }"""
             ))
         ]
@@ -259,7 +261,7 @@ def setup_db(db):
     """
     Set up test database with some records. Yield them if you need to retrieve them in your tests.
     """
-    org = Organization.objects.create(id=1, name="Test Org", max_topic_count=10)
+    org = Organization.objects.create(id=1, name="Test Org", max_topic_count=10, revenue_search_prefix="teststore.ch/de/")
     user = User.objects.create_user('agent@example.com', 'password', 'example', 'agent')
     agent = Agent.objects.create(id=123, organization=org, user=user)
     topic = Topic.objects.create(name="Billing", description="Billing issues", organization=org, is_active=True)
@@ -343,12 +345,59 @@ def mock_processing_user():
 @pytest.fixture
 def mock_db_handler():
     """
-    Mocks the db_handler functions for obtain_active_topics and obtain_suggested_topics.
+    Mocks the db_handler functions for retrieve_organization_search_prefix, obtain_active_topics and
+    obtain_suggested_topics.
     """
-    with patch("tellme.call_processing.utils.db_handler.obtain_active_topics") as mock_active, \
-         patch("tellme.call_processing.utils.db_handler.obtain_suggested_topics") as mock_suggested:
-        
+    with patch("tellme.call_processing.utils.db_handler.retrieve_organization_search_prefix") as mock_prefix, \
+        patch("tellme.call_processing.utils.db_handler.obtain_active_topics") as mock_active, \
+        patch("tellme.call_processing.utils.db_handler.obtain_suggested_topics") as mock_suggested:
+
+        mock_prefix.return_value = "pkz.ch/de/"
         mock_active.return_value = "Billing: Payment and invoice issues, "
         mock_suggested.return_value = "Technical Support: Hardware troubleshooting, "
         
-        yield mock_active, mock_suggested
+        yield mock_prefix, mock_active, mock_suggested
+
+
+@pytest.fixture
+def mock_call_valuer():
+    """
+    Mocks out the CallValuer Google Custom Search API and HTML parsing to return consistent test prices.
+    """
+    with patch("tellme.call_processing.processors.call_valuer.build") as mock_build, \
+         patch("tellme.call_processing.processors.call_valuer.requests.get") as mock_get:
+
+        # Mock Google Custom Search API service
+        mock_service = MagicMock()
+        mock_build.return_value = mock_service
+
+        # Mock search result
+        mock_search_result = {
+            'items': [
+                {
+                    'link': 'https://teststore.ch/de/men-leather-jackets-premium',
+                    'title': 'Premium Leather Jackets'
+                }
+            ]
+        }
+
+        mock_cse = MagicMock()
+        mock_cse.list.return_value.execute.return_value = mock_search_result
+        mock_service.cse.return_value = mock_cse
+
+        # Mock product page response with prices
+        mock_product_response = MagicMock()
+        mock_product_response.content = """
+        <html>
+            <body>
+                <div class="price">CHF 299.90</div>
+                <div class="price">CHF 199.50</div>
+                <span>EUR 149.99</span>
+                <p>Price: CHF 250.00</p>
+            </body>
+        </html>
+        """.encode('utf-8')
+        mock_product_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_product_response
+
+        yield mock_build, mock_get

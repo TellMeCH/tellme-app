@@ -180,7 +180,7 @@ class CallValuer:
         Returns:
             list[float]: List of price values found on the page
         """
-        response = requests.get(url, headers=self.headers, timeout=self.TIMEOUT)
+        response = requests.get(url, headers=self.headers)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -188,38 +188,49 @@ class CallValuer:
         # Get all text content from the page
         page_text = soup.get_text()
 
-        # Extract prices using regex patterns
+        # Extract prices using a comprehensive regex pattern
+        # This pattern matches all common price formats in a single pass to avoid duplicates
+        price_pattern = r'''
+            (?:CHF|EUR|€|\$)\s*(\d+(?:[.,]\d{2})?)|  # CHF 199.90, EUR 29.99, €29.99, $49.95
+            (\d+(?:[.,]\d{2})?)\s*(?:CHF|EUR|€|\$)|  # 199.90 CHF, 29.99 EUR, 29.99 €, 49.95 $
+            \b(\d{2,4}[.,]\d{2})\b|                  # 199.90 or 29,99 (standalone decimals)
+            \b(\d{2,4})\.-\b                         # 199.- (Swiss format)
+        '''
+
         prices = []
+        # Find all price matches with their positions in the text
+        for match in re.finditer(price_pattern, page_text, re.IGNORECASE | re.VERBOSE):
+            # Extract the actual price value from the match groups
+            price_str = next((group for group in match.groups() if group), None)
 
-        # Common price patterns:
-        # CHF 199.90, CHF 50, €29.99, $49.95, 199.90 CHF, etc.
-        price_patterns = [
-            r'CHF\s*(\d+(?:[.,]\d{2})?)',  # CHF 199.90 or CHF 199
-            r'€\s*(\d+(?:[.,]\d{2})?)',    # €29.99 or €29
-            r'\$\s*(\d+(?:[.,]\d{2})?)',   # $49.95 or $49
-            r'(\d+(?:[.,]\d{2})?)\s*CHF', # 199.90 CHF
-            r'(\d+(?:[.,]\d{2})?)\s*€',   # 29.99 €
-            r'(\d+(?:[.,]\d{2})?)\s*\$',  # 49.95 $
-            # Generic patterns for standalone numbers that look like prices
-            r'\b(\d{2,4}[.,]\d{2})\b',    # 199.90 or 29,99
-            r'\b(\d{2,4})\.-\b',          # 199.- (Swiss format)
-        ]
+            if price_str:
+                # Get the context around this price match
+                start_pos = max(0, match.start() - 50)  # 50 characters before
+                end_pos = min(len(page_text), match.end() + 50)  # 50 characters after
+                context = page_text[start_pos:end_pos].lower()
 
-        for pattern in price_patterns:
-            matches = re.findall(pattern, page_text, re.IGNORECASE)
-            for match in matches:
-                try:
-                    # Normalize decimal separators (replace comma with dot)
-                    price_str = match.replace(',', '.')
-                    # Remove any trailing dot and dash (Swiss format)
-                    price_str = price_str.rstrip('.-')
-                    price = float(price_str)
+                # Check if this price should be excluded based on context
+                exclude_patterns = [
+                    r'mindestbestellwert[\:\s]+[^a-zA-Z]*' + re.escape(match.group(0).lower()),
+                    r'minimum\s+order[^a-zA-Z]*' + re.escape(match.group(0).lower()),
+                    re.escape(match.group(0).lower()) + r'[^a-zA-Z]*(?:rabatt|discount|gutschein)'
+                ]
 
-                    # Filter reasonable price ranges
-                    if MINIMUM_EXPECTED_PRICE <= price <= MAXIMUM_EXPECTED_PRICE:
-                        prices.append(price)
-                except (ValueError, AttributeError):
-                    continue
+                should_exclude = any(re.search(pattern, context) for pattern in exclude_patterns)
 
-        # Remove duplicates and return
-        return list(set(prices))
+                if not should_exclude:
+                    try:
+                        # Normalize decimal separators (replace comma with dot)
+                        price_str = price_str.replace(',', '.')
+                        # Remove any trailing dot and dash (Swiss format)
+                        price_str = price_str.rstrip('.-')
+                        price = float(price_str)
+
+                        # Filter reasonable price ranges
+                        if MINIMUM_EXPECTED_PRICE <= price <= MAXIMUM_EXPECTED_PRICE:
+                            prices.append(price)
+                    except (ValueError, AttributeError):
+                        continue
+
+        # Remove any remaining duplicates (shouldn't be many with this approach) and return
+        return list(dict.fromkeys(prices))
