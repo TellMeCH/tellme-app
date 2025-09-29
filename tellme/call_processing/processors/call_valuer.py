@@ -232,5 +232,4 @@ class CallValuer:
                     except (ValueError, AttributeError):
                         continue
 
-        # Remove any remaining duplicates (shouldn't be many with this approach) and return
-        return list(dict.fromkeys(prices))
+        return prices
