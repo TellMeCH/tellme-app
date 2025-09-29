@@ -1,5 +1,7 @@
 
 
+SEARCH_PREFIX = 'pkz.ch/de/'
+
 TOPICS = [
     {
         "name": "Order Status",

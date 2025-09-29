@@ -19,7 +19,7 @@ if not settings.configured:
 from google import genai
 from google.genai import types, errors
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
-from tellme.evaluation.metadata import CONVERSATIONS, TOPICS, SUGGESTED_TOPICS
+from tellme.evaluation.metadata import CONVERSATIONS, TOPICS, SUGGESTED_TOPICS, SEARCH_PREFIX
 
 
 # LLM evaluation prompt and configuration
@@ -213,6 +213,19 @@ class CallProcessingEvaluator:
         for topic in SUGGESTED_TOPICS:
             suggested_string += f"\t - {topic['name']}: {topic['description']}\n"
         return suggested_string
+
+    @staticmethod
+    def _mock_retrieve_organization_search_prefix(organization_id: int) -> str:
+        """
+        Mock for db_handler.retrieve_organization_search_prefix that returns a test search prefix.
+
+        Args:
+            organization_id: Organization ID
+
+        Returns:
+            str: Test search prefix for revenue queries
+        """
+        return SEARCH_PREFIX
 
     @staticmethod
     def _process_expected_customer_id(expected: Dict[str, Any]) -> Dict[str, Any]:
@@ -556,7 +569,8 @@ class CallProcessingEvaluator:
         with patch('tellme.call_processing.utils.gcs_utils.download_from_gcs', side_effect=self._mock_gcs_download), \
              patch('tellme.call_processing.utils.gcs_utils.list_files_in_gcs', side_effect=self._mock_gcs_list_files), \
              patch('tellme.call_processing.utils.db_handler.obtain_active_topics', side_effect=self._mock_db_obtain_active_topics), \
-             patch('tellme.call_processing.utils.db_handler.obtain_suggested_topics', side_effect=self._mock_db_obtain_suggested_topics):
+             patch('tellme.call_processing.utils.db_handler.obtain_suggested_topics', side_effect=self._mock_db_obtain_suggested_topics), \
+             patch('tellme.call_processing.utils.db_handler.retrieve_organization_search_prefix', side_effect=self._mock_retrieve_organization_search_prefix):
 
             pipeline = CallProcessingPipeline()
 
