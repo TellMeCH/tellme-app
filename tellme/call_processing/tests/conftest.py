@@ -261,7 +261,7 @@ def setup_db(db):
     """
     Set up test database with some records. Yield them if you need to retrieve them in your tests.
     """
-    org = Organization.objects.create(id=1, name="Test Org", max_topic_count=10, revenue_search_prefix="teststore.ch/de/")
+    org = Organization.objects.create(id=1, name="Test Org", max_topic_count=10, revenue_search_prefix="teststore.ch/de/", language="de")
     user = User.objects.create_user('agent@example.com', 'password', 'example', 'agent')
     agent = Agent.objects.create(id=123, organization=org, user=user)
     topic = Topic.objects.create(name="Billing", description="Billing issues", organization=org, is_active=True)
@@ -345,18 +345,20 @@ def mock_processing_user():
 @pytest.fixture
 def mock_db_handler():
     """
-    Mocks the db_handler functions for retrieve_organization_search_prefix, obtain_active_topics and
-    obtain_suggested_topics.
+    Mocks the db_handler functions for retrieve_organization_search_prefix, obtain_active_topics,
+    obtain_suggested_topics, and retrieve_organization_language.
     """
     with patch("tellme.call_processing.utils.db_handler.retrieve_organization_search_prefix") as mock_prefix, \
         patch("tellme.call_processing.utils.db_handler.obtain_active_topics") as mock_active, \
-        patch("tellme.call_processing.utils.db_handler.obtain_suggested_topics") as mock_suggested:
+        patch("tellme.call_processing.utils.db_handler.obtain_suggested_topics") as mock_suggested, \
+        patch("tellme.call_processing.utils.db_handler.retrieve_organization_language") as mock_language:
 
         mock_prefix.return_value = "pkz.ch/de/"
         mock_active.return_value = "Billing: Payment and invoice issues, "
         mock_suggested.return_value = "Technical Support: Hardware troubleshooting, "
-        
-        yield mock_prefix, mock_active, mock_suggested
+        mock_language.return_value = "German"
+
+        yield mock_prefix, mock_active, mock_suggested, mock_language
 
 
 @pytest.fixture

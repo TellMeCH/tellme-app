@@ -60,7 +60,8 @@ class TestCallProcessingPipeline:
         assert "title" in result
         assert "summary" in result
 
-    def test_pipeline_without_customer_id(self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub):
+    def test_pipeline_without_customer_id(self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub,
+                                          mock_db_handler):
         """
         Test full pipeline execution when customer_id is not provided.
         """
@@ -333,9 +334,10 @@ class TestCallEnricher:
         Test enrichment process when customer_id is provided (via enrichment).
         """
         # Mock the topic retrieval functions
-        _, mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, Support: Technical help, "
         mock_obtain_suggested_topics.return_value = "Warranty: Product warranty claims, "
+        mock_retrieve_organization_language.return_value = "German"
 
         # Mock OpenAI to include customer_info
         mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
@@ -377,9 +379,10 @@ class TestCallEnricher:
         """
         Test that enrichment response includes all expected fields with correct types.
         """
-        _, mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, "
         mock_obtain_suggested_topics.return_value = "Technical Support: Hardware troubleshooting, "
+        mock_retrieve_organization_language.return_value = "German"
 
         transcript = "Agent: Hello. Customer: Hi, I need help."
         redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
@@ -414,9 +417,10 @@ class TestCallEnricher:
         """
         Test that enrichment follows the ENRICHMENT_PIPELINE configuration.
         """
-        _, mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, "
         mock_obtain_suggested_topics.return_value = "Technical Support: Hardware troubleshooting, "
+        mock_retrieve_organization_language.return_value = "German"
 
         transcript = "Agent: Hello. Customer: Hi, I need help."
         redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
@@ -469,9 +473,10 @@ class TestCallEnricher:
         """
         When OpenAI enrichment raises a retriable error, the enricher should retry with Vertex AI.
         """
-        _, mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, "
         mock_obtain_suggested_topics.return_value = "Technical Support: Hardware troubleshooting, "
+        mock_retrieve_organization_language.return_value = "German"
 
         # Force the primary provider (OpenAI) to fail
         mock_openai.chat.completions.create.side_effect = httpx.HTTPError("Simulated OpenAI failure")
