@@ -593,7 +593,13 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         try:
             self.stdout.write('Creating Sample Organizations')
-            org = Organization(name='ACME Org', max_user_count=20, enrichment_method='vertexai')
+            org = Organization(
+                name='ACME Org',
+                max_user_count=20,
+                enrichment_method='vertexai',
+                language='de',
+                revenue_search_prefix='pkz.ch/de/'
+            )
             org.save()
 
             other_org = Organization(name='Competitors Inc.')
@@ -781,6 +787,7 @@ class Command(BaseCommand):
                     summary=data['summary'],
                     input_tokens=random.randint(50, 200),
                     output_tokens=random.randint(20, 100),
+                    revenue_at_stake=random.random() * 800 + 100,
                     customer=customer,
                     agent=agent
                 )
