@@ -3,7 +3,7 @@ import json
 import pytest
 from datetime import datetime
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
-from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher
+from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher, CallValuer
 from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
 
 
@@ -14,7 +14,8 @@ class TestCallProcessingPipeline:
     """
 
     @pytest.fixture
-    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai, mock_gcs_utils):
+    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai, mock_gcs_utils,
+                 mock_call_valuer):
         return CallProcessingPipeline()
 
     def test_define_session_id(self, pipeline):
@@ -36,7 +37,9 @@ class TestCallProcessingPipeline:
         session_id2 = pipeline.define_session_id(file_metadata)
         # Note: session IDs will be different due to timestamp inclusion
 
-    def test_pipeline_with_customer_id(self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub):
+    def test_pipeline_with_customer_id(
+            self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub, mock_db_handler
+    ):
         """
         Test full pipeline execution when customer_id is provided.
         """
@@ -57,7 +60,8 @@ class TestCallProcessingPipeline:
         assert "title" in result
         assert "summary" in result
 
-    def test_pipeline_without_customer_id(self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub):
+    def test_pipeline_without_customer_id(self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub,
+                                          mock_db_handler):
         """
         Test full pipeline execution when customer_id is not provided.
         """
@@ -330,9 +334,10 @@ class TestCallEnricher:
         Test enrichment process when customer_id is provided (via enrichment).
         """
         # Mock the topic retrieval functions
-        mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, Support: Technical help, "
         mock_obtain_suggested_topics.return_value = "Warranty: Product warranty claims, "
+        mock_retrieve_organization_language.return_value = "German"
 
         # Mock OpenAI to include customer_info
         mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
@@ -374,9 +379,10 @@ class TestCallEnricher:
         """
         Test that enrichment response includes all expected fields with correct types.
         """
-        mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, "
         mock_obtain_suggested_topics.return_value = "Technical Support: Hardware troubleshooting, "
+        mock_retrieve_organization_language.return_value = "German"
 
         transcript = "Agent: Hello. Customer: Hi, I need help."
         redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
@@ -411,9 +417,10 @@ class TestCallEnricher:
         """
         Test that enrichment follows the ENRICHMENT_PIPELINE configuration.
         """
-        mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, "
         mock_obtain_suggested_topics.return_value = "Technical Support: Hardware troubleshooting, "
+        mock_retrieve_organization_language.return_value = "German"
 
         transcript = "Agent: Hello. Customer: Hi, I need help."
         redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
@@ -466,9 +473,10 @@ class TestCallEnricher:
         """
         When OpenAI enrichment raises a retriable error, the enricher should retry with Vertex AI.
         """
-        mock_obtain_active_topics, mock_obtain_suggested_topics = mock_db_handler
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, "
         mock_obtain_suggested_topics.return_value = "Technical Support: Hardware troubleshooting, "
+        mock_retrieve_organization_language.return_value = "German"
 
         # Force the primary provider (OpenAI) to fail
         mock_openai.chat.completions.create.side_effect = httpx.HTTPError("Simulated OpenAI failure")
@@ -486,3 +494,61 @@ class TestCallEnricher:
 
         for key in ("title", "summary", "sentiment", "topics"):
             assert key in result
+
+
+@pytest.mark.django_db
+class TestRevenueCalculation:
+    """
+    Test the CallValuer revenue calculation functionality.
+    """
+
+    @pytest.fixture
+    def call_valuer(self, mock_call_valuer, mock_db_handler):
+        """Create a CallValuer instance with mocked dependencies."""
+        return CallValuer()
+
+    def test_call_valuer_with_search_query(self, call_valuer, setup_db, mock_call_valuer):
+        """
+        Test that CallValuer calculates revenue when a valid search query is provided.
+        """
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Test with a search query
+        result = call_valuer("men leather jackets", org.id)
+
+        # Check that revenue is calculated
+        assert result is not None
+        assert isinstance(result, float)
+
+        # With our mock setup, it should calculate the average of prices: (299.90 + 199.50 + 149.99 + 250.00) / 4
+        expected_revenue = (299.90 + 199.50 + 149.99 + 250.00) / 4
+        assert abs(result - expected_revenue) < 1.0  # Allow small floating point differences
+
+        # Verify that the CallValuer used Google Custom Search API and made HTTP request
+        mock_build, mock_get = mock_call_valuer
+        assert mock_build.called  # Google Custom Search API was initialized
+        assert mock_get.called  # HTTP request to product page was made
+
+    def test_call_valuer_with_empty_search_query(self, call_valuer, setup_db):
+        """
+        Test that CallValuer returns None when no search query is provided.
+        """
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Test with empty search query
+        result = call_valuer("", org.id)
+
+        # Check that revenue is None when no search query
+        assert result is None
+
+    def test_call_valuer_with_whitespace_search_query(self, call_valuer, setup_db):
+        """
+        Test that CallValuer returns None when search query is only whitespace.
+        """
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Test with whitespace-only search query
+        result = call_valuer("   ", org.id)
+
+        # Check that revenue is None when search query is whitespace
+        assert result is None
