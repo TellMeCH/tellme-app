@@ -82,7 +82,8 @@ def another_conversation_same_organization(agent, customer, another_topic_same_o
         customer=customer,
         agent=agent,
         input_tokens=5,
-        output_tokens=15
+        output_tokens=15,
+        revenue_at_stake=399.95
     )
     another_conv.topics.add(another_topic_same_organization)
     return another_conv
@@ -441,6 +442,51 @@ class TestConversationTrendMixin:
         another_conversation_same_organization.topics.add(topic)
         avg_sentiment = list(topic.get_trend(field='sentiment', period='monthly'))
         assert len(avg_sentiment) == 1
+
+    def test_get_avg_revenue_empty(self, topic):
+        """
+        Test that get_trend for revenue returns empty results when there are no conversations.
+        """
+        avg_revenue = list(topic.get_trend(field='revenue', period='daily'))
+        assert len(avg_revenue) == 0
+
+    def test_get_avg_revenue_single_conversation(self, topic, conversation):
+        """
+        Test that get_trend for revenue returns the correct average revenue for a single conversation.
+        """
+        avg_revenue = list(topic.get_trend(field='revenue', period='daily'))
+        assert len(avg_revenue) == 1
+        assert avg_revenue[0]['avg_revenue'] == conversation.revenue_at_stake
+
+    def test_get_daily_avg_revenue_multiple_conversations(self, topic, conversation,
+                                                         another_conversation_same_organization):
+        """
+        Test that get_trend for revenue returns the correct average daily revenue for multiple conversations over
+        different days.
+        """
+        another_conversation_same_organization.topics.add(topic)
+        avg_revenue = list(topic.get_trend(field='revenue', period='daily'))
+        assert len(avg_revenue) == 2
+
+    def test_get_weekly_avg_revenue_multiple_conversations(self, topic, conversation,
+                                                          another_conversation_same_organization):
+        """
+        Test that get_trend for revenue returns the correct average weekly revenue for multiple conversations over
+        different days.
+        """
+        another_conversation_same_organization.topics.add(topic)
+        avg_revenue = list(topic.get_trend(field='revenue', period='weekly'))
+        assert len(avg_revenue) == 1
+
+    def test_get_monthly_avg_revenue_multiple_conversations(self, topic, conversation,
+                                                           another_conversation_same_organization):
+        """
+        Test that get_trend for revenue returns the correct average monthly revenue for multiple conversations over
+        different days.
+        """
+        another_conversation_same_organization.topics.add(topic)
+        avg_revenue = list(topic.get_trend(field='revenue', period='monthly'))
+        assert len(avg_revenue) == 1
 
 
 @pytest.mark.django_db
