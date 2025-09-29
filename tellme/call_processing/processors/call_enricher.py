@@ -104,7 +104,8 @@ class CallEnricher:
         # Retrieve relevant topic data for compilation
         compile_data = {
             "topics_string": db_handler.obtain_active_topics(organization_id),
-            "suggested_string": db_handler.obtain_suggested_topics(organization_id)
+            "suggested_string": db_handler.obtain_suggested_topics(organization_id),
+            "organization_language": db_handler.retrieve_organization_language(organization_id)
         }
 
         # Process each enrichment step

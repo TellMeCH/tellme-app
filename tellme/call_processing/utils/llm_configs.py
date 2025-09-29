@@ -144,12 +144,14 @@ ENRICHMENT_PIPELINE = [
             - 5: Customer is highly satisfied and will definitely continue
 
             STEP 7: REVENUE SEARCH QUERY
-            Based on the conversation content, generate a specific search query that would
-            help identify the products or services being discussed. This should be a realistic product search
-            query that could be used on a fashion retail website. Focus on specific product categories, styles,
-            or types mentioned in the call. Examples of valid queries: "men sneakers", "women dresses",
-            "men sweatshirts", "leather jackets", "running shoes". If the conversation doesn't relate to
-            fashion products, return an empty string.
+            Identify any distinct products or services being discussed. For example, if the customer is calling to
+            complain about an order mix-up, identify what item the customer initially ordered. If the customer asks
+            questions about a particular product, identify that product. Then come up with a search query that would
+            allow one to find the product online. For example, if the customer is asking about a pair of men's sneakers,
+            your query is "men sneakers". If the customer is complaining about a damaged dress, the query is "women
+            dresses". Generate the search query in {{organization_language}} language. For example, if this language is
+            "English": use "men sneakers", "women dresses",  if organization_language is "German": use "herren sneaker", 
+            "damen kleider", etc. If you can't identify a specific item, simply return an empty string. 
 
             STEP 8: OUTPUT FORMAT
             The output must be in JSON format with the following structure:
@@ -165,7 +167,7 @@ ENRICHMENT_PIPELINE = [
             Do not add any text before or after the JSON.
             """,
         "uses_redacted": True,
-        "to_compile": ["topics_string", "suggested_string"],
+        "to_compile": ["topics_string", "suggested_string", "organization_language"],
         "config": {
             "model": {"openai": "gpt-4o-mini", "vertexai": "gemini-2.0-flash-001"},
             "temperature": 0.2,
@@ -205,8 +207,8 @@ ENRICHMENT_PIPELINE = [
                             "revenue_search_query": {"type": "string"}
                         },
                         "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "revenue_search_query"],
-                        "strict": True
-                    }
+                    },
+                    "strict": True
                 }
             }
         }

@@ -68,6 +68,27 @@ def retrieve_organization_search_prefix(organization_id: int) -> str:
     return org.revenue_search_prefix
 
 
+def retrieve_organization_language(organization_id: int) -> str:
+    """
+    Returns the organization's language code
+
+    Args:
+        organization_id (int): ID of the organization to query
+
+    Returns:
+        str: The language for the organization (e.g., 'English', 'German')
+    """
+    LANGUAGE_MAPPING = {
+        'en': 'English',
+        'de': 'German',
+        'fr': 'French',
+        'it': 'Italian',
+        'es': 'Spanish',
+    }  # Note: At some point this might have to be scaled
+    org = Organization.objects.get(id=organization_id)
+    return LANGUAGE_MAPPING.get(org.language)
+
+
 def obtain_active_topics(organization_id: int):
     """
     Query the call_miner data model to extract all active topics from the organization.
