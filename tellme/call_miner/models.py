@@ -191,7 +191,8 @@ class ConversationTrendMixin:
     field_aggregations = {
         'count': models.Count('id'),
         'sentiment': models.Avg('sentiment'),
-        'duration': models.Avg('duration')
+        'duration': models.Avg('duration'),
+        'revenue': models.Avg('revenue_at_stake')
     }
 
     @property
