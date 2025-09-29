@@ -641,6 +641,20 @@ class TestTopicTrendActions:
         assert len(results) == 1
         assert results[0]['avg_sentiment'] == conversation.sentiment
 
+    def test_topic_revenue_trend_action_returns_expected_content(self, client, analyst_user, topic,
+                                                                conversation):
+        """
+        Test that the 'trend' action for a topic retrieves the expected revenue trend data.
+        """
+        client.force_authenticate(user=analyst_user)
+        url = reverse('topic-trend', args=[topic.id])
+        response = client.get(url, {'trend_period': 'daily', 'field': 'revenue'})
+        assert response.status_code == status.HTTP_200_OK
+        assert 'results' in response.data
+        results = response.data['results']
+        assert len(results) == 1
+        assert results[0]['avg_revenue'] == conversation.revenue_at_stake
+
 
 @pytest.mark.django_db
 class TestTopicSummary:

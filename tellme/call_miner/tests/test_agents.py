@@ -612,6 +612,19 @@ class TestAgentTrendActions:
         assert len(results) == 1
         assert results[0]['avg_sentiment'] == conversation.sentiment
 
+    def test_agent_revenue_trend_action_returns_expected_content(self, client, agent, conversation):
+        """
+        Test that the 'trend' action for an agent retrieves the expected revenue trend data.
+        """
+        client.force_authenticate(user=agent.user)
+        url = reverse('agent-trend', args=[agent.id])
+        response = client.get(url, {'trend_period': 'daily', 'field': 'revenue'})
+        assert response.status_code == status.HTTP_200_OK
+        assert 'results' in response.data
+        results = response.data['results']
+        assert len(results) == 1
+        assert results[0]['avg_revenue'] == conversation.revenue_at_stake
+
     def test_agent_sentiment_per_topic_trend_action_returns_expected_content(self, client, agent, conversation):
         """
         Test that the 'trend' action for an agent retrieves the expected sentiment trend data per topic.
