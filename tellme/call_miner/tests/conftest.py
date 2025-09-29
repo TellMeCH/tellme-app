@@ -70,7 +70,11 @@ def client():
 @pytest.fixture
 def organization():
     """Create and return a test Organization."""
-    return Organization.objects.create(name='Test Organization', max_user_count=10)
+    return Organization.objects.create(
+        name='Test Organization',
+        max_user_count=10,
+        revenue_search_prefix='testorg.ch/de/'
+    )
 
 
 @pytest.fixture
@@ -83,7 +87,11 @@ def api_key(organization):
 @pytest.fixture
 def another_organization():
     """Create and return another test Organization."""
-    return Organization.objects.create(name='Another Organization', max_user_count=10)
+    return Organization.objects.create(
+        name='Another Organization',
+        max_user_count=10,
+        revenue_search_prefix='anotherorga.ch/de/'
+    )
 
 
 @pytest.fixture

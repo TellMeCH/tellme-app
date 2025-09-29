@@ -17,6 +17,7 @@ from django.conf import settings
 import google.cloud.dlp
 
 from .utils import create_customer_id
+from .config import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, MINIMUM_CALLER_AGE
 
 
 class CallRedactor:
@@ -27,7 +28,7 @@ class CallRedactor:
     and optionally extracts customer identifiers from the redaction process.
     """
 
-    def __init__(self, minimum_caller_age=16, max_retries=5, base_delay=5.0, backoff_factor=2):
+    def __init__(self):
         """
         Initialize the CallRedactor with necessary clients and configuration.
 
@@ -56,16 +57,11 @@ class CallRedactor:
             "inspect_config": {"info_types": [{"name": info_type} for info_type in dlp_entity_types]}
         }
 
-        self.minimum_caller_age = minimum_caller_age
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.backoff_factor = backoff_factor
-
     @observe(as_type="generation")
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=2, exp_base=2, min=5.0),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
     )
     def redact_transcript(self, transcript: str, extract_customer_id: bool = False) -> tuple[str, str | None]:
@@ -187,7 +183,7 @@ class CallRedactor:
             str: The first valid birth date string, or empty string if none found
         """
         today = datetime.now()
-        minimum_birth_date = datetime(today.year - self.minimum_caller_age, today.month, today.day)
+        minimum_birth_date = datetime(today.year - MINIMUM_CALLER_AGE, today.month, today.day)
 
         for date_str in date_strings:
             try:

@@ -5,10 +5,12 @@ This package contains specialized processors for different aspects of call proce
 - CallTranscriber: Handles audio transcription and diarization
 - CallRedactor: Handles PII redaction and customer identification
 - CallEnricher: Handles AI-powered call analysis and enrichment
+- CallValuer: Handles revenue estimation through web search and price extraction
 """
 
 from .call_transcriber import CallTranscriber
 from .call_redactor import CallRedactor
 from .call_enricher import CallEnricher
+from .call_valuer import CallValuer
 
-__all__ = ['CallTranscriber', 'CallRedactor', 'CallEnricher']
+__all__ = ['CallTranscriber', 'CallRedactor', 'CallEnricher', 'CallValuer']
