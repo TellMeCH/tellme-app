@@ -20,6 +20,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
 from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
 from tellme.call_processing.utils import db_handler
 from .utils import vertexai_retry_logic, create_customer_id
+from .config import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR
 
 
 class CallEnricher:
@@ -30,7 +31,7 @@ class CallEnricher:
     speaker identification, topic analysis, summarization, and sentiment assessment.
     """
 
-    def __init__(self, max_retries=5, base_delay=5.0, backoff_factor=2):
+    def __init__(self):
         """
         Initialize the CallEnricher with necessary clients and configuration.
 
@@ -62,10 +63,6 @@ class CallEnricher:
                 fallback=ENRICHMENT_PIPELINE[i]['prompt']
             )
             self.enrichment_prompts.append(prompt)
-
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.backoff_factor = backoff_factor
 
     @observe(capture_input=False)
     def enrich_recording(self, transcript: str, redacted_transcript: str,
@@ -107,7 +104,8 @@ class CallEnricher:
         # Retrieve relevant topic data for compilation
         compile_data = {
             "topics_string": db_handler.obtain_active_topics(organization_id),
-            "suggested_string": db_handler.obtain_suggested_topics(organization_id)
+            "suggested_string": db_handler.obtain_suggested_topics(organization_id),
+            "organization_language": db_handler.retrieve_organization_language(organization_id)
         }
 
         # Process each enrichment step
@@ -177,8 +175,8 @@ class CallEnricher:
     @observe(as_type="generation", capture_input=False, capture_output=False)
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=2, exp_base=2, min=5.0),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception_type(httpx.HTTPError)
     )
     def enrich_recording_with_openai(self, transcript: str, system_message: str,
@@ -216,8 +214,8 @@ class CallEnricher:
     @observe(as_type="generation", capture_input=False, capture_output=False)
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=2, exp_base=2, min=5.0),
-        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(vertexai_retry_logic)
     )
     def enrich_recording_with_vertexai(self, transcript: str, system_message: str,

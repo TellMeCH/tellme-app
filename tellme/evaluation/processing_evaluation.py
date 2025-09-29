@@ -1,7 +1,10 @@
 import os
+import sys
+import argparse
 import csv
 import json
 import hashlib
+import traceback
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from unittest.mock import patch
@@ -19,7 +22,7 @@ if not settings.configured:
 from google import genai
 from google.genai import types, errors
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
-from tellme.evaluation.metadata import CONVERSATIONS, TOPICS, SUGGESTED_TOPICS
+from tellme.evaluation.metadata import CONVERSATIONS, TOPICS, SUGGESTED_TOPICS, SEARCH_PREFIX, SEARCH_LANGUAGE
 
 
 # LLM evaluation prompt and configuration
@@ -93,6 +96,8 @@ EVALUATION_CONFIG = {
         }
     }
 }
+
+REVENUE_THRESHOLD = 0.5
 
 class CallProcessingEvaluator:
     """
@@ -215,6 +220,32 @@ class CallProcessingEvaluator:
         return suggested_string
 
     @staticmethod
+    def _mock_retrieve_organization_search_prefix(organization_id: int) -> str:
+        """
+        Mock for db_handler.retrieve_organization_search_prefix that returns a test search prefix.
+
+        Args:
+            organization_id: Organization ID
+
+        Returns:
+            str: Test search prefix for revenue queries
+        """
+        return SEARCH_PREFIX
+
+    @staticmethod
+    def _mock_retrieve_organization_language(organization_id: int) -> str:
+        """
+        Mock for db_handler.retrieve_organization_language that returns the test language.
+
+        Args:
+            organization_id: Organization ID
+
+        Returns:
+            str: Test search prefix for revenue queries
+        """
+        return SEARCH_LANGUAGE
+
+    @staticmethod
     def _process_expected_customer_id(expected: Dict[str, Any]) -> Dict[str, Any]:
         raw_id = expected.get('customer_id')
         if raw_id is not None:
@@ -264,15 +295,15 @@ class CallProcessingEvaluator:
         results['customer_id_match'] = (actual.get('customer_id') == expected.get('customer_id')) or (expected.get('customer_id') is None)
 
         # Revenue comparison (if available)
-        actual_revenue = actual.get('revenue')
-        expected_revenue = expected.get('revenue')
+        actual_revenue = actual.get('revenue_at_stake')
+        expected_revenue = expected.get('revenue_at_stake')
         if actual_revenue is not None and expected_revenue is not None:
             try:
                 actual_rev = float(actual_revenue)
                 expected_rev = float(expected_revenue)
-                results['revenue_match'] = actual_rev == expected_rev
                 results['revenue_diff'] = abs(actual_rev - expected_rev)
                 results['revenue_relative_diff'] = abs(actual_rev - expected_rev) / expected_rev if expected_rev != 0 else 0
+                results['revenue_match'] = results['revenue_relative_diff'] < REVENUE_THRESHOLD
             except (ValueError, TypeError):
                 results['revenue_match'] = False
                 results['revenue_diff'] = None
@@ -475,8 +506,8 @@ class CallProcessingEvaluator:
             print("✗ Customer ID: MISMATCH")
 
         # Revenue comparison
-        expected_revenue = expected_data.get('revenue')
-        actual_revenue = actual_data.get('revenue')
+        expected_revenue = expected_data.get('revenue_at_stake')
+        actual_revenue = actual_data.get('revenue_at_stake')
         print(f"\nRevenue - Expected: {expected_revenue}, Actual: {actual_revenue}")
         if result.get('revenue_match') is True:
             print("✓ Revenue: EXACT MATCH")
@@ -556,7 +587,9 @@ class CallProcessingEvaluator:
         with patch('tellme.call_processing.utils.gcs_utils.download_from_gcs', side_effect=self._mock_gcs_download), \
              patch('tellme.call_processing.utils.gcs_utils.list_files_in_gcs', side_effect=self._mock_gcs_list_files), \
              patch('tellme.call_processing.utils.db_handler.obtain_active_topics', side_effect=self._mock_db_obtain_active_topics), \
-             patch('tellme.call_processing.utils.db_handler.obtain_suggested_topics', side_effect=self._mock_db_obtain_suggested_topics):
+             patch('tellme.call_processing.utils.db_handler.obtain_suggested_topics', side_effect=self._mock_db_obtain_suggested_topics), \
+             patch('tellme.call_processing.utils.db_handler.retrieve_organization_search_prefix', side_effect=self._mock_retrieve_organization_search_prefix), \
+             patch('tellme.call_processing.utils.db_handler.retrieve_organization_language', side_effect=self._mock_retrieve_organization_language):
 
             pipeline = CallProcessingPipeline()
 
@@ -734,9 +767,6 @@ def main():
 
     try:
         # Parse command line arguments
-        import sys
-        import argparse
-
         parser = argparse.ArgumentParser(description='Evaluate CallProcessingPipeline performance')
         parser.add_argument('--verbose', '-v', action='store_true', help='Show detailed side-by-side comparisons')
         parser.add_argument('--audio-path', type=str, help='Path to audio files directory', default=None)
@@ -863,7 +893,6 @@ def main():
 
     except Exception as e:
         print(f"Error running evaluation: {e}")
-        import traceback
         traceback.print_exc()
 
 

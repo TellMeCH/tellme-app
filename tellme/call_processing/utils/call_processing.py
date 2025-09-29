@@ -7,7 +7,7 @@ from langfuse.decorators import observe, langfuse_context
 from tellme.call_processing.utils.llm_configs import (
     TRANSCRIPTION_METHOD_CHOICES, CUSTOMER_IDENTIFICATION_METHOD_CHOICES
 )
-from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher
+from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher, CallValuer
 
 
 
@@ -29,30 +29,8 @@ class CallProcessingPipeline:
 
     The pipeline is stateless and delegates all processing to the specialized modules, which handle
     their own client initialization, retry logic, and provider fallbacks.
-
-    Attributes:
-    CHUNK_SIZE : float
-        Length of each audio chunk, in minutes.
-    TRANSCRIPTION_MODEL_NAME_DEEPGRAM : str
-        Model used when transcribing with Deepgram.
-    TRANSCRIPTION_MODEL_NAME_GROQ : str
-        Model used when transcribing with Groq.
-    API_MAX_RETRIES : int
-        Max retry attempts for any network call in the pipeline.
-    API_BASE_DELAY : float
-        Initial back-off delay (seconds) for retry logic.
-    API_BACKOFF_FACTOR : int
-        Multiplier for exponential back-off.
-    MINIMUM_CALLER_AGE: int
-        Minimum expected age of the caller, to identify birth dates vs relative dates.
     """
-    CHUNK_SIZE: float = 5
-    TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
-    TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
-    API_MAX_RETRIES: int = 5
-    API_BASE_DELAY: float = 5.0
-    API_BACKOFF_FACTOR: int = 2
-    MINIMUM_CALLER_AGE: int = 16
+
 
     def __init__(self):
         """
@@ -66,27 +44,13 @@ class CallProcessingPipeline:
         """
 
         # Initialize processing modules
-        self.transcriber = CallTranscriber(
-            chunk_size=self.CHUNK_SIZE,
-            max_retries=self.API_MAX_RETRIES,
-            base_delay=self.API_BASE_DELAY,
-            backoff_factor=self.API_BACKOFF_FACTOR,
-            transcription_model_deepgram=self.TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
-            transcription_model_groq=self.TRANSCRIPTION_MODEL_NAME_GROQ
-        )
+        self.transcriber = CallTranscriber()
 
-        self.redacter = CallRedactor(
-            minimum_caller_age=self.MINIMUM_CALLER_AGE,
-            max_retries=self.API_MAX_RETRIES,
-            base_delay=self.API_BASE_DELAY,
-            backoff_factor=self.API_BACKOFF_FACTOR
-        )
+        self.redacter = CallRedactor()
 
-        self.enricher = CallEnricher(
-            max_retries=self.API_MAX_RETRIES,
-            base_delay=self.API_BASE_DELAY,
-            backoff_factor=self.API_BACKOFF_FACTOR
-        )
+        self.enricher = CallEnricher()
+
+        self.valuer = CallValuer()
 
     @observe()
     def __call__(
@@ -191,10 +155,16 @@ class CallProcessingPipeline:
             file_metadata['organization_id']
         )
 
+        # Calculate revenue at stake
+        revenue_at_stake = None
+        if 'revenue_search_query' in enriched_data:
+            revenue_at_stake = self.valuer(enriched_data['revenue_search_query'], file_metadata['organization_id'])
+
         enriched_data['language'] = language
         enriched_data['input_tokens'] = input_tokens
         enriched_data['output_tokens'] = output_tokens
         enriched_data['duration'] = total_duration
+        enriched_data['revenue_at_stake'] = revenue_at_stake
         enriched_data.update(file_metadata)
         return enriched_data
 
