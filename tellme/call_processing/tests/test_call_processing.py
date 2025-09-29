@@ -514,15 +514,18 @@ class TestRevenueCalculation:
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
         # Test with a search query
-        result = call_valuer("men leather jackets", org.id)
+        revenue, product_url = call_valuer("men leather jackets", org.id)
 
         # Check that revenue is calculated
-        assert result is not None
-        assert isinstance(result, float)
+        assert revenue is not None
+        assert isinstance(revenue, float)
+        assert product_url is not None
+        assert isinstance(product_url, str)
+        assert product_url == 'https://teststore.ch/de/men-leather-jackets-premium'
 
         # With our mock setup, it should calculate the average of prices: (299.90 + 199.50 + 149.99 + 250.00) / 4
         expected_revenue = (299.90 + 199.50 + 149.99 + 250.00) / 4
-        assert abs(result - expected_revenue) < 1.0  # Allow small floating point differences
+        assert abs(revenue - expected_revenue) < 1.0  # Allow small floating point differences
 
         # Verify that the CallValuer used Google Custom Search API and made HTTP request
         mock_build, mock_get = mock_call_valuer
@@ -536,10 +539,11 @@ class TestRevenueCalculation:
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
         # Test with empty search query
-        result = call_valuer("", org.id)
+        revenue, product_url = call_valuer("", org.id)
 
-        # Check that revenue is None when no search query
-        assert result is None
+        # Check that both revenue and product_url are None when no search query
+        assert revenue is None
+        assert product_url is None
 
     def test_call_valuer_with_whitespace_search_query(self, call_valuer, setup_db):
         """
@@ -548,7 +552,8 @@ class TestRevenueCalculation:
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
         # Test with whitespace-only search query
-        result = call_valuer("   ", org.id)
+        revenue, product_url = call_valuer("   ", org.id)
 
-        # Check that revenue is None when search query is whitespace
-        assert result is None
+        # Check that both revenue and product_url are None when search query is whitespace
+        assert revenue is None
+        assert product_url is None
