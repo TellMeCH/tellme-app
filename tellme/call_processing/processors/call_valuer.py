@@ -17,14 +17,14 @@ class CallValuer:
 
     This processor takes a search query, performs a Google Custom Search API query within
     a specific domain, downloads the HTML of the first result, and extracts price information
-    to calculate an average revenue value.
+    to calculate an average revenue value and return the product URL for observability.
 
     Workflow:
     1. Use Google Custom Search API with site-specific filtering
     2. Get the first relevant product page URL from search results
     3. Download and parse the product page HTML
     4. Extract all price values from the page using regex patterns
-    5. Calculate and return average price as revenue estimate
+    5. Calculate and return average price as revenue estimate along with product URL
 
     Attributes:
     max_retries : int
@@ -75,7 +75,7 @@ class CallValuer:
                 self.search_service = None
 
     @observe()
-    def __call__(self, search_query: str, organization_id: int) -> float:
+    def __call__(self, search_query: str, organization_id: int) -> tuple[float, str]:
         """
         Estimate revenue at stake by searching for products and analyzing prices.
 
@@ -84,39 +84,41 @@ class CallValuer:
             organization_id (int): Organization ID to retrieve search prefix
 
         Returns:
-            float: Average price of products found, or None if no prices found or on error
+            tuple[float, str]: Tuple containing:
+                - Average price of products found (or None if no prices found or on error)
+                - Product URL that was analyzed (or None if no URL found or on error)
 
         Raises:
             Exception: Re-raises any unhandled exceptions after logging
         """
         if not search_query or not search_query.strip():
-            return None
+            return None, None
 
         # Retrieve the organization's search prefix
         domain_prefix = db_handler.retrieve_organization_search_prefix(organization_id)
 
         if not domain_prefix or not domain_prefix.strip():
-            return None
+            return None, None
 
         try:
             # Get the first relevant product page URL using Google Custom Search API
             product_url = self._get_first_product_url(search_query.strip(), domain_prefix)
 
             if not product_url:
-                return None
+                return None, None
 
             # Download and parse the product page
             prices = self._extract_prices_from_page(product_url)
 
             if not prices:
-                return None
+                return None, None
 
             # Calculate and return average price
-            return statistics.mean(prices)
+            return statistics.mean(prices), product_url
 
         except Exception as e:
             print(f"CallValuer error processing query '{search_query}': {e}")
-            return None
+            return None, None
 
     @retry(
         reraise=True,
