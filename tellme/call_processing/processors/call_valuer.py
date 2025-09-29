@@ -8,8 +8,8 @@ from langfuse.decorators import observe
 from googleapiclient.discovery import build
 from django.conf import settings
 
-from tellme.call_processing.utils.db_handler import retrieve_organization_search_prefix
-
+from tellme.call_processing.utils import db_handler
+from .config import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, MINIMUM_EXPECTED_PRICE, MAXIMUM_EXPECTED_PRICE
 
 class CallValuer:
     """
@@ -43,8 +43,7 @@ class CallValuer:
         Custom Search Engine ID for the API.
     """
 
-    def __init__(self, minimum_price: float, maximum_price: float, max_retries: int = 3, base_delay: float = 1.0,
-                 backoff_factor: int = 2):
+    def __init__(self):
         """
         Initialize the CallValuer with retry configuration and Google Custom Search API.
 
@@ -53,11 +52,6 @@ class CallValuer:
             base_delay (float): Initial delay between retries in seconds
             backoff_factor (int): Multiplier for exponential backoff
         """
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.backoff_factor = backoff_factor
-        self.minimum_price = minimum_price
-        self.maximum_price = maximum_price
 
         # Common headers to appear more like a regular browser
         self.headers = {
@@ -99,7 +93,7 @@ class CallValuer:
             return None
 
         # Retrieve the organization's search prefix
-        domain_prefix = retrieve_organization_search_prefix(organization_id)
+        domain_prefix = db_handler.retrieve_organization_search_prefix(organization_id)
 
         if not domain_prefix or not domain_prefix.strip():
             return None
@@ -126,8 +120,8 @@ class CallValuer:
 
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
-        stop=stop_after_attempt(self.max_retries),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception_type(Exception)
     )
     def _get_first_product_url(self, search_query: str, domain_prefix: str) -> str:
@@ -172,8 +166,8 @@ class CallValuer:
 
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
-        stop=stop_after_attempt(self.max_retries),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception_type((requests.RequestException, requests.Timeout))
     )
     def _extract_prices_from_page(self, url: str) -> list[float]:
@@ -222,7 +216,7 @@ class CallValuer:
                     price = float(price_str)
 
                     # Filter reasonable price ranges
-                    if self.minimum_price <= price <= self.maximum_price:
+                    if MINIMUM_EXPECTED_PRICE <= price <= MAXIMUM_EXPECTED_PRICE:
                         prices.append(price)
                 except (ValueError, AttributeError):
                     continue

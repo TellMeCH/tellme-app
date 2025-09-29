@@ -23,6 +23,10 @@ from google.genai import types
 
 from tellme.call_processing.utils.llm_configs import DIARIZATION_CONFIG, DIARIZATION_PROMPT
 from tellme.call_processing.utils import gcs_utils
+from .config import (
+    CHUNK_SIZE, API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
+    TRANSCRIPTION_MODEL_NAME_GROQ
+)
 from .utils import vertexai_retry_logic
 
 
@@ -47,19 +51,9 @@ class CallTranscriber:
     including chunking, transcription via multiple providers, and speaker diarization.
     """
 
-    def __init__(self, chunk_size=5.0, max_retries=5, base_delay=5.0, backoff_factor=2,
-                 transcription_model_deepgram='whisper-medium',
-                 transcription_model_groq='whisper-large-v3'):
+    def __init__(self):
         """
         Initialize the CallTranscriber with necessary clients and configuration.
-
-        Args:
-            chunk_size (float): Audio chunk size in minutes
-            max_retries (int): Maximum retry attempts
-            base_delay (float): Base delay for exponential backoff
-            backoff_factor (int): Backoff multiplier
-            transcription_model_deepgram (str): Deepgram model name
-            transcription_model_groq (str): Groq model name
 
         Raises:
             RuntimeError: If required API keys are not found
@@ -81,7 +75,7 @@ class CallTranscriber:
 
         # Initialize transcription options
         self.transcription_options = deepgram.PrerecordedOptions(
-            model=transcription_model_deepgram,
+            model=TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
             smart_format=True,
             detect_language=True,
             punctuate=True,
@@ -94,13 +88,6 @@ class CallTranscriber:
             label=[k for k in ['development', 'staging', 'production'] if settings.TELLME_ENV in k][0],
             fallback=DIARIZATION_PROMPT
         )
-
-        self.chunk_size = chunk_size
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.backoff_factor = backoff_factor
-        self.transcription_model_deepgram = transcription_model_deepgram
-        self.transcription_model_groq = transcription_model_groq
 
     @observe(capture_output=False)
     def transcribe(self, file_name: str, transcription_method: str) -> tuple[str, str, float]:
@@ -226,7 +213,8 @@ class CallTranscriber:
 
         return full_transcript, base_language, total_duration / 1000
 
-    def cut_into_chunks(self, file_data: bytes, audio_format: str = "wav") -> tuple[list[bytes], int]:
+    @staticmethod
+    def cut_into_chunks(file_data: bytes, audio_format: str = "wav") -> tuple[list[bytes], int]:
         """
         Split audio data into chunks for processing.
 
@@ -241,7 +229,7 @@ class CallTranscriber:
             raise ValueError(f"Unsupported audio format: {audio_format}. Only {SUPPORTED_FILE_FORMATS} are supported.")
 
         audio = AudioSegment.from_file(BytesIO(file_data), format=audio_format)
-        chunk_length_ms = int(self.chunk_size * 60 * 1000)
+        chunk_length_ms = int(CHUNK_SIZE * 60 * 1000)
         chunks = []
 
         for start_ms in range(0, len(audio), chunk_length_ms):
@@ -256,8 +244,8 @@ class CallTranscriber:
     @observe(as_type="generation")
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
-        stop=stop_after_attempt(self.max_retries),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(
             lambda e: (isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429) or
                       (isinstance(e, DeepgramApiError) and e.status == '429')
@@ -288,19 +276,19 @@ class CallTranscriber:
         try:
             response = self.deepgram.listen.rest.v("1").transcribe_file(
                 payload, self.transcription_options,
-                timeout=httpx.Timeout(self.chunk_size * 60, connect=10.0)
+                timeout=httpx.Timeout(CHUNK_SIZE * 60, connect=10.0)
             )
 
             transcript = response['results']['channels'][0]['alternatives'][0]['paragraphs']['transcript']
             transcript = transcript.replace("\n\n", "\n").strip()
             language = response['results']['channels'][0]['detected_language']
-            cost = DEEPGRAM_COSTS[self.transcription_model_deepgram] * response['metadata']['duration']
+            cost = DEEPGRAM_COSTS[TRANSCRIPTION_MODEL_NAME_DEEPGRAM] * response['metadata']['duration']
 
             langfuse_context.update_current_observation(
                 end_time=datetime.now(),
                 input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response['metadata']['duration']},
                 output={"transcript_chunk_size": len(transcript), "language": language},
-                model=f'deepgram-{self.transcription_model_deepgram}',
+                model=f'deepgram-{TRANSCRIPTION_MODEL_NAME_DEEPGRAM}',
                 usage={'total': response['metadata']['duration'], 'unit': 'SECONDS', 'totalCost': cost}
             )
             return transcript, language
@@ -315,8 +303,8 @@ class CallTranscriber:
     @observe(as_type="generation")
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
-        stop=stop_after_attempt(self.max_retries),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
     )
     def transcribe_chunk_with_groq(self, chunk_data: bytes) -> tuple[str, str]:
@@ -340,7 +328,7 @@ class CallTranscriber:
         try:
             response = self.groq.audio.transcriptions.create(
                 file=('recording_chunk.wav', chunk_data),
-                model=self.transcription_model_groq,
+                model=TRANSCRIPTION_MODEL_NAME_GROQ,
                 response_format="verbose_json",
             )
             transcript = '\n'.join([f"Speaker X: {phrase['text']}" for phrase in response.segments])
@@ -350,11 +338,11 @@ class CallTranscriber:
                 end_time=datetime.now(),
                 input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response.duration},
                 output={"transcript_chunk_size": len(transcript), "language": language},
-                model=f'groq-{self.transcription_model_groq}',
+                model=f'groq-{TRANSCRIPTION_MODEL_NAME_GROQ}',
                 usage={
                     'total': response.duration,
                     'unit': 'SECONDS',
-                    'totalCost': GROQ_COSTS[self.transcription_model_groq] * response.duration
+                    'totalCost': GROQ_COSTS[TRANSCRIPTION_MODEL_NAME_GROQ] * response.duration
                 }
             )
 
@@ -367,8 +355,8 @@ class CallTranscriber:
     @observe(as_type="generation", capture_output=False, capture_input=False)
     @retry(
         reraise=True,
-        wait=wait_exponential(multiplier=self.backoff_factor, exp_base=2, min=self.base_delay),
-        stop=stop_after_attempt(self.max_retries),
+        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
+        stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(vertexai_retry_logic)
     )
     def diarize_transcript(self, transcript: str) -> str:
