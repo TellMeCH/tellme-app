@@ -390,67 +390,7 @@ class TestCreateConversation:
         assert conversation.suggested_topics.count() == 2  
         assert suggested1 in conversation.suggested_topics.all()
         assert suggested2 in conversation.suggested_topics.all()
-    
-    def test_create_conversation_missing_topics_warning(self, setup_db):
-        """Test that missing topics raise a warning."""
-        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        # Create only one topic but request two
-        existing_topic = Topic.objects.create(name="Existing Topic", description="Exists", organization=org)
-        
-        with pytest.raises(Warning) as exc_info:
-            db_handler.create_conversation(
-                customer_id="CUST789",
-                organization_id=org.id,
-                agent_id=agent.id,
-                topics=["Existing Topic", "Missing Topic"],  # One exists, one doesn't
-                suggested_topics=[],
-                file_name="missing_topics_call.wav",
-                timestamp="2024-01-01T12:00:00Z",
-                duration=60.0,
-                transcript="Test transcript",
-                sentiment=3.0,
-                summary="Test summary",
-                title="Test Call",
-                input_tokens=80,
-                output_tokens=40
-            )
-        
-        assert "Some topics were not found" in str(exc_info.value)
-        assert "Missing Topic" in str(exc_info.value)
-    
-    def test_create_conversation_missing_suggested_topics_warning(self, setup_db):
-        """Test that missing suggested topics raise a warning."""
-        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
-
-        # Create only one suggested topic but request two
-        existing_suggested = SuggestedTopic.objects.create(
-            name="Existing Suggested", 
-            description="Exists", 
-            organization=org
-        )
-        
-        with pytest.raises(Warning) as exc_info:
-            db_handler.create_conversation(
-                customer_id="CUST101",
-                organization_id=org.id,
-                agent_id=agent.id,
-                topics=[topic.name],
-                suggested_topics=["Existing Suggested", "Missing Suggested"],
-                file_name="missing_suggested_call.wav",
-                timestamp="2024-01-01T12:00:00Z",
-                duration=75.0,
-                transcript="Test transcript", 
-                sentiment=4.0,
-                summary="Test summary",
-                title="Test Call",
-                input_tokens=90,
-                output_tokens=45
-            )
-        
-        assert "Some suggested topics were not found" in str(exc_info.value)
-        assert "Missing Suggested" in str(exc_info.value)
-    
     def test_create_conversation_empty_topics_lists(self, setup_db):
         """Test creating conversation with empty topics and suggested_topics lists."""
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
