@@ -188,6 +188,11 @@ class ConversationModifySerializer(serializers.ModelSerializer):
         queryset=Topic.objects.all(),
         help_text='Primary keys of the topics associated with the conversation'
     )
+    suggested_topics = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=SuggestedTopic.objects.all(),
+        help_text='Primary keys of the suggested topics associated with the conversation'
+    )
     agent = serializers.PrimaryKeyRelatedField(
         queryset=Agent.objects.all(),
         help_text='Primary key of the related agent'
@@ -200,7 +205,7 @@ class ConversationModifySerializer(serializers.ModelSerializer):
     class Meta:
         model = Conversation
         fields = ['id', 'created', 'path', 'date', 'duration', 'transcript', 'summary', 'title', 'sentiment', 'topics',
-                  'agent', 'customer', 'input_tokens', 'output_tokens']
+                  'suggested_topics', 'agent', 'customer', 'input_tokens', 'output_tokens', 'revenue_at_stake']
 
     def validate(self, data):
         """
@@ -340,8 +345,8 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Organization
         fields = [
-            'url', 'name', 'conversation_count', 'max_user_count', 'created', 'updated', 'transcription_method',
-            'enrichment_method', 'employee_count'
+            'url', 'name', 'conversation_count', 'max_user_count', 'max_topic_count', 'created', 'updated', 'transcription_method',
+            'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count'
         ]
 
     @staticmethod
