@@ -286,10 +286,12 @@ class TestConversationCreate:
             'title': 'New Conversation',
             'sentiment': 3.6,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
             'input_tokens': 120,
-            'output_tokens': 60
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_201_CREATED
@@ -305,15 +307,17 @@ class TestConversationCreate:
             'path': 'path/to/new_conversation',
             'date': datetime.now().isoformat(),
             'duration': 100.0,
-            'transcript': 'Admin transcript',
-            'summary': 'Admin summary',
-            'title': 'Admin Conversation',
-            'sentiment': 2.7,
+            'transcript': 'New transcript',
+            'summary': 'New summary',
+            'title': 'New Conversation',
+            'sentiment': 3.6,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
-            'input_tokens': 130,
-            'output_tokens': 70
+            'input_tokens': 120,
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -330,12 +334,14 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 4.6,
+            'sentiment': 3.6,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
             'input_tokens': 120,
-            'output_tokens': 60
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -352,12 +358,14 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 1.6,
+            'sentiment': 3.6,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
             'input_tokens': 120,
-            'output_tokens': 60
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -376,12 +384,14 @@ class TestConversationCreate:
             'transcript': 'New transcript',
             'summary': 'New summary',
             'title': 'New Conversation',
-            'sentiment': 2.6,
+            'sentiment': 3.6,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
             'input_tokens': 120,
-            'output_tokens': 60
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -399,10 +409,12 @@ class TestConversationCreate:
             'title': 'New Conversation',
             'sentiment': 3.6,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
             'input_tokens': 120,
-            'output_tokens': 60
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -421,10 +433,12 @@ class TestConversationCreate:
             'title': 'New Conversation',
             'sentiment': 87,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
             'input_tokens': 120,
-            'output_tokens': 60
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -439,10 +453,12 @@ class TestConversationCreate:
             'title': 'New Conversation',
             'sentiment': -3,
             'topics': [],
+            'suggested_topics': [],
             'agent': agent.id,
             'customer': customer.id,
             'input_tokens': 120,
-            'output_tokens': 60
+            'output_tokens': 60,
+            'revenue_at_stake': 100,
         }
         response = client.post(reverse('conversation-list'), data, format='json')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
