@@ -353,7 +353,8 @@ class ConversationTrendMixin:
 
                 previous = this_data[metric][prior_month]
                 latest = this_data[metric][last_month]
-                if previous != 0:
+                if (previous != 0) and (previous is not None):
+                    latest = latest if latest is not None else 0
                     this_data[metric]['change'] = (latest - previous) * 100 / previous
                 else:
                     this_data[metric]['change'] = None
