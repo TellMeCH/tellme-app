@@ -161,9 +161,9 @@ class CallProcessingPipeline:
         )
 
         # Calculate revenue at stake
-        revenue, product_url = None, None
+        revenue, product_url, revenue_failure_reason = None, None, None
         if 'revenue_search_query' in enriched_data:
-            revenue, product_url = self.valuer(enriched_data['revenue_search_query'], file_metadata['organization_id'])
+            revenue, product_url, revenue_failure_reason = self.valuer.infer_revenue(enriched_data['revenue_search_query'], file_metadata['organization_id'])
 
         enriched_data['language'] = language
         enriched_data['input_tokens'] = input_tokens

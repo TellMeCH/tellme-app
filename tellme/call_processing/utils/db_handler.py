@@ -158,13 +158,13 @@ def create_conversation(
     topics_qs = Topic.objects.filter(name__in=topics, organization=org)
     if len(topics_qs) != len(topics):
         missing = set(topics) - set(t.name for t in topics_qs)
-        raise Warning(f"Some topics were not found in org {organization_id}: {missing}")
+        print(f"Some topics were not found in org {organization_id}: {missing}")
 
     # Instantiate the SuggestedTopics based on their names, filtering by this org
     suggested_topics_qs = SuggestedTopic.objects.filter(name__in=suggested_topics, organization=org)
     if len(suggested_topics_qs) != len(suggested_topics):
         missing = set(suggested_topics) - set(t.name for t in suggested_topics_qs)
-        raise Warning(f"Some suggested topics were not found in org {organization_id}: {missing}")
+        print(f"Some suggested topics were not found in org {organization_id}: {missing}")
 
     # Convert date_str to a timezone-aware DateTime
     if timestamp is None:

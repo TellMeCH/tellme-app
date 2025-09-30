@@ -75,7 +75,7 @@ class CallValuer:
                 self.search_service = None
 
     @observe()
-    def __call__(self, search_query: str, organization_id: int) -> tuple[float, str]:
+    def infer_revenue(self, search_query: str, organization_id: int) -> tuple[float, str, str]:
         """
         Estimate revenue at stake by searching for products and analyzing prices.
 
@@ -84,41 +84,42 @@ class CallValuer:
             organization_id (int): Organization ID to retrieve search prefix
 
         Returns:
-            tuple[float, str]: Tuple containing:
+            tuple[float, str, str]: Tuple containing:
                 - Average price of products found (or None if no prices found or on error)
                 - Product URL that was analyzed (or None if no URL found or on error)
+                - Failure reason (or None if successful)
 
         Raises:
             Exception: Re-raises any unhandled exceptions after logging
         """
         if not search_query or not search_query.strip():
-            return None, None
+            return None, None, "Missing query"
 
         # Retrieve the organization's search prefix
         domain_prefix = db_handler.retrieve_organization_search_prefix(organization_id)
 
         if not domain_prefix or not domain_prefix.strip():
-            return None, None
+            return None, None, "Missing domain prefix"
 
         try:
             # Get the first relevant product page URL using Google Custom Search API
             product_url = self._get_first_product_url(search_query.strip(), domain_prefix)
 
             if not product_url:
-                return None, None
+                return None, None, "No search results"
 
             # Download and parse the product page
             prices = self._extract_prices_from_page(product_url)
 
             if not prices:
-                return None, None
+                return None, None, "No prices could be extracted"
 
             # Calculate and return average price
-            return statistics.mean(prices), product_url
+            return statistics.mean(prices), product_url, None
 
         except Exception as e:
             print(f"CallValuer error processing query '{search_query}': {e}")
-            return None, None
+            return None, None, f"Error: {str(e)}"
 
     @retry(
         reraise=True,
