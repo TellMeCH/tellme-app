@@ -96,6 +96,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'tellme.middleware.PostHogMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -280,7 +281,7 @@ FIREBASE_WEB_API_KEY = env('FIREBASE_WEB_API_KEY')
 # Authentication Backends (especially for Admin Login)
 AUTHENTICATION_BACKENDS = ['tellme.call_miner.backends.FirebaseEmailPasswordBackend']
 
-# Logging
+# Logging & Monitoring
 if TELLME_ENV != 'dev':
     sentry_sdk.init(
         dsn="https://865de3318edd1ee3676d50e3e3246387@o4508211228180480.ingest.de.sentry.io/4508211539017808",
@@ -311,3 +312,7 @@ LOGGING = {
         },
     },
 }
+
+POSTHOG_API_KEY = env('POSTHOG_API_KEY')
+POSTHOG_HOST = env('POSTHOG_HOST')
+
