@@ -3,6 +3,8 @@ import logging
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 
+from tellme.call_miner.models import Organization, User
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,33 +146,46 @@ class PostHogMiddleware(MiddlewareMixin):
         """
         Extract user information for PostHog tracking.
         """
+        
         user_info = {
             'distinct_id': 'anonymous',
             'email': None,
             'is_authenticated': False
         }
 
-        # Check if user exists and is not anonymous
-        # In DRF with custom authentication, we need to check if user is not AnonymousUser
-        if hasattr(request, 'user') and request.user and not request.user.is_anonymous:
-            user_info.update({
-                'distinct_id': request.user.email or str(request.user.id),
-                'email': request.user.email,
-                'is_authenticated': True,
-                'user_id': str(request.user.id),
-                'is_staff': getattr(request.user, 'is_staff', False),
-                'is_superuser': getattr(request.user, 'is_superuser', False)
-            })
-
-            # Add organization info if available
-            if hasattr(request.user, 'employee') and request.user.employee:
-                employee = request.user.employee
+        if hasattr(request, 'user') and request.user:
+            # Check if request.user is an Organization (for call_processing authentication)
+            if isinstance(request.user, Organization):
                 user_info.update({
-                    'organization_id': employee.organization.id,
-                    'organization_name': employee.organization.name,
-                    'employee_role': employee.role,
-                    'is_organization_admin': employee.is_organization_admin
+                    'distinct_id': f"{request.user.name}",
+                    'is_authenticated': True,
+                    'auth_type': 'organization',
+                    'organization_id': request.user.id,
+                    'organization_name': request.user.name,
+                    'transcription_method': getattr(request.user, 'transcription_method', None),
+                    'enrichment_method': getattr(request.user, 'enrichment_method', None),
                 })
+            # Check if request.user is a regular User and not anonymous
+            elif isinstance(request.user, User) and not request.user.is_anonymous:
+                user_info.update({
+                    'distinct_id': request.user.email or str(request.user.id),
+                    'email': request.user.email,
+                    'is_authenticated': True,
+                    'auth_type': 'user',
+                    'user_id': str(request.user.id),
+                    'is_staff': getattr(request.user, 'is_staff', False),
+                    'is_superuser': getattr(request.user, 'is_superuser', False)
+                })
+
+                # Add organization info if available
+                if hasattr(request.user, 'employee') and request.user.employee:
+                    employee = request.user.employee
+                    user_info.update({
+                        'organization_id': employee.organization.id,
+                        'organization_name': employee.organization.name,
+                        'employee_role': employee.role,
+                        'is_organization_admin': employee.is_organization_admin
+                    })
 
         return user_info
 
