@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Organization, Employee, Analyst, Agent, Topic, Customer, Conversation, User
+from .models import Organization, Employee, Analyst, Agent, Topic, SuggestedTopic, Customer, Conversation, User
 from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm
 
 
@@ -18,6 +18,13 @@ class TopicAdmin(admin.ModelAdmin):
     search_fields = ['name', 'organization__name']
     list_filter = ['organization']
     readonly_fields = ['is_active', 'created', 'updated']
+
+
+class SuggestedTopicAdmin(admin.ModelAdmin):
+    list_display = ['name', 'organization', 'description']
+    search_fields = ['name', 'organization__name']
+    list_filter = ['organization']
+    readonly_fields = ['created', 'updated']
 
 
 class EmployeeAdmin(admin.ModelAdmin):
@@ -62,6 +69,7 @@ class ConversationAdmin(admin.ModelAdmin):
 admin.site.register(User, CustomUserAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(Topic, TopicAdmin)
+admin.site.register(SuggestedTopic, SuggestedTopicAdmin)
 admin.site.register(Employee, EmployeeAdmin)
 admin.site.register(Analyst, AnalystAdmin)
 admin.site.register(Agent, AgentAdmin)
