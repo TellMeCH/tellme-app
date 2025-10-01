@@ -73,6 +73,8 @@ jobs:
           echo "SEARCH_ENGINE_ID=fake_key" >> .env
           echo "SEARCH_API_KEY=fake_key" >> .env
           echo "FIREBASE_WEB_API_KEY=fake_key" >> .env
+          echo "POSTHOG_API_KEY=fake_key" >> .env
+          echo "POSTHOG_HOST=fake_key" >> .env
           echo "FRONTEND_PATH='*'" >> .env
 
       - name: Make Migrations
