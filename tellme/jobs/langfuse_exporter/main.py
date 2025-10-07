@@ -79,7 +79,7 @@ DESIRED_SCHEMA = {
 }
 
 
-def call_with_retry(func: Callable[..., Any], *args, max_retries: int = 10, base_delay: float = 1, operation_name: str = "operation", **kwargs) -> Any:
+def call_with_retry(func: Callable[..., Any], *args, max_retries: int = 100, base_delay: float = 1, operation_name: str = "operation", **kwargs) -> Any:
     """
     Calls a function with retry logic for handling 429 rate limiting errors.
 
