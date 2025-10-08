@@ -788,6 +788,7 @@ class Command(BaseCommand):
                     input_tokens=random.randint(50, 200),
                     output_tokens=random.randint(20, 100),
                     revenue_at_stake=random.random() * 800 + 100,
+                    resolved=random.random() > 0.5,
                     customer=customer,
                     agent=agent
                 )

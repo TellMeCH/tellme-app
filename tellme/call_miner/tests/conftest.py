@@ -240,7 +240,8 @@ def conversation(agent, customer, topic, suggested_topic):
         customer=customer,
         input_tokens=100,
         output_tokens=50,
-        revenue_at_stake=299.99
+        revenue_at_stake=299.99,
+        resolved=False
     )
     conv.topics.add(topic)
     conv.suggested_topics.add(suggested_topic)
@@ -270,7 +271,8 @@ def conversation_today(agent, customer, topic):
         customer=customer,
         input_tokens=100,
         output_tokens=50,
-        revenue_at_stake=199.50
+        revenue_at_stake=199.50,
+        resolved=False,
     )
     conv.topics.add(topic)
     return conv
@@ -297,7 +299,8 @@ def another_organization_conversation(another_organization_agent, another_organi
         customer=another_organization_customer,
         input_tokens=100,
         output_tokens=50,
-        revenue_at_stake=149.75
+        revenue_at_stake=149.75,
+        resolved=False,
     )
     conv.topics.add(another_organization_topic)
     return conv
