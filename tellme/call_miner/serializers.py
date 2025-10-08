@@ -256,7 +256,8 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'suggested_topic_data',
-                  'agent', 'agent_email', 'customer', 'customer_id', 'input_tokens', 'output_tokens', 'created']
+                  'resolved', 'agent', 'agent_email', 'customer', 'customer_id', 'input_tokens', 'output_tokens',
+                  'created']
 
     @extend_schema_field(TOPIC_DATA_RESPONSE_SCHEMA)
     def get_topic_data(self, obj):
@@ -315,8 +316,8 @@ class ConversationDetailSerializer(ConversationListSerializer):
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data',
-                  'suggested_topic_data', 'agent', 'agent_email', 'agent_first_name', 'agent_last_name', 'customer',
-                  'customer_id', 'revenue_at_stake', 'input_tokens', 'output_tokens', 'created']
+                  'suggested_topic_data', 'resolved', 'agent', 'agent_email', 'agent_first_name', 'agent_last_name',
+                  'customer', 'customer_id', 'revenue_at_stake', 'input_tokens', 'output_tokens', 'created']
 
     def get_processed_transcript(self, obj):
         """
