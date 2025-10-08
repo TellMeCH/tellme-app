@@ -152,8 +152,13 @@ ENRICHMENT_PIPELINE = [
             dresses". Generate the search query in {{organization_language}} language. For example, if this language is
             "English": use "men sneakers", "women dresses",  if organization_language is "German": use "herren sneaker", 
             "damen kleider", etc. If you can't identify a specific item, simply return an empty string. 
+            
+            STEP 8: RESOLUTION STATUS
+            Based on the content of the call, determine whether the conversation resolved the customer issue or not. In
+            other words, will the same customer contact the company again to solve the issue? If so, the issue was not
+            resolved. Return this as a boolean.
 
-            STEP 8: OUTPUT FORMAT
+            STEP 9: OUTPUT FORMAT
             The output must be in JSON format with the following structure:
             {
                 "topics": ["list of matching established topics"],
@@ -163,6 +168,7 @@ ENRICHMENT_PIPELINE = [
                 "title": "call title",
                 "sentiment": 3,
                 "revenue_search_query": "product search query or empty string"
+                "resolved": False
             }
             Do not add any text before or after the JSON.
             """,
@@ -204,9 +210,10 @@ ENRICHMENT_PIPELINE = [
                                 "minimum": 1,
                                 "maximum": 5
                             },
-                            "revenue_search_query": {"type": "string"}
+                            "revenue_search_query": {"type": "string"},
+                            "resolved": {"type": "boolean"}
                         },
-                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "revenue_search_query"],
+                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "revenue_search_query", "resolved"]
                     },
                     "strict": True
                 }
