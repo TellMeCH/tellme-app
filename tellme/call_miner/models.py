@@ -787,6 +787,7 @@ class Conversation(models.Model):
     topics = models.ManyToManyField(Topic, related_name='conversations')
     suggested_topics = models.ManyToManyField(SuggestedTopic, related_name='conversations')
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='conversations')
+    resolved = models.BooleanField(default=False)
     agent = models.ForeignKey(Agent, on_delete=models.PROTECT, related_name='conversations')
     created = models.DateTimeField(auto_now_add=True)
 
