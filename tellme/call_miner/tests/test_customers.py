@@ -32,6 +32,8 @@ class TestCustomerList:
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) == 1
         assert response.data['results'][0]['external_id'] == customer.external_id
+        assert 'total_revenue' in response.data['results'][0]
+        assert response.data['results'][0]['total_revenue'] == 0.0
 
     def test_customer_list_as_analyst_outside_org(self, client, another_organization_analyst_user, customer,
                                                   another_organization_customer):
@@ -130,9 +132,11 @@ class TestCustomerRetrieve:
         assert "conversation_count" in response.data
         assert "first_conversation_date" in response.data
         assert "last_conversation_date" in response.data
+        assert "total_revenue" in response.data
         assert response.data.get("conversation_count") == 1
         assert response.data.get("first_conversation_date") == conversation.date.isoformat()[:-6] + 'Z'
         assert response.data.get("last_conversation_date") == conversation.date.isoformat()[:-6] + 'Z'
+        assert response.data.get("total_revenue") == (conversation.revenue_at_stake or 0.0)
 
 
 
