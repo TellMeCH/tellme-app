@@ -189,10 +189,10 @@ class ConversationTrendMixin:
         'monthly': models.functions.TruncMonth('date'),
     }
     field_aggregations = {
-        'count': models.Count('id'),
-        'sentiment': models.Avg('sentiment'),
-        'duration': models.Avg('duration'),
-        'revenue': models.Avg('revenue_at_stake')
+        'count': (models.Count('id'), 'count'),
+        'sentiment': (models.Avg('sentiment'), 'avg_sentiment'),
+        'duration': (models.Avg('duration'), 'avg_duration'),
+        'revenue': (models.Sum('revenue_at_stake'), 'total_revenue')
     }
 
     @property
@@ -265,8 +265,8 @@ class ConversationTrendMixin:
         # Rename columns holding aggregation results
         old_col_names = aggregations.copy().keys()
         for col in old_col_names:
-            if col != 'count':
-                aggregations[f'avg_{col}'] = aggregations.pop(col)
+            new_name = aggregations[col][1]
+            aggregations[new_name] = aggregations.pop(col)[0]
 
         qs = self.conversations_scope
         if start_date:
@@ -322,8 +322,7 @@ class ConversationTrendMixin:
         ))
 
         # Relevant KPIs
-        relevant_metrics = [f'avg_{name}' for name in self.field_aggregations.keys() if name != 'count']
-        relevant_metrics.append('count')
+        relevant_metrics = [val[1] for val in self.field_aggregations.values()]
 
         overview_data = {}
         if per_topic:
