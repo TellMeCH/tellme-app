@@ -136,6 +136,7 @@ def create_conversation(
     title: str,
     input_tokens: int,
     output_tokens: int,
+    resolved: bool,
     revenue_at_stake: float = None,
     **kwargs
 ):
@@ -188,6 +189,7 @@ def create_conversation(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         revenue_at_stake=revenue_at_stake,
+        resolved=resolved,
         customer=customer,
         agent=agent
     )

@@ -170,7 +170,8 @@ def mock_vertexai():
             "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
             "agent_speaker_labels": ["Speaker 0"],
             "customer_speaker_labels": ["Speaker 1"],
-            "revenue_search_query": "men leather jackets"
+            "revenue_search_query": "men leather jackets",
+            "resolved": false
         }"""
 
         def gen_content_side_effect(*args, **kwargs):
@@ -228,7 +229,8 @@ def mock_openai():
                 "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
                 "agent_speaker_labels": ["Speaker 0"],
                 "customer_speaker_labels": ["Speaker 1"],
-                "revenue_search_query": "men leather jackets"
+                "revenue_search_query": "men leather jackets",
+                "resolved": false
                 }"""
             ))
         ]
@@ -285,6 +287,7 @@ def setup_db(db):
         sentiment=4.5,
         agent=agent,
         customer=customer,
+        resolved=False,
         input_tokens=100,
         output_tokens=50
     )
