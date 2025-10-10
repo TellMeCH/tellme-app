@@ -3,6 +3,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema_field
 from django.conf import settings
+from django.db import models
 from tellme.call_miner.models import (
     Conversation, Organization, OrganizationAPIKey, Topic, SuggestedTopic, Employee, Agent, Analyst, Customer, User
 )
@@ -649,10 +650,27 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
     """
     Serializer used to list Customer instances
     """
+    total_revenue = serializers.SerializerMethodField(
+        help_text='Total revenue at stake across all conversations for this customer'
+    )
+
     class Meta:
         model = Customer
         fields = ['url', 'external_id', 'conversation_count', 'first_conversation_date', 'last_conversation_date',
-                  'created']
+                  'total_revenue', 'created']
+
+    @extend_schema_field({'type': 'number', 'format': 'float'})
+    def get_total_revenue(self, obj):
+        """
+        Calculate the total revenue at stake across all conversations for this customer.
+
+        Returns:
+            float: Sum of revenue_at_stake for all conversations, or 0.0 if no revenue data exists
+        """
+        result = obj.conversations.aggregate(
+            total=models.Sum('revenue_at_stake')
+        )
+        return result['total'] or 0.0
 
 
 class UserSerializer(serializers.ModelSerializer):
