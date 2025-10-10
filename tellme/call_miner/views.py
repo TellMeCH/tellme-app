@@ -299,7 +299,7 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
-    cursor_ordering = ['-date']
+    cursor_ordering = ['-date', 'sentiment', 'resolved']
     relationships_to_select = ['customer', 'agent', 'agent__user']
     relationships_to_prefetch = ['topics']
     search_vector = (
