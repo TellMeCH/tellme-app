@@ -10,7 +10,27 @@ from tellme.call_miner.utils.fallback_prompt import SUMMARIZER_PROMPTS, PROMPT_C
 
 logger = logging.getLogger("django")
 openai.api_key = settings.OPENAI_API_KEY
-TOKEN_CUTOFF = 120000
+
+# Model-specific token limits (max context window for each model)
+MODEL_TOKEN_LIMITS = {
+    # GPT-4 Family
+    "gpt-4": 8192,
+    "gpt-4-32k": 32768,
+    "gpt-4-turbo": 128000,
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+
+    # GPT-5 Family
+    "gpt-5-main": 400000,        # Unified, fast model
+    "gpt-5-main-mini": 400000,   # Fast, high-throughput mini version
+    "gpt-5-thinking": 400000,    # Reasoning model (multi-step, in-depth)
+    "gpt-5-thinking-mini": 400000, # Reasoning mini version
+    "gpt-5-thinking-nano": 400000, # Reasoning nano version
+}
+
+# Conservative safety margin (use 80% of max tokens)
+SAFETY_MARGIN = 0.8
+
 PROMPT_MAPPING = {
     "<class 'tellme.call_miner.models.Topic'>": "summary_mining",
     "<class 'tellme.call_miner.models.Customer'>": "customer_summary",
@@ -32,6 +52,20 @@ def count_tokens(text: str, model_name: str) -> int:
     encoding = tiktoken.encoding_for_model(model_name)
     tokens = encoding.encode(text)
     return len(tokens)
+
+
+def get_token_cutoff(model_name: str) -> int:
+    """
+    Get the appropriate token cutoff for a given model with safety margin applied.
+
+    Args:
+        model_name (str): The model name
+
+    Returns:
+        int: Token cutoff with safety margin applied (80% of max context window)
+    """
+    max_tokens = MODEL_TOKEN_LIMITS.get(model_name, 128000)  # Default to gpt-4o limit
+    return int(max_tokens * SAFETY_MARGIN)
 
 
 def condense_summaries(summaries: list[str], trace_data: dict):
@@ -79,13 +113,17 @@ def condense_summaries(summaries: list[str], trace_data: dict):
         config_kwargs = {'langfuse_prompt': prompt}
         config_kwargs.update(prompt.config)
 
+    # Get model-specific token cutoff
+    token_cutoff = get_token_cutoff(config_kwargs['model'])
+    logger.info(f"Using token cutoff of {token_cutoff} for model {config_kwargs['model']}")
+
     # Randomly select summaries to the point of reaching the token cutoff
     selected_text = ''
     random.shuffle(summaries)
     for i, summ in enumerate(summaries):
         new_part = f'Conversation #{i + 1}: {summ}'
         potential_payload = f'{prompt.prompt}\n\n{selected_text}\n\n{new_part}'
-        if count_tokens(potential_payload, config_kwargs['model']) >= TOKEN_CUTOFF and i > 0:
+        if count_tokens(potential_payload, config_kwargs['model']) >= token_cutoff and i > 0:
             logger.info(f'Generating meta-summary with only {i + 1} most recent conversations.')
             break
         else:

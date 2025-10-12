@@ -352,7 +352,9 @@ class TestCallEnricher:
             },
             "summary": "Short summary",
             "title": "Test Call",
-            "sentiment": 4
+            "sentiment": 4,
+            "revenue_at_stake": 0,
+            "resolved": False,
         })
 
         transcript = "Agent: Hello. Customer: Hi, I need help."
@@ -395,7 +397,7 @@ class TestCallEnricher:
         required_fields = [
             "agent_speaker_labels", "customer_speaker_labels",
             "topics", "suggested_topics", "new_topics",
-            "summary", "title", "sentiment"
+            "summary", "title", "sentiment", "resolved"
         ]
         for field in required_fields:
             assert field in result, f"Missing required field: {field}"
@@ -409,6 +411,7 @@ class TestCallEnricher:
         assert isinstance(result["summary"], str)
         assert isinstance(result["title"], str)
         assert isinstance(result["sentiment"], (int, float))
+        assert isinstance(result["resolved"], bool)
 
         # Test sentiment range
         assert 1 <= result["sentiment"] <= 5
@@ -447,7 +450,9 @@ class TestCallEnricher:
                 "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
                 "summary": "Short summary",
                 "title": "Test Call",
-                "sentiment": 4
+                "sentiment": 4,
+                "revenue_at_stake": 3.4,
+                "resolved": False,
             })
             return response
 

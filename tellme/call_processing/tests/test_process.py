@@ -164,7 +164,9 @@ class TestProcessRecordingView:
             "new_topics": [],  # Empty new topics
             "summary": "Short summary",
             "title": "Test Call",
-            "sentiment": 4
+            "sentiment": 4,
+            "revenue_at_stake": 3.4,
+            "resolved": False,
         })
         
         url = reverse("process")
@@ -201,7 +203,9 @@ class TestProcessRecordingView:
             ],
             "summary": "Short summary",
             "title": "Test Call",
-            "sentiment": 4
+            "sentiment": 4,
+            "revenue_at_stake": 3.4,
+            "resolved": False,
         })
         
         url = reverse("process")
@@ -259,7 +263,9 @@ class TestProcessRecordingView:
             ],
             "summary": "Short summary",
             "title": "Test Call",
-            "sentiment": 4
+            "sentiment": 4,
+            "revenue_at_stake": 3.4,
+            "resolved": False,
         })
         
         url = reverse("process")
@@ -333,7 +339,9 @@ class TestProcessRecordingView:
             },
             "summary": "Short summary",
             "title": "Test Call",
-            "sentiment": 4
+            "sentiment": 4,
+            "revenue_at_stake": 3.4,
+            "resolved": False,
         })
 
         url = reverse("process")

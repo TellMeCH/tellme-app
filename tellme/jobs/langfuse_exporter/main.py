@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import time
 import environ
 import langfuse
 import pandas as pd
@@ -8,6 +9,7 @@ from google.cloud import storage
 from google.cloud import secretmanager
 from datetime import datetime, timedelta, timezone
 from functions_framework import http
+from typing import Callable, Any
 
 env = environ.Env()
 SECRET_NAME = env('SETTINGS_NAME')
@@ -77,6 +79,41 @@ DESIRED_SCHEMA = {
 }
 
 
+def call_with_retry(func: Callable[..., Any], *args, max_retries: int = 100, base_delay: float = 1, operation_name: str = "operation", **kwargs) -> Any:
+    """
+    Calls a function with retry logic for handling 429 rate limiting errors.
+
+    Args:
+        func: The function to call
+        *args: Positional arguments to pass to the function
+        max_retries: Maximum number of retries (default: 10)
+        base_delay: Base delay in seconds for exponential backoff (default: 1)
+        operation_name: Name of the operation for logging (default: "operation")
+        **kwargs: Keyword arguments to pass to the function
+
+    Returns:
+        The result of the function call
+
+    Raises:
+        Exception: If max retries exceeded due to rate limiting or other non-429 errors
+    """
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if hasattr(e, 'response') and e.response.status_code == 429:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    raise Exception(f"Max retries exceeded for {operation_name}. Rate limit persists.")
+
+                delay = base_delay * (2 ** (retry_count - 1))
+                print(f"Rate limited on {operation_name}. Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                raise e
+
+
 def langfuse_observations_to_dataframe(langfuse_client: langfuse.Langfuse, start_time: datetime) -> pd.DataFrame:
     """
     Fetches Langfuse observations and converts them into a Pandas DataFrame.
@@ -90,8 +127,20 @@ def langfuse_observations_to_dataframe(langfuse_client: langfuse.Langfuse, start
     """
     data = []
     page = 1
+
     while True:
-        observations = langfuse_client.fetch_observations(from_start_time=start_time, limit=100, page=page)
+        try:
+            observations = call_with_retry(
+                langfuse_client.fetch_observations,
+                from_start_time=start_time,
+                limit=100,
+                page=page,
+                operation_name=f"observations page {page}"
+            )
+        except Exception as e:
+            print(f"Failed to fetch observations page {page} after retries: {e}")
+            break
+
         if observations.data:
             for item in observations.data:
                 data.append(item.dict())
@@ -114,8 +163,20 @@ def langfuse_traces_to_dataframe(langfuse_client: langfuse.Langfuse, start_time:
     """
     data = []
     page = 1
+
     while True:
-        traces = langfuse_client.fetch_traces(from_timestamp=start_time, limit=100, page=page)
+        try:
+            traces = call_with_retry(
+                langfuse_client.fetch_traces,
+                from_timestamp=start_time,
+                limit=100,
+                page=page,
+                operation_name=f"traces page {page}"
+            )
+        except Exception as e:
+            print(f"Failed to fetch traces page {page} after retries: {e}")
+            break
+
         if traces.data:
             for item in traces.data:
                 data.append(item.dict())
@@ -308,7 +369,7 @@ def export_from_langfuse(request) -> (str, int):
         gen.loc[:, 'failed'] = gen['statusMessage'].notna()
 
         # Reformatting the 'name' column
-        mask_enrichment_openai = (gen['name'] == 'OpenAI-generation') & (gen['promptName'] == 'call_enrichment')
+        mask_enrichment_openai = (gen['name'] == 'OpenAI-generation') & (gen['promptName'].str.contains('enrichment'))
         gen.loc[mask_enrichment_openai, 'name'] = 'enrichment_openai'
         gen.loc[gen['name'] == 'transcribe_chunk_with_groq', 'name'] = 'transcription_groq'
         gen.loc[gen['name'] == 'transcribe_chunk_with_deepgram', 'name'] = 'transcription_deepgram'

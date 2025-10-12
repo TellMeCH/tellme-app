@@ -265,7 +265,9 @@ class TestCreateConversation:
             summary="Test summary",
             title="Test Call",
             input_tokens=100,
-            output_tokens=50
+            output_tokens=50,
+            revenue_at_stake=3.4,
+            resolved=False
         )
         
         # Verify conversation was created
@@ -310,7 +312,9 @@ class TestCreateConversation:
             summary="Test summary", 
             title="Test Call",
             input_tokens=80,
-            output_tokens=40
+            output_tokens=40,
+            revenue_at_stake=3.4,
+            resolved=False
         )
         
         # Verify customer was created
@@ -341,7 +345,9 @@ class TestCreateConversation:
             summary="Test summary",
             title="Test Call",
             input_tokens=120,
-            output_tokens=60
+            output_tokens=60,
+            revenue_at_stake=3.4,
+            resolved=False
         )
         
         # Verify no new customer was created
@@ -376,7 +382,9 @@ class TestCreateConversation:
             summary="Multi-topic summary",
             title="Multi-topic Call",
             input_tokens=200,
-            output_tokens=100
+            output_tokens=100,
+            revenue_at_stake=3.4,
+            resolved=False
         )
         
         conversation = Conversation.objects.get(path="multi_topic_call.wav")
@@ -409,7 +417,9 @@ class TestCreateConversation:
             summary="Simple summary",
             title="Simple Call",
             input_tokens=60,
-            output_tokens=30
+            output_tokens=30,
+            revenue_at_stake=3.4,
+            resolved=False
         )
         
         conversation = Conversation.objects.get(path="empty_topics_call.wav")
@@ -435,7 +445,9 @@ class TestCreateConversation:
             summary="Timezone summary",
             title="Timezone Call",
             input_tokens=70,
-            output_tokens=35
+            output_tokens=35,
+            revenue_at_stake=3.4,
+            resolved=False
         )
         
         conversation = Conversation.objects.get(path="timezone_call.wav")
@@ -462,7 +474,9 @@ class TestCreateConversation:
             summary="Datetime summary",
             title="Datetime Call", 
             input_tokens=85,
-            output_tokens=42
+            output_tokens=42,
+            revenue_at_stake=3.4,
+            resolved=False
         )
         
         conversation = Conversation.objects.get(path="datetime_obj_call.wav")
@@ -487,7 +501,9 @@ class TestCreateConversation:
                 summary="Test summary",
                 title="Test Call",
                 input_tokens=80,
-                output_tokens=40
+                output_tokens=40,
+                revenue_at_stake=3.4,
+                resolved=False
             )
         
         assert "Could not parse datetime from" in str(exc_info.value)

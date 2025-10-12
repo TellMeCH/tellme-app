@@ -623,7 +623,7 @@ class TestAgentTrendActions:
         assert 'results' in response.data
         results = response.data['results']
         assert len(results) == 1
-        assert results[0]['avg_revenue'] == conversation.revenue_at_stake
+        assert results[0]['total_revenue'] == conversation.revenue_at_stake
 
     def test_agent_sentiment_per_topic_trend_action_returns_expected_content(self, client, agent, conversation):
         """

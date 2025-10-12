@@ -1,6 +1,13 @@
 from django.contrib import admin
-from .models import Organization, Employee, Analyst, Agent, Topic, SuggestedTopic, Customer, Conversation, User
+from .models import (
+    PeriodSummary, Organization, Employee, Analyst, Agent, Topic, SuggestedTopic, Customer, Conversation, User
+)
 from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm
+
+
+class PeriodSummaryAdmin(admin.ModelAdmin):
+    list_display = ['content_type', 'object_id', 'period_type', 'period_label', 'call_count', 'last_call_at']
+    readonly_fields = ['created', 'updated']
 
 
 class CustomUserAdmin(admin.ModelAdmin):
@@ -66,6 +73,7 @@ class ConversationAdmin(admin.ModelAdmin):
 
 
 # Register the models and their customized admin interfaces
+admin.site.register(PeriodSummary, PeriodSummaryAdmin)
 admin.site.register(User, CustomUserAdmin)
 admin.site.register(Organization, OrganizationAdmin)
 admin.site.register(Topic, TopicAdmin)

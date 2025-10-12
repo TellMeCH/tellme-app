@@ -51,6 +51,10 @@ class MetaSummaryAbstractModel(models.Model):
     # Deviation Threshold (in %) for Re-calculation
     DEVIATION_THRESHOLD = 10
 
+    # Template for enriching conversation summaries with other conversation data
+    ENRICHED_TEMPLATE = "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {summary}"
+
+
     class Meta:
         abstract = True
 
@@ -99,10 +103,9 @@ class MetaSummaryAbstractModel(models.Model):
             return summary.summary, latest_date, call_count, label
 
         # Otherwise, perform the summarization anew
-        new_summary = condense_summaries(
-            list(conversations.values_list("summary", flat=True)),
-            trace_data=trace_data
-        )
+        enriched_summaries = self._enrich_summaries(conversations)
+
+        new_summary = condense_summaries(enriched_summaries, trace_data=trace_data)
 
         summary.summary = new_summary
         summary.call_count = call_count
@@ -145,6 +148,46 @@ class MetaSummaryAbstractModel(models.Model):
                 new_call_count = conversations.filter(date__gt=old_latest_call).count()
                 deviation = new_call_count * 100 / previous
         return deviation > self.DEVIATION_THRESHOLD, current
+
+    def _enrich_summaries(self, conversations: models.query.QuerySet) -> list:
+        """
+        Enriches conversation summaries with key contextual metadata for enhanced AI analysis.
+
+        This method transforms basic conversation summaries into enriched versions that include
+        critical business context such as sentiment scores, revenue implications, and resolution
+        status. This enriched format provides LLM models with the necessary context to make
+        informed analytical decisions about customer satisfaction, churn risk, and business impact.
+
+        The enrichment follows the pattern:
+        "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {summary}"
+
+        Args:
+            conversations (models.query.QuerySet): QuerySet of Conversation objects to enrich.
+                Each conversation should have date, sentiment, revenue_at_stake, resolved, and
+                summary attributes.
+
+        Returns:
+            list: List of enriched summary strings. Each string contains the original summary
+                prefixed with contextual metadata in a structured format that helps AI models
+                understand the business context and customer impact of each conversation.
+
+        Example:
+            Input conversations with summaries like "Customer complained about billing error"
+            Output: "(2025-01-12, Sentiment: 2/5, Revenue at Stake: 1500.00, Resolved: False)
+                    Customer complained about billing error"
+        """
+        enriched_summaries = []
+        for conv in conversations:
+            enriched_summaries.append(
+                self.ENRICHED_TEMPLATE.format(
+                    date=conv.date,
+                    sentiment=conv.sentiment,
+                    revenue=conv.revenue_at_stake,
+                    resolved=conv.resolved,
+                    summary=conv.summary
+                )
+            )
+        return enriched_summaries
 
 
 class ConversationStatsAbstractModel(models.Model):
@@ -189,10 +232,10 @@ class ConversationTrendMixin:
         'monthly': models.functions.TruncMonth('date'),
     }
     field_aggregations = {
-        'count': models.Count('id'),
-        'sentiment': models.Avg('sentiment'),
-        'duration': models.Avg('duration'),
-        'revenue': models.Avg('revenue_at_stake')
+        'count': (models.Count('id'), 'count'),
+        'sentiment': (models.Avg('sentiment'), 'avg_sentiment'),
+        'duration': (models.Avg('duration'), 'avg_duration'),
+        'revenue': (models.Sum('revenue_at_stake'), 'total_revenue')
     }
 
     @property
@@ -265,8 +308,8 @@ class ConversationTrendMixin:
         # Rename columns holding aggregation results
         old_col_names = aggregations.copy().keys()
         for col in old_col_names:
-            if col != 'count':
-                aggregations[f'avg_{col}'] = aggregations.pop(col)
+            new_name = aggregations[col][1]
+            aggregations[new_name] = aggregations.pop(col)[0]
 
         qs = self.conversations_scope
         if start_date:
@@ -322,8 +365,7 @@ class ConversationTrendMixin:
         ))
 
         # Relevant KPIs
-        relevant_metrics = [f'avg_{name}' for name in self.field_aggregations.keys() if name != 'count']
-        relevant_metrics.append('count')
+        relevant_metrics = [val[1] for val in self.field_aggregations.values()]
 
         overview_data = {}
         if per_topic:
@@ -787,6 +829,7 @@ class Conversation(models.Model):
     topics = models.ManyToManyField(Topic, related_name='conversations')
     suggested_topics = models.ManyToManyField(SuggestedTopic, related_name='conversations')
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='conversations')
+    resolved = models.BooleanField(default=False)
     agent = models.ForeignKey(Agent, on_delete=models.PROTECT, related_name='conversations')
     created = models.DateTimeField(auto_now_add=True)
 

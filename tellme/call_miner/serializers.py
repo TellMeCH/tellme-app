@@ -3,6 +3,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import NotFound
 from drf_spectacular.utils import extend_schema_field
 from django.conf import settings
+from django.db import models
 from tellme.call_miner.models import (
     Conversation, Organization, OrganizationAPIKey, Topic, SuggestedTopic, Employee, Agent, Analyst, Customer, User
 )
@@ -256,7 +257,8 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'suggested_topic_data',
-                  'agent', 'agent_email', 'customer', 'customer_id', 'input_tokens', 'output_tokens', 'created']
+                  'resolved', 'agent', 'agent_email', 'customer', 'customer_id', 'input_tokens', 'output_tokens',
+                  'created']
 
     @extend_schema_field(TOPIC_DATA_RESPONSE_SCHEMA)
     def get_topic_data(self, obj):
@@ -315,8 +317,8 @@ class ConversationDetailSerializer(ConversationListSerializer):
     class Meta:
         model = Conversation
         fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data',
-                  'suggested_topic_data', 'agent', 'agent_email', 'agent_first_name', 'agent_last_name', 'customer',
-                  'customer_id', 'revenue_at_stake', 'input_tokens', 'output_tokens', 'created']
+                  'suggested_topic_data', 'resolved', 'agent', 'agent_email', 'agent_first_name', 'agent_last_name',
+                  'customer', 'customer_id', 'revenue_at_stake', 'input_tokens', 'output_tokens', 'created']
 
     def get_processed_transcript(self, obj):
         """
@@ -648,10 +650,27 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
     """
     Serializer used to list Customer instances
     """
+    total_revenue = serializers.SerializerMethodField(
+        help_text='Total revenue at stake across all conversations for this customer'
+    )
+
     class Meta:
         model = Customer
         fields = ['url', 'external_id', 'conversation_count', 'first_conversation_date', 'last_conversation_date',
-                  'created']
+                  'total_revenue', 'created']
+
+    @extend_schema_field({'type': 'number', 'format': 'float'})
+    def get_total_revenue(self, obj):
+        """
+        Calculate the total revenue at stake across all conversations for this customer.
+
+        Returns:
+            float: Sum of revenue_at_stake for all conversations, or 0.0 if no revenue data exists
+        """
+        result = obj.conversations.aggregate(
+            total=models.Sum('revenue_at_stake')
+        )
+        return result['total'] or 0.0
 
 
 class UserSerializer(serializers.ModelSerializer):
