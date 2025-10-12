@@ -74,7 +74,8 @@ CONVERSATIONS = [
             "summary": "The customer called to report that he had received women's sandals instead of the men's sandals he ordered. He asked for assistance in getting the correct item sent before an upcoming vacation. The agent was dismissive and did not offer meaningful help, insisting on the standard returns procedure and displaying poor customer service. The conversation became heated, with the customer expressing strong dissatisfaction and threatening to report the agent's conduct. Topics discussed include returns and exchanges, as well as a new topic: agent misconduct. The interaction ended without resolution, and the customer's impression of the company was negative.",
             "title": "Order Issue Escalates to Agent Misconduct Complaint",
             "revenue_search_query": "herren sandalen",
-            "revenue_at_stake": "162.4"
+            "revenue_at_stake": "162.4",
+            "resolved": False,
         }
     },
     {
@@ -109,7 +110,8 @@ CONVERSATIONS = [
             "summary": "The customer called PKZ Customer Service to inquire about the sizing of a blue sundress she wished to purchase. After providing her name, birthdate, and measurements, the agent gave her clear guidance on which size would be ideal based on the product's fit and measurements. The agent also mentioned the return policy for added reassurance. The conversation was friendly and helpful throughout, leaving Anna satisfied and confident in her purchase decision. No additional topics outside sizing and fit were discussed.",
             "title": "Assistance with Sundress Sizing Provided Cordially",
             "revenue_search_query": "damen kleid",
-            "revenue_at_stake": "472.06"
+            "revenue_at_stake": "472.06",
+            "resolved": True,
         }
     },
     {
@@ -143,7 +145,8 @@ CONVERSATIONS = [
             "summary": "The customer called to inquire about the availability of a specific blue wool sweater in size L. The agent informed him that it is currently sold out but will be restocked at the end of the month and offered to send an email notification once available. Markus also asked for details about the material and sustainability of the sweater and was reassured that it is made from organic merino wool with GOTS certification. The conversation was neutral and efficient, covering product availability and material information.",
             "title": "Inquiry on Sweater Availability & Material Details",
             "revenue_search_query": "herren pullover",
-            "revenue_at_stake": "282.36"
+            "revenue_at_stake": "282.36",
+            "resolved": False,
         }
     },
     {
@@ -184,7 +187,8 @@ CONVERSATIONS = [
             "summary": "The customer called to inquire about the next sale season and whether it would include the jewelry department. She repeatedly asked about the sale dates, participating brands, and potential discount rates. The agent answered each query patiently and provided details about the upcoming sale, expected brands, and typical discount ranges for jewelry. The conversation was friendly and the agent remained polite and helpful throughout.",
             "title": "Detailed Discount Inquiry with Jewelry Focus",
             "revenue_search_query": "damen schmuck",
-            "revenue_at_stake": "84.90"
+            "revenue_at_stake": "84.90",
+            "resolved": True,
         }
     },
     {
@@ -221,7 +225,8 @@ CONVERSATIONS = [
             "summary": "The customer called to inquire about the status of his suit order, having received only an order confirmation and no delivery updates. The agent discovered a payment issue linked to bitcoin, resulting from a recent switch to a new payment provider and related technical problems. The customer was impatient and critical, expressing dissatisfaction with the process. The agent promised to escalate the issue and provide an update by the end of the day. Main topics discussed were order status and payment processing. The overall engagement was low.",
             "title": "Order Status Problem Due to Bitcoin Payment Integration",
             "revenue_search_query": "herren anzug",
-            "revenue_at_stake": "714.90"
+            "revenue_at_stake": "714.90",
+            "resolved": False,
         }
     },
     {
@@ -254,7 +259,8 @@ CONVERSATIONS = [
             "summary": "The customer called to inquire about the status of her return for a pair of high heel shoes. The agent confirmed a postal notification showing the package is currently en route. Claudia then asked about the refund timeline, and the agent explained it typically takes five business days after the item is received. The interaction was polite and informative, focusing on returns and exchanges and touching on refund payment timing.",
             "title": "Return Status and Refund Timeline for High Heels",
             "revenue_search_query": "high heels",
-            "revenue_at_stake": "185.90"
+            "revenue_at_stake": "185.90",
+            "resolved": True,
         }
     },
     {
@@ -287,7 +293,8 @@ CONVERSATIONS = [
             "summary": "The customer called to ask about a leather purse he was considering as a present for his partner. He inquired about customer popularity, material quality, and the return policy. The agent confirmed that the purse is highly rated, made of high-quality vegetable-tanned leather, and can be returned within 30 days if unused. The call was friendly and informative, with the primary topics being product materials and returns.",
             "title": "Customer Inquiry: Leather Purse Quality, Popularity & Return Policy",
             "revenue_search_query": "taschen",
-            "revenue_at_stake": "453.80"
+            "revenue_at_stake": "453.80",
+            "resolved": True,
         }
     },
     {
@@ -322,7 +329,8 @@ CONVERSATIONS = [
             "summary": "The customer called about returning a pair of jeans that were too small and found that her required size L was not in stock. She expressed frustration over the sizing issue and the product's unavailability. The agent apologized and offered a refund along with an email notification when the product is restocked. Emily agreed to the refund and notification. The call focused on sizing and fit, product availability, and returns.",
             "title": "Unhappy Customer: Jeans Size Issue and Out-of-Stock Situation",
             "revenue_search_query": "damen jeans",
-            "revenue_at_stake": "177.99"
+            "revenue_at_stake": "177.99",
+            "resolved": True,
         }
     },
     {
@@ -353,7 +361,8 @@ CONVERSATIONS = [
             "summary": "A caller mistakenly contacted PKZ Customer Service, thinking it was the local butcher. The agent clarified they were a clothing store, not a butcher shop. The caller apologized for the confusion, and the agent responded kindly. The call ended on a friendly note, with no business topics discussed.",
             "title": "Friendly Wrong Number Call",
             "revenue_search_query": None,
-            "revenue_at_stake": None
+            "revenue_at_stake": None,
+            "resolved": True,
         }
     },
     {
@@ -386,7 +395,8 @@ CONVERSATIONS = [
             "summary": "The customer called to update the phone number associated with his delivery address after a pair of sneakers could not be delivered. The agent confirmed two failed delivery attempts due to the outdated number and updated the contact information as requested. The call was straightforward and focused on resolving the delivery issue, with a neutral tone throughout.",
             "title": "Order Delivery Issue Resolved with Updated Contact Information",
             "revenue_search_query": "herren sneaker",
-            "revenue_at_stake": "232.40"
+            "revenue_at_stake": "232.40",
+            "resolved": True,
         }
     }
 ]

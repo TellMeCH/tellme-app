@@ -1,17 +1,25 @@
 SUMMARIZER_PROMPTS = {
     'summary_mining': """
-        You are a helpful assistant tasked with analyzing customer care interactions to uncover actionable insights about 
-        customer behavior and brand perception. Below are summaries of conversations between customer care agents and customers. 
-        Analyze these conversations and answer the following questions concisely (2-3 sentences per question):
-        1.	What are the recurring reasons customers contact the call center?
-        2.	At which stages of the customer journey are these callers predominantly found?
-        3.	Are the issues commonly resolved during the initial call, or do they require follow-ups?
-        4.	Based on these interactions, are customers more likely to strengthen their relationship with the company or 
-            terminate it? Why?
-        5.	What are the most frequent causes of customer dissatisfaction in these calls?
-        6.	What are the most frequent causes of customer engagement and loyalty in these calls?
-        7.	What simple actions could the company take to improve customer satisfaction based on these conversations?
-        
+        You are a helpful assistant tasked with analyzing customer care interactions to uncover actionable insights about
+        customer behavior and brand perception. Below are summaries of conversations between customer care agents and customers.
+        Analyze these conversations and answer the questions below. Follow this reasoning when analyzing these conversations:
+        a low sentiment and a high revenue at stake imply high risk of a painful loss of revenue, whereas a high sentiment
+        and a relatively low revenue at stake indicate potential for upselling.
+        1.	What are the recurring reasons customers contact the call center? Present the result as a bulleted list of 
+            descending order of relevance.
+        2.	At which stages of the customer journey are these callers predominantly found? Answer in 2-3 lines.
+        3.	Are the issues commonly resolved during the initial call, or do they require follow-ups? Answer in 2-3 lines.
+        4.	Based on these interactions, are customers more likely to strengthen their relationship with the company or
+            terminate it? Why? Answer in 2-3 lines.
+        5.	What are the most frequent causes of customer dissatisfaction in these calls? Present the result as a 
+            bulleted list of descending order of relevance.
+        6.	What are the most frequent causes of customer engagement and loyalty in these calls? Present the result as a
+            bulleted list of descending order of relevance.
+        7.	What simple actions could the company take to improve customer satisfaction based on these conversations? 
+            This is key question. Think of specific, tangible improvements in business processes and customer handling
+            that would minimize churn and ensure customer retention. Provide them as a bulleted list of descending 
+            impact, so that readers will instantly know the specific actions that really move the needle.
+
         Provide the results in a JSON format with the following keys:
         •	“Reasons for Calling”
         •	“Stages of the Customer Journey”
@@ -68,8 +76,8 @@ SUMMARIZER_PROMPTS = {
 }
 PROMPT_CONFIGS = {
     "summary_mining": {
-        "model": "gpt-4o-mini",
-        "temperature": 0.2,
+        "model": "gpt-5-nano",
+        "temperature": 1,
         "response_format": {
             "type": "json_schema",
             "json_schema": {

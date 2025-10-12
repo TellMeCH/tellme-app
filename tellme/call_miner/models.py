@@ -51,6 +51,10 @@ class MetaSummaryAbstractModel(models.Model):
     # Deviation Threshold (in %) for Re-calculation
     DEVIATION_THRESHOLD = 10
 
+    # Template for enriching conversation summaries with other conversation data
+    ENRICHED_TEMPLATE = "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {summary}"
+
+
     class Meta:
         abstract = True
 
@@ -99,10 +103,9 @@ class MetaSummaryAbstractModel(models.Model):
             return summary.summary, latest_date, call_count, label
 
         # Otherwise, perform the summarization anew
-        new_summary = condense_summaries(
-            list(conversations.values_list("summary", flat=True)),
-            trace_data=trace_data
-        )
+        enriched_summaries = self._enrich_summaries(conversations)
+
+        new_summary = condense_summaries(enriched_summaries, trace_data=trace_data)
 
         summary.summary = new_summary
         summary.call_count = call_count
@@ -145,6 +148,46 @@ class MetaSummaryAbstractModel(models.Model):
                 new_call_count = conversations.filter(date__gt=old_latest_call).count()
                 deviation = new_call_count * 100 / previous
         return deviation > self.DEVIATION_THRESHOLD, current
+
+    def _enrich_summaries(self, conversations: models.query.QuerySet) -> list:
+        """
+        Enriches conversation summaries with key contextual metadata for enhanced AI analysis.
+
+        This method transforms basic conversation summaries into enriched versions that include
+        critical business context such as sentiment scores, revenue implications, and resolution
+        status. This enriched format provides LLM models with the necessary context to make
+        informed analytical decisions about customer satisfaction, churn risk, and business impact.
+
+        The enrichment follows the pattern:
+        "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {summary}"
+
+        Args:
+            conversations (models.query.QuerySet): QuerySet of Conversation objects to enrich.
+                Each conversation should have date, sentiment, revenue_at_stake, resolved, and
+                summary attributes.
+
+        Returns:
+            list: List of enriched summary strings. Each string contains the original summary
+                prefixed with contextual metadata in a structured format that helps AI models
+                understand the business context and customer impact of each conversation.
+
+        Example:
+            Input conversations with summaries like "Customer complained about billing error"
+            Output: "(2025-01-12, Sentiment: 2/5, Revenue at Stake: 1500.00, Resolved: False)
+                    Customer complained about billing error"
+        """
+        enriched_summaries = []
+        for conv in conversations:
+            enriched_summaries.append(
+                self.ENRICHED_TEMPLATE.format(
+                    date=conv.date,
+                    sentiment=conv.sentiment,
+                    revenue=conv.revenue_at_stake,
+                    resolved=conv.resolved,
+                    summary=conv.summary
+                )
+            )
+        return enriched_summaries
 
 
 class ConversationStatsAbstractModel(models.Model):
