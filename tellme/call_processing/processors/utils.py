@@ -31,7 +31,7 @@ def vertexai_retry_logic(error):
     return case_1 or case_2
 
 
-def create_customer_id(full_name: str, birth_date: str) -> str:
+def create_customer_id(full_name: str, birth_date: str) -> tuple[str, str | None, str | None, str | None]:
     """
     Create a hashed customer ID from name and birth date.
 
@@ -40,21 +40,26 @@ def create_customer_id(full_name: str, birth_date: str) -> str:
         birth_date (str): Customer's birth date string
 
     Returns:
-        str: SHA-256 hashed customer ID
+        tuple[str, str | None, str | None, str | None]:
+            SHA-256 hashed customer ID, first name, last name, and Django-formatted birth date
     """
     # Generate raw ID for hashing
     raw_id = str(time.time())  # Fallback to timestamp-based ID if no name found
+    first_name, last_name, django_formatted_date = None, None, None
     if full_name:
         parsed_name = nameparser.HumanName(full_name)
 
         if parsed_name.last:
             name_component = f'{parsed_name.first}{parsed_name.last}'
+            first_name, last_name = parsed_name.first, parsed_name.last
 
             if birth_date:
                 date_component = dateparser.parse(birth_date).strftime("%d/%m/%Y")
+                django_formatted_date = dateparser.parse(birth_date).strftime("%Y-%m-%d")
                 raw_id = f'{name_component}{date_component}'
             else:
                 raw_id = name_component
 
     # Return salted hash of the raw ID
-    return hashlib.sha256((settings.HASH_KEY + raw_id + settings.HASH_KEY).encode('utf8')).hexdigest()
+    hashed_id = hashlib.sha256((settings.HASH_KEY + raw_id + settings.HASH_KEY).encode('utf8')).hexdigest()
+    return hashed_id, first_name, last_name, django_formatted_date

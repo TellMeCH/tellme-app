@@ -48,7 +48,7 @@ class CallProcessingPipeline:
         # Initialize processing modules
         self.transcriber = CallTranscriber()
 
-        self.redacter = CallRedactor()
+        self.redactor = CallRedactor()
 
         self.enricher = CallEnricher()
 
@@ -147,10 +147,13 @@ class CallProcessingPipeline:
 
         # Redact sensitive information
         customer_from_redaction = extract_customer_id and (customer_identification_method == 'redaction')
-        redacted_transcript, customer_id = self.redacter.redact_transcript(transcript, customer_from_redaction)
+        redacted_transcript, customer_id, first_name, last_name, birth_date = self.redactor.redact_transcript(transcript, customer_from_redaction)
 
         if customer_from_redaction:
             file_metadata['customer_id'] = customer_id
+            file_metadata['customer_first_name'] = first_name
+            file_metadata['customer_last_name'] = last_name
+            file_metadata['customer_birth_date'] = birth_date
 
         # Obtain additional information from the transcript
         enriched_data, input_tokens, output_tokens = self.enricher.enrich_recording(
