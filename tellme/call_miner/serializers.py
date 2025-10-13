@@ -643,7 +643,7 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['id', 'created', 'organization', 'external_id']
+        fields = ['id', 'created', 'organization', 'external_id', 'first_name', 'last_name', 'birth_date']
 
 
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
@@ -656,8 +656,8 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['url', 'external_id', 'conversation_count', 'first_conversation_date', 'last_conversation_date',
-                  'total_revenue', 'created']
+        fields = ['url', 'external_id', 'first_name', 'last_name', 'birth_date', 'conversation_count',
+                  'first_conversation_date', 'last_conversation_date', 'total_revenue', 'created']
 
     @extend_schema_field({'type': 'number', 'format': 'float'})
     def get_total_revenue(self, obj):

@@ -1,3 +1,10 @@
+"""
+Cloud Tasks queue management utilities for call processing.
+
+This module provides functions for creating and managing Google Cloud Tasks
+for call processing workflows, including file uploads and task scheduling.
+"""
+
 import datetime
 import json
 from google.cloud import tasks_v2
@@ -15,6 +22,22 @@ def create_storage_path(
         call_timestamp: datetime.datetime,
         format: str = None
 ):
+    """
+    Generate a standardized storage path for call recordings.
+
+    Args:
+        organization_id (int): ID of the organization
+        customer_id (str): Customer identifier
+        agent_id (int): Agent identifier
+        call_timestamp (datetime.datetime): Call timestamp
+        format (str, optional): File format extension (.wav or .mp3)
+
+    Returns:
+        str: Formatted storage path
+
+    Raises:
+        ValueError: If format is provided but not .wav or .mp3
+    """
     customer_part = customer_id if customer_id is not None else "Unknown"
     if format is not None:
         if format not in ['.wav', '.mp3']:
@@ -28,6 +51,20 @@ def create_task(
         process_url: str, file_name: str, organization_id: int, customer_id: str, agent_id: int,
         timestamp: datetime.datetime, transcription_method: str, enrichment_method: str, logger
 ):
+    """
+    Create a Google Cloud Task for processing a call recording.
+
+    Args:
+        process_url (str): URL endpoint for processing the recording
+        file_name (str): Name/path of the file to process
+        organization_id (int): ID of the organization
+        customer_id (str): Customer identifier
+        agent_id (int): Agent identifier
+        timestamp (datetime.datetime): Call timestamp
+        transcription_method (str): Method to use for transcription
+        enrichment_method (str): Method to use for enrichment
+        logger: Logger instance for logging events
+    """
     payload = {
         "file_name": file_name,
         "organization_id": organization_id,

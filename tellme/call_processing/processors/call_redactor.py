@@ -64,7 +64,7 @@ class CallRedactor:
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429)
     )
-    def redact_transcript(self, transcript: str, extract_customer_id: bool = False) -> tuple[str, str | None]:
+    def redact_transcript(self, transcript: str, extract_customer_id: bool = False) -> tuple[str, str | None, str | None, str | None, str | None]:
         """
         Remove sensitive information from transcript using Google Cloud DLP API.
 
@@ -73,7 +73,8 @@ class CallRedactor:
             extract_customer_id (bool): Whether to extract customer ID from redaction
 
         Returns:
-            tuple[str, str | None]: Redacted transcript and optional customer ID
+            tuple[str, str | None, str | None, str | None, str | None]:
+                Redacted transcript, optional customer ID, first name, last name, and birth date
         """
         langfuse_context.update_current_observation(
             name="redaction_google_dlp",
@@ -92,13 +93,13 @@ class CallRedactor:
             model="dlp-service-client"
         )
 
-        customer_id = None
+        customer_id, first_name, last_name, birth_date =  None, None, None, None
         if extract_customer_id:
-            customer_id = self.extract_customer_id_from_redaction(transcript, redacted_transcript)
+            customer_id, first_name, last_name, birth_date = self.extract_customer_id_from_redaction(transcript, redacted_transcript)
 
-        return redacted_transcript, customer_id
+        return redacted_transcript, customer_id, first_name, last_name, birth_date
 
-    def extract_customer_id_from_redaction(self, transcript: str, redacted_transcript: str) -> str:
+    def extract_customer_id_from_redaction(self, transcript: str, redacted_transcript: str) -> tuple[str, str | None, str | None, str | None]:
         """
         Extract a unique customer identifier from original and redacted transcripts.
 
@@ -112,8 +113,9 @@ class CallRedactor:
             redacted_transcript (str): The DLP-redacted transcript with [ENTITY_TYPE] placeholders
 
         Returns:
-            str: A SHA-256 hashed customer ID based on extracted name and birth date,
-                 or a time-based fallback ID if extraction fails
+            tuple[str, str | None, str | None, str | None]:
+                A SHA-256 hashed customer ID based on extracted name and birth date,
+                first name, last name, and parsed birth date (or None if extraction fails)
 
         Raises:
             ValueError: If the original and redacted transcripts cannot be aligned
@@ -167,9 +169,11 @@ class CallRedactor:
         # Find first valid birth date (more than MINIMUM_CALLER_AGE years in the past)
         birth_date = self._find_valid_birth_date(extracted_entities['DATE'])
 
-        return create_customer_id(raw_customer_name, birth_date)
+        customer_id, first_name, last_name, parsed_birth_date = create_customer_id(raw_customer_name, birth_date)
+        return customer_id, first_name, last_name, parsed_birth_date
 
-    def _find_valid_birth_date(self, date_strings: list[str]) -> str:
+    @staticmethod
+    def _find_valid_birth_date(date_strings: list[str]) -> str:
         """
         Find the first date string that represents a plausible birth date.
 
