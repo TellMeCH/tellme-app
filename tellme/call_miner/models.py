@@ -798,6 +798,9 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
     external_id = models.CharField(max_length=128, null=False)  # Comes from call recording software
     created = models.DateTimeField(auto_now_add=True)
+    first_name = models.CharField(max_length=128, null=True)
+    last_name = models.CharField(max_length=128, null=True)
+    birth_date = models.DateField(null=True)
 
     class Meta:
         unique_together = ('organization', 'external_id')

@@ -138,20 +138,53 @@ def create_conversation(
     output_tokens: int,
     resolved: bool,
     revenue_at_stake: float = None,
+    customer_first_name: str = None,
+    customer_last_name: str = None,
+    customer_birth_date: str = None,
     **kwargs
 ):
     """
-    Creates and saves a new Conversation instance using:
-      - a Customer fetched (or created) by external_customer_id + organization_id
-      - an Agent fetched by agent_id
-      - a list of Topics fetched by their names
-    Raises ValueError if Agent or Topics do not match the Organization.
+    Creates and saves a new Conversation instance with associated customer and agent data.
+
+    This function creates a conversation record by:
+    - Creating or retrieving a Customer by external_id and organization
+    - Retrieving the Agent by agent_id
+    - Associating topics and suggested topics by their names
+    - Creating the conversation with all provided metadata including customer demographics
+
+    Args:
+        customer_id (str): External customer identifier
+        organization_id (int): ID of the organization
+        agent_id (int): ID of the agent handling the call
+        topics (list[str]): List of topic names to associate
+        suggested_topics (list[str]): List of suggested topic names to associate
+        file_name (str): Path to the audio file
+        timestamp (str): Call timestamp
+        duration (float): Call duration in seconds
+        transcript (str): Full call transcript
+        sentiment (float): Sentiment score
+        summary (str): AI-generated call summary
+        title (str): AI-generated call title
+        input_tokens (int): Number of input tokens used
+        output_tokens (int): Number of output tokens generated
+        resolved (bool): Whether the call issue was resolved
+        revenue_at_stake (float, optional): Estimated revenue value
+        customer_first_name (str, optional): Customer's first name
+        customer_last_name (str, optional): Customer's last name
+        customer_birth_date (str, optional): Customer's birth date in YYYY-MM-DD format
+        **kwargs: Additional keyword arguments
+
+    Raises:
+        ValueError: If Agent or Topics do not match the Organization
     """
 
     org = Organization.objects.get(id=organization_id)
     customer, _ = Customer.objects.get_or_create(
         organization=org,
-        external_id=customer_id
+        external_id=customer_id,
+        first_name=customer_first_name,
+        last_name=customer_last_name,
+        birth_date=customer_birth_date,
     )
     agent = Agent.objects.get(id=agent_id)
 

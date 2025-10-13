@@ -64,7 +64,7 @@ class CallEnricher:
             )
             self.enrichment_prompts.append(prompt)
 
-    @observe(capture_input=False)
+    @observe()
     def enrich_recording(self, transcript: str, redacted_transcript: str,
                         enrichment_method: str, organization_id: int) -> tuple[dict, int, int]:
         """
@@ -164,15 +164,19 @@ class CallEnricher:
 
         # Generate customer ID from extracted info and remove sensitive data
         if 'customer_info' in enriched_response:
-            enriched_response['customer_id'] = create_customer_id(
+            hashed_id, first_name, last_name, birth_date = create_customer_id(
                 enriched_response['customer_info']['full_name'],
                 enriched_response['customer_info']['birth_date']
             )
+            enriched_response['customer_id'] = hashed_id
+            enriched_response['customer_first_name'] = first_name
+            enriched_response['customer_last_name'] = last_name
+            enriched_response['customer_birth_date'] = birth_date
             del enriched_response['customer_info']
 
         return enriched_response, input_tokens, output_tokens
 
-    @observe(as_type="generation", capture_input=False, capture_output=False)
+    @observe(as_type="generation")
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
@@ -211,7 +215,7 @@ class CallEnricher:
         output_tokens = completion.usage.completion_tokens
         return json.loads(response.content), input_tokens, output_tokens
 
-    @observe(as_type="generation", capture_input=False, capture_output=False)
+    @observe(as_type="generation")
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),

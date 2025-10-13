@@ -6,20 +6,21 @@ SUMMARIZER_PROMPTS = {
         a low sentiment and a high revenue at stake imply high risk of a painful loss of revenue, whereas a high sentiment
         and a relatively low revenue at stake indicate potential for upselling.
         1.	What are the recurring reasons customers contact the call center? Present the result as a bulleted list of 
-            descending order of relevance.
+            descending order of relevance, with maximum 4 items.
         2.	At which stages of the customer journey are these callers predominantly found? Answer in 2-3 lines.
         3.	Are the issues commonly resolved during the initial call, or do they require follow-ups? Answer in 2-3 lines.
         4.	Based on these interactions, are customers more likely to strengthen their relationship with the company or
             terminate it? Why? Answer in 2-3 lines.
         5.	What are the most frequent causes of customer dissatisfaction in these calls? Present the result as a 
-            bulleted list of descending order of relevance.
+            bulleted list of descending order of relevance, with maximum 4 items.
         6.	What are the most frequent causes of customer engagement and loyalty in these calls? Present the result as a
-            bulleted list of descending order of relevance.
+            bulleted list of descending order of relevance, with maximum 4 items.
         7.	What simple actions could the company take to improve customer satisfaction based on these conversations? 
             This is key question. Think of specific, tangible improvements in business processes and customer handling
             that would minimize churn and ensure customer retention. Provide them as a bulleted list of descending 
-            impact, so that readers will instantly know the specific actions that really move the needle.
-
+            impact, so that readers will instantly know the specific actions that really move the needle. 
+            Keep the list to maximum 5 items.
+        
         Provide the results in a JSON format with the following keys:
         •	“Reasons for Calling”
         •	“Stages of the Customer Journey”

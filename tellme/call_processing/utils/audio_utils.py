@@ -1,3 +1,10 @@
+"""
+Audio format conversion utilities for call processing.
+
+This module provides functions for converting between different audio formats,
+specifically for handling mu-law encoded audio files commonly used in telephony.
+"""
+
 import wave
 import audioop
 import io
@@ -5,9 +12,19 @@ import io
 
 def decode_mulaw_file_to_wav(in_path: str, channels=2, sample_rate=8000):
     """
-    Reads raw mu-law data (2-channel interleaved) from 'in_path',
+    Convert a raw mu-law audio file to WAV format.
+
+    Reads raw mu-law data (2-channel interleaved) from the specified path,
     decodes it to 16-bit PCM, then writes it as a proper WAV file
     into memory and returns the WAV bytes.
+
+    Args:
+        in_path (str): Path to the input mu-law file
+        channels (int): Number of audio channels (default: 2)
+        sample_rate (int): Audio sample rate in Hz (default: 8000)
+
+    Returns:
+        io.BytesIO: BytesIO object containing the WAV file data
     """
     # Read raw mu-law bytes from disk
     with open(in_path, 'rb') as f:
@@ -37,8 +54,13 @@ def decode_mulaw_file_to_wav(in_path: str, channels=2, sample_rate=8000):
 
 def split_interleaved_stereo_mulaw(mulaw_stereo: bytes):
     """
-    Given interleaved [L0, R0, L1, R1, ...], separate into
-    left_bytes and right_bytes.
+    Split interleaved stereo mu-law data into separate left and right channels.
+
+    Args:
+        mulaw_stereo (bytes): Interleaved stereo mu-law data [L0, R0, L1, R1, ...]
+
+    Returns:
+        tuple[bytes, bytes]: Left channel bytes and right channel bytes
     """
     left = bytearray()
     right = bytearray()
@@ -50,7 +72,15 @@ def split_interleaved_stereo_mulaw(mulaw_stereo: bytes):
 
 def interleave_two_channels(left_pcm, right_pcm, sample_width=2):
     """
-    Interleave L0, R0, L1, R1, ... for 16-bit (2-byte) frames.
+    Interleave left and right channel PCM data into stereo format.
+
+    Args:
+        left_pcm (bytes): Left channel PCM data
+        right_pcm (bytes): Right channel PCM data
+        sample_width (int): Width of each sample in bytes (default: 2 for 16-bit)
+
+    Returns:
+        bytes: Interleaved stereo PCM data [L0, R0, L1, R1, ...]
     """
     interleaved = bytearray()
     length = min(len(left_pcm), len(right_pcm))

@@ -18,9 +18,11 @@ logger = logging.getLogger('django')
 
 class WebhookProcessingView(APIView):
     """
-    This view processes an incoming Webhook notification indicating a finalized call, and then calls the respecitve API
-    (f.e. the Avaya Communications API) to download the recordings of the call. Once the call recordings are downloaded,
-    they are uploaded to GCS and queued for processing.
+    Handle incoming webhook notifications for finalized calls.
+
+    This view processes webhook notifications indicating a finalized call, then calls the respective API
+    (e.g., the Avaya Communications API) to download the recordings of the call. Once the call recordings
+    are downloaded, they are uploaded to GCS and queued for processing.
     """
     authentication_classes = [OrganizationAPIKeyAuthentication]
     permission_classes = [IsAuthenticatedOrganization]
@@ -76,8 +78,10 @@ class WebhookProcessingView(APIView):
 
 class QueueRecordingView(APIView):
     """
+    Queue call recordings for processing via Cloud Tasks.
+
     This API view has the sole purpose of queueing a call processing task on a predefined Cloud Tasks Manager.
-    The view expects a recording in the provided data.
+    The view expects a recording file in the provided data and uploads it to GCS before queueing.
     Only API-token bearing requests should have permission to run this view.
     """
     serializer_class = QueueRecordingSerializer
@@ -111,8 +115,11 @@ class QueueRecordingView(APIView):
 
 class ProcessRecordingView(APIView):
     """
-    Carries out the processing steps on a call recording.
-    Only the processing pipeline account (PROCESSING_PIPELINE_USER and PROCESSING_PIPELINE_KEY) should have access
+    Execute the full call processing pipeline on a recording.
+
+    This view carries out all processing steps on a call recording including transcription,
+    redaction, enrichment, and revenue analysis. It then persists the results to the database.
+    Only the processing pipeline service account should have access to this endpoint.
     """
     serializer_class = ProcessRecordingSerializer
     authentication_classes = [ProcessingKeyAuthentication]
