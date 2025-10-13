@@ -296,11 +296,14 @@ class TestCallRedactor:
         """
         transcript = "Hello, my name is John Doe and my phone is 555-1234."
 
-        redacted_transcript, customer_id = redacter.redact_transcript(transcript, extract_customer_id=False)
+        redacted_transcript, customer_id, first_name, last_name, birth_date = redacter.redact_transcript(transcript, extract_customer_id=False)
 
         assert mock_dlp.deidentify_content.called
         assert redacted_transcript
         assert customer_id is None
+        assert first_name is None
+        assert last_name is None
+        assert birth_date is None
 
     def test_extract_customer_id_from_redaction(self, redacter, mock_dlp):
         """
@@ -311,12 +314,15 @@ class TestCallRedactor:
         # Mock DLP to return a redacted transcript with placeholders
         mock_dlp.deidentify_content.return_value.item.value = "Hello, my name is [PERSON_NAME] and I was born on [DATE]."
 
-        redacted_transcript, customer_id = redacter.redact_transcript(original_transcript, extract_customer_id=True)
+        redacted_transcript, customer_id, first_name, last_name, birth_date = redacter.redact_transcript(original_transcript, extract_customer_id=True)
 
         assert mock_dlp.deidentify_content.called
         assert redacted_transcript
         assert customer_id is not None
         assert len(customer_id) == 64  # SHA-256 hash length
+        assert first_name == 'John'
+        assert last_name == 'Doe'
+        assert birth_date == '1990-01-15'
 
 
 @pytest.mark.django_db
@@ -499,6 +505,65 @@ class TestCallEnricher:
 
         for key in ("title", "summary", "sentiment", "topics"):
             assert key in result
+
+    def test_enrich_recording_extracts_customer_data_from_redaction(self, enricher, mock_openai, mock_db_handler):
+        """
+        Test that enrichment properly extracts and processes customer data when customer_info is provided via enrichment.
+
+        This test verifies that the create_customer_id function is called and returns the expected
+        customer demographic data (first name, last name, birth date) along with the hashed ID.
+        """
+        # Mock the topic retrieval functions
+        _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
+        mock_obtain_active_topics.return_value = "Billing: Payment issues, Support: Technical help"
+        mock_obtain_suggested_topics.return_value = "Warranty: Product warranty claims"
+        mock_retrieve_organization_language.return_value = "English"
+
+        # Mock OpenAI to return customer_info that will be processed
+        mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
+            "agent_speaker_labels": ["Agent"],
+            "customer_speaker_labels": ["Customer"],
+            "topics": ["Billing"],
+            "suggested_topics": ["Technical Support"],
+            "new_topics": [{"name": "Account Management", "description": "Customer account related inquiries"}],
+            "customer_info": {
+                "full_name": "Jane Smith",
+                "birth_date": "March 22, 1985"
+            },
+            "summary": "Customer called regarding billing inquiry",
+            "title": "Billing Support Call",
+            "sentiment": 4,
+            "revenue_at_stake": 0,
+            "resolved": True,
+        })
+
+        transcript = "Agent: Hello. Customer: Hi, I'm Jane Smith, born March 22, 1985."
+        redacted_transcript = "Agent: Hello. Customer: Hi, I'm [PERSON_NAME], born [DATE]."
+
+        result, input_tokens, output_tokens = enricher.enrich_recording(
+            transcript, redacted_transcript, "openai", 1
+        )
+
+        # Verify that customer_info was processed into individual customer fields
+        assert "customer_id" in result
+        assert len(result["customer_id"]) == 64  # SHA-256 hash length
+        assert "customer_first_name" in result
+        assert result["customer_first_name"] == "Jane"
+        assert "customer_last_name" in result
+        assert result["customer_last_name"] == "Smith"
+        assert "customer_birth_date" in result
+        assert result["customer_birth_date"] == "1985-03-22"  # Django formatted date
+
+        # Verify that customer_info was removed after processing
+        assert "customer_info" not in result
+
+        # Verify other enrichment results
+        assert "title" in result
+        assert "summary" in result
+        assert "sentiment" in result
+        assert result["sentiment"] == 4
+        assert "resolved" in result
+        assert result["resolved"] is True
 
 
 @pytest.mark.django_db
