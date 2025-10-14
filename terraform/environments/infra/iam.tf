@@ -68,7 +68,6 @@ resource "google_project_iam_member" "cloudsql_client" {
   member = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# TODO: What's the difference between these two?
 # Allows GitHub to attach a service account to a resource.
 resource "google_project_iam_member" "sa_user" {
   for_each = local.sa_envs
@@ -84,7 +83,6 @@ resource "google_service_account_iam_member" "github_app_sa_user" {
   member             = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# TODO: What happened to the media bucket access? And the call processing bucket? Should they be defined here?
 # Used by the SA account to have access to the bucket holding the Terraform state.
 resource "google_storage_bucket_iam_member" "tfstate_object_admin" {
   for_each = local.sa_envs
@@ -145,7 +143,6 @@ resource "google_project_iam_member" "cloudfunctions_admin" {
   member = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# TODO: Where is the monitoring function SA created?
 # Allow GitHub to use monitoring function service account
 resource "google_service_account_iam_member" "github_monitoring_sa_user" {
   for_each = {
@@ -205,7 +202,6 @@ resource "google_project_iam_member" "cloudscheduler_admin" {
   member = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# TODO: Where is the group created?
 # Backend Developer role - group access to secrets
 resource "google_secret_manager_secret_iam_member" "backend_dev_django_settings" {
   for_each = local.sa_envs
