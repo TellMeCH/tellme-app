@@ -29,15 +29,19 @@ resource "google_storage_bucket" "call_processing_bucket" {
 
 # Monitoring function (staging only)
 module "monitoring_function" {
-  source                  = "../../modules/monitoring_function"
-  project_id              = var.project_id
-  region                  = var.region
-  function_name           = "langfuse-exporter"
-  monitoring_bucket_name  = "monitoring_data"
-  runtime                 = "python39"
-  entry_point             = "main"
-  source_bucket           = "gcf-v2-sources-${data.google_project.this.number}-${var.region}"
-  source_object           = "function-source.zip"
+  source                      = "../../modules/monitoring_function"
+  project_id                  = var.project_id
+  region                      = var.region
+  function_name               = "langfuse-exporter"
+  monitoring_bucket_name      = "monitoring_data"
+  runtime                     = "python312"
+  entry_point                 = "export_from_langfuse"
+  build_service_account_email = data.google_service_account.github.email
+  repo_name                   = var.github_repo
+  branch_name                 = "staging"
+  source_dir                  = "./tellme/jobs/langfuse_exporter"
+  schedule                    = "0 0 * * *"
+  time_zone                   = "Etc/UTC"
 }
 
 module "api_revision" {
