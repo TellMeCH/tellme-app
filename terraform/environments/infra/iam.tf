@@ -91,6 +91,22 @@ resource "google_storage_bucket_iam_member" "tfstate_object_admin" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
+# GitHub access to media bucket
+resource "google_storage_bucket_iam_member" "github_media_bucket" {
+  for_each = local.sa_envs
+  bucket = google_storage_bucket.media_bucket[each.key].name
+  role = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# GitHub access to call processing bucket
+resource "google_storage_bucket_iam_member" "github_call_processing_bucket" {
+  for_each = local.sa_envs
+  bucket = google_storage_bucket.call_processing_bucket[each.key].name
+  role = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
 # Firebase auth admin
 resource "google_project_iam_member" "firebase_auth_admin" {
   for_each = local.sa_envs
