@@ -12,3 +12,19 @@ variable "github_repo" {
     error_message = "github_repo must be in the form ORG/REPO (e.g., my-org/my-repo)."
   }
 }
+
+variable "artifact_repo" {
+  type = string
+  description = "Artifact Registry repository name"
+}
+
+# Bucket names
+variable "media_bucket" {
+  type = string
+  default = "static_files"
+}
+
+variable "call_processing_bucket" {
+  type = string
+  default = "call_recordings"
+}
