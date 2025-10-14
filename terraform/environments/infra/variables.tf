@@ -45,4 +45,15 @@ variable "envs" {
   }))
 }
 
-variable "service_name" { type = string }
+
+# GitHub organization for WIF
+variable "github_org" {
+  type = string
+  description = "GitHub organization name for WIF provider"
+}
+
+variable "backend_dev_group" {
+  type = string
+  default = "backend_runners@tell-me.ch"
+  description = "Google Group for backend developers"
+}

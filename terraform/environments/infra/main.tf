@@ -46,12 +46,11 @@ module "wif" {
   project_id  = module.project["infra"].project_id
   pool_id     = var.pool_id
   provider_id = var.provider_id
+  github_org  = var.github_org
 }
-
 
 # Create a artifact registry repository.
 resource "google_artifact_registry_repository" "artifact_repo" {
-  name = "cloud-run-source-deploy"  # TODO: Is this allowed?
   for_each = local.sa_envs
   project  = module.project[each.key].project_id
   location = var.region
