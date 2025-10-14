@@ -6,7 +6,16 @@ variable "google_cloud_project" {
 variable "region" {
   description = "The GCP region"
   type        = string
-  default     = "europe-west6"
+}
+
+variable "workload_identity_provider" {
+  description = "Workload identity provider for GitHub Actions"
+  type        = string
+}
+
+variable "cicd_service_account" {
+  description = "CI/CD service account email"
+  type        = string
 }
 
 variable "environment" {
@@ -63,14 +72,4 @@ variable "monitoring_function" {
   description = "Monitoring function name (staging only)"
   type        = string
   default     = ""
-}
-
-variable "workload_identity_provider" {
-  description = "Workload identity provider for GitHub Actions"
-  type        = string
-}
-
-variable "cicd_service_account" {
-  description = "CI/CD service account email"
-  type        = string
 }
