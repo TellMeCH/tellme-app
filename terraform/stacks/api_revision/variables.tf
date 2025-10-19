@@ -1,27 +1,92 @@
-# TODO: Service Account as ${{ vars.SERVICE_NAME }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-# TODO: Image Url as ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
-# TODO: CloudSQL as ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }}
-
 variable "service_name" {
-  type = string
+  type        = string
+  description = "Name of the Cloud Run service"
 }
 
 variable "image_url" {
-  type = string
+  type        = string
+  description = "Container image URL"
 }
 
 variable "project_id" {
-  type = string
+  type        = string
+  description = "GCP Project ID"
 }
 
 variable "region" {
-  type = string
+  type        = string
+  description = "GCP region"
 }
 
 variable "service_account_email" {
-  type = string
+  type        = string
+  description = "Service account email for Cloud Run"
 }
 
 variable "cloud_sql" {
-  type = string
+  type        = string
+  description = "Cloud SQL connection name"
+}
+
+variable "tellme_env" {
+  type        = string
+  description = "Environment (staging/prod)"
+}
+
+variable "settings_name" {
+  type        = string
+  description = "Django settings name"
+}
+
+variable "sql_instance_name" {
+  type        = string
+  description = "SQL instance name"
+}
+
+variable "database_name" {
+  type        = string
+  description = "Database name"
+}
+
+variable "media_bucket" {
+  type        = string
+  description = "Media bucket name"
+}
+
+variable "cloud_tasks_queue_name" {
+  type        = string
+  description = "Cloud Tasks queue name"
+}
+
+variable "call_processing_bucket" {
+  type        = string
+  description = "Call processing bucket name"
+}
+
+variable "frontend_path" {
+  type        = string
+  description = "Frontend path"
+}
+
+# CloudSQL variables
+variable "admin_username" {
+  type        = string
+  description = "CloudSQL admin username"
+}
+
+variable "admin_password" {
+  type        = string
+  description = "CloudSQL admin password"
+  sensitive   = true
+}
+
+variable "app_username" {
+  type        = string
+  description = "CloudSQL app username"
+}
+
+variable "app_password" {
+  type        = string
+  description = "CloudSQL app password"
+  sensitive   = true
 }
