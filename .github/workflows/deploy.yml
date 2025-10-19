@@ -144,7 +144,7 @@ jobs:
           timeout: 30m
           flags: |
             --allow-unauthenticated
-            --min-instances=0
+            --min-instances=${{ env.TELLME_ENV == 'prod' && '1' || '0' }}
             --max-instances=10
             --execution-environment=gen2
             --service-account=${{ vars.SERVICE_NAME }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
