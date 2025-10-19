@@ -256,9 +256,9 @@ class ConversationListSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'topic_data', 'suggested_topic_data',
-                  'resolved', 'agent', 'agent_email', 'customer', 'customer_id', 'input_tokens', 'output_tokens',
-                  'created']
+        fields = ['url', 'path', 'date', 'duration', 'title', 'sentiment', 'revenue_at_stake', 'topic_data',
+                  'suggested_topic_data', 'resolved', 'agent', 'agent_email', 'customer', 'customer_id', 'input_tokens',
+                  'output_tokens', 'created']
 
     @extend_schema_field(TOPIC_DATA_RESPONSE_SCHEMA)
     def get_topic_data(self, obj):
