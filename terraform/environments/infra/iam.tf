@@ -7,34 +7,6 @@ resource "google_service_account" "github" {
   display_name = "GitHub Service Account (${each.value.environment})"
 }
 
-# Access to secrets
-resource "google_secret_manager_secret_iam_member" "django_settings_access" {
-  for_each = local.sa_envs
-  project = module.project[each.key].project_id
-  secret_id = "django_settings"
-  role = "roles/secretmanager.secretAccessor"
-  member = "serviceAccount:${google_service_account.github[each.key].email}"
-  depends_on = [module.secrets]
-}
-
-resource "google_secret_manager_secret_iam_member" "superuser_passwords_access" {
-  for_each = local.sa_envs
-  project = module.project[each.key].project_id
-  secret_id = "superuser_passwords"
-  role = "roles/secretmanager.secretAccessor"
-  member = "serviceAccount:${google_service_account.github[each.key].email}"
-  depends_on = [module.secrets]
-}
-
-resource "google_secret_manager_secret_iam_member" "firebase_config_access" {
-  for_each = local.sa_envs
-  project = module.project[each.key].project_id
-  secret_id = "firebase_config"
-  role = "roles/secretmanager.secretAccessor"
-  member = "serviceAccount:${google_service_account.github[each.key].email}"
-  depends_on = [module.secrets]
-}
-
 # Used by the SA account to push images to the registry.
 resource "google_artifact_registry_repository_iam_member" "repo_writer" {
   for_each = local.sa_envs
