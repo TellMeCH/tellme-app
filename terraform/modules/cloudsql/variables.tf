@@ -53,7 +53,12 @@ variable "deletion_protection" {
 }
 
 variable "create_app_user" {
-  type        = bool
-  description = "Whether to create the application database user"
-  default     = true
+  type        = number
+  description = "Whether to create the application database user (0 = false, 1 = true)"
+  default     = 1
+
+  validation {
+    condition     = var.create_app_user == 0 || var.create_app_user == 1
+    error_message = "create_app_user must be either 0 (false) or 1 (true)."
+  }
 }

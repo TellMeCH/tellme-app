@@ -28,6 +28,7 @@ module "cloudsql" {
   admin_password  = var.admin_password
   app_username    = var.app_username
   app_password    = var.app_password
+  create_app_user = var.create_app_user
 }
 
 # Cloud Tasks module
@@ -78,11 +79,4 @@ module "cloud_run_v2" {
       }
     }
   ]
-}
-
-locals {
-  spec_rendered = templatefile("${path.module}/../../configs/spec.yaml", {
-    cloud_run_url = module.cloud_run_v2.service_uri
-  })
-  api_config_id = "cfg-${substr(sha256(local.spec_rendered), 0, 8)}"
 }

@@ -29,14 +29,14 @@ resource "google_project_iam_member" "runtime_cloudsql_client" {
 
 # Storage bucket access for media files
 resource "google_storage_bucket_iam_member" "runtime_media_bucket" {
-  bucket = google_storage_bucket.media_bucket.name
+  bucket = module.api_revision.media_bucket_name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.app.email}"
 }
 
 # Storage bucket access for call recordings (objectUser for runtime)
 resource "google_storage_bucket_iam_member" "runtime_call_processing_bucket" {
-  bucket = google_storage_bucket.call_processing_bucket.name
+  bucket = module.api_revision.call_processing_bucket_name
   role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.app.email}"
 }
@@ -99,14 +99,14 @@ resource "google_service_account_iam_member" "github_app_sa_user" {
 
 # GitHub access to media bucket
 resource "google_storage_bucket_iam_member" "github_media_bucket" {
-  bucket = google_storage_bucket.media_bucket.name
+  bucket = module.api_revision.media_bucket_name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${data.google_service_account.github.email}"
 }
 
 # GitHub access to call processing bucket
 resource "google_storage_bucket_iam_member" "github_call_processing_bucket" {
-  bucket = google_storage_bucket.call_processing_bucket.name
+  bucket = module.api_revision.call_processing_bucket_name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${data.google_service_account.github.email}"
 }

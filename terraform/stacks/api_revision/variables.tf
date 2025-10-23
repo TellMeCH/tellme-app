@@ -23,10 +23,6 @@ variable "service_account_email" {
   description = "Service account email for Cloud Run"
 }
 
-variable "cloud_sql" {
-  type        = string
-  description = "Cloud SQL connection name"
-}
 
 variable "tellme_env" {
   type        = string
@@ -89,4 +85,15 @@ variable "app_password" {
   type        = string
   description = "CloudSQL app password"
   sensitive   = true
+}
+
+variable "create_app_user" {
+  type        = number
+  description = "Whether to create the application database user (0 = false, 1 = true)"
+  default     = 1
+
+  validation {
+    condition     = var.create_app_user == 0 || var.create_app_user == 1
+    error_message = "create_app_user must be either 0 (false) or 1 (true)."
+  }
 }

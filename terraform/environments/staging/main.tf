@@ -8,25 +8,6 @@ terraform {
   }
 }
 
-# Create Cloud Storage buckets
-resource "google_storage_bucket" "media_bucket" {
-  project  = var.project_id
-  name     = "${var.project_id}_${var.media_bucket}"
-  location = var.region
-  uniform_bucket_level_access = false
-  public_access_prevention    = "inherited"
-  force_destroy               = false
-}
-
-resource "google_storage_bucket" "call_processing_bucket" {
-  project  = var.project_id
-  name     = "${var.project_id}_${var.call_processing_bucket}"
-  location = var.region
-  uniform_bucket_level_access = false
-  public_access_prevention    = "inherited"
-  force_destroy               = false
-}
-
 # Monitoring function (staging only)
 module "monitoring_function" {
   source                      = "../../modules/monitoring_function"
@@ -47,9 +28,21 @@ module "monitoring_function" {
 module "api_revision" {
   source                = "../../stacks/api_revision"
   service_name          = var.service_name
-  image_url             = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}/${var.service_name}:${github.sha}"
+  image_url             = var.image_url
   project_id            = var.project_id
   region                = var.region
   service_account_email = google_service_account.app.email
-  cloud_sql             = "${var.project_id}:${var.region}:${var.sql_instance}"
+  tellme_env            = "staging"
+  settings_name         = var.settings_name
+  sql_instance_name     = var.sql_instance
+  database_name         = var.database_name
+  media_bucket          = var.media_bucket
+  cloud_tasks_queue_name = var.cloud_tasks_queue_name
+  call_processing_bucket = var.call_processing_bucket
+  frontend_path         = var.frontend_path
+  admin_username        = var.admin_username
+  admin_password        = var.admin_password
+  app_username          = var.app_username
+  app_password          = var.app_password
+  create_app_user       = var.create_app_user
 }
