@@ -20,19 +20,9 @@ jobs:
     env:
       GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
       REGION: ${{ secrets.GCP_PROJECT_REGION }}
-      DEBUG: 0
-      SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
-      SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
-      DATABASE_NAME: ${{ vars.DATABASE_NAME }}
-      GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-      ARTIFACT_REPO: ${{ vars.ARTIFACT_REPO }}
-      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
-      CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
-      CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
-      FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
-      CALL_PROCESSING_ENDPOINT: none
       USE_CLOUD_SQL_AUTH_PROXY: 1
-      COLLECT_STATIC: false
+      COLLECT_STATIC: true
+      RUN_MIGRATIONS: true
       CREATE_SUPERUSERS: true
     if: github.event.pull_request.merged == true
 
@@ -44,6 +34,9 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -66,6 +59,63 @@ jobs:
       - name: Print TELLME_ENV
         run: |
           echo "TELLME_ENV=$TELLME_ENV"
+
+      - name: Login to Google Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          registry: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev
+
+      - name: Build, tag and push container
+        id: build-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
+
+      - name: Compose image ref (repo@digest)
+        id: imgref
+        run: |
+          echo "image_ref=${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}@${{ steps.build-image.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Init
+        working-directory: terraform/environments/staging
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: terraform/environments/staging
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        working-directory: terraform/environments/staging
+        run: |
+          terraform plan \
+            -no-color \
+            -input=false \
+            -out=tfplan.bin \
+            -var "project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var "region=${{ secrets.GCP_PROJECT_REGION }}" \
+            -var "service_name=${{ vars.SERVICE_NAME }}" \
+            -var "sql_instance=${{ vars.SQL_INSTANCE_NAME }}" \
+            -var "github_repo=${GITHUB_REPOSITORY}" \
+            -var "media_bucket=${{ vars.MEDIA_BUCKET }}" \
+            -var "call_processing_bucket=${{ vars.CALL_PROCESSING_BUCKET }}" \
+            -var "image_url=${{ steps.imgref.outputs.image_ref }}" \
+            -var "settings_name=${{ vars.SETTINGS_NAME }}" \
+            -var "database_name=${{ vars.DATABASE_NAME }}" \
+            -var "cloud_tasks_queue_name=${{ vars.CLOUD_TASKS_QUEUE_NAME }}" \
+            -var "frontend_path=${{ secrets.FRONTEND_PATH }}" \
+            -var "admin_username=postgres" \
+            -var "admin_password=${{ secrets.DB_ADMIN_PASSWORD }}" \
+            -var "app_username=app_user" \
+            -var "app_password=${{ secrets.DB_APP_PASSWORD }}" \
+            -var "create_app_user=1"
+
+      - name: Terraform Apply
+        working-directory: terraform/environments/staging
+        run: terraform apply -auto-approve tfplan.bin
 
       - name: Start Cloud SQL Proxy
         if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
@@ -105,74 +155,57 @@ jobs:
           fi
 
       - name: Run Migrations
-        if: steps.detect_changes.outputs.migrations == 'true'
+        if: steps.detect_changes.outputs.migrations == 'true' || env.RUN_MIGRATIONS == 'true'
+        env:
+          DEBUG: 0
+          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
         run: |
           uv run python manage.py migrate
 
       - name: Collect Static
         if: env.COLLECT_STATIC == 'true'
+        env:
+          DEBUG: 0
+          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
         run: |
           uv run python manage.py collectstatic --noinput
 
       - name: Create Superuser Accounts
         if: env.CREATE_SUPERUSERS == 'true'
         env:
+          DEBUG: 0
+          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
         run: |
           uv run python manage.py create_superusers
-
-      - name: Login to Google Artifact Registry
-        uses: docker/login-action@v3
-        with:
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
-          registry: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev
-
-      - name: Build, tag and push container
-        id: build-image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
-
-      - name: Deploy to Cloud Run
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ vars.SERVICE_NAME }}
-          timeout: 30m
-          flags: |
-            --allow-unauthenticated
-            --min-instances=${{ env.TELLME_ENV == 'prod' && '1' || '0' }}
-            --max-instances=10
-            --execution-environment=gen2
-            --service-account=${{ vars.SERVICE_NAME }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-            --add-cloudsql-instances=${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }}
-          region: ${{ secrets.GCP_PROJECT_REGION }}
-          image: ${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}:${{ github.sha }}
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
-            REGION=${{ secrets.GCP_PROJECT_REGION }}
-            TELLME_ENV=${{ env.TELLME_ENV }}
-            DEBUG=0
-            SETTINGS_NAME=${{ vars.SETTINGS_NAME }}
-            SQL_INSTANCE_NAME=${{ vars.SQL_INSTANCE_NAME }}
-            DATABASE_NAME=${{ vars.DATABASE_NAME }}
-            GS_BUCKET_NAME=${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-            CLOUD_TASKS_QUEUE_NAME=${{ vars.CLOUD_TASKS_QUEUE_NAME }}
-            CALL_PROCESSING_BUCKET=${{ vars.CALL_PROCESSING_BUCKET }}
-            FRONTEND_PATH=${{ secrets.FRONTEND_PATH }}
-            CALL_PROCESSING_ENDPOINT=None
 
       - name: Determine Cloud Run URL
         id: extract_urls
         run: |
           PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
-          CLOUD_RUN_URLS="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
-          CLOUD_RUN_URLS="${CLOUD_RUN_URLS},${{ steps.deploy.outputs.url }}"
+          BASE_URL="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
+          DEPLOYED_URL=$(gcloud run services describe ${{ vars.SERVICE_NAME }} --region=${{ secrets.GCP_PROJECT_REGION }} --format="value(status.url)")
+          CLOUD_RUN_URLS="${BASE_URL},${DEPLOYED_URL}"
           echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
-          echo "base_url=https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app" >> $GITHUB_OUTPUT
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
 
       - name: Update the Application to use those Service URLs
         run: |
@@ -185,58 +218,6 @@ jobs:
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
             --update-env-vars CALL_PROCESSING_ENDPOINT="${{ steps.extract_urls.outputs.base_url }}${{ vars.CALL_PROCESSING_ADDRESS }}"
-
-      - name: Deploy Monitoring Cloud Function
-        id: deploy_monitoring
-        if: env.TELLME_ENV == 'staging'
-        uses: google-github-actions/deploy-cloud-functions@v3
-        with:
-          name: ${{ vars.MONITORING_FUNCTION }}
-          runtime: python312
-          region: ${{ secrets.GCP_PROJECT_REGION }}
-          source_dir: ./tellme/jobs/langfuse_exporter
-          entry_point: export_from_langfuse
-          memory: 1024M
-          service_timeout: 300s
-          service_account: "${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-          build_service_account: "projects/${{ secrets.GCP_PROJECT_ID }}/serviceAccounts/${{ secrets.CICD_SERVICE_ACCOUNT }}"
-          environment_variables: |-
-            SETTINGS_NAME=${{ vars.SETTINGS_NAME }}
-            GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}
-            MONITORING_BUCKET=${{ vars.MONITORING_BUCKET }}
-
-      - name: Give Run Invoker access to the Cloud Function Service Account
-        if: env.TELLME_ENV == 'staging'
-        run: |
-          gcloud functions add-iam-policy-binding ${{ vars.MONITORING_FUNCTION }} \
-            --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --member "serviceAccount:${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role "roles/cloudfunctions.invoker"
-
-      - name: Configure a Cloud Scheduler to hit this function daily
-        if: env.TELLME_ENV == 'staging'
-        run: |
-          EXISTING_JOB=$(gcloud scheduler jobs describe ${{ vars.MONITORING_FUNCTION }} --location="${{ secrets.GCP_PROJECT_REGION }}" --format="value(name)" 2>/dev/null || true)
-          echo "EXISTING_JOB=$EXISTING_JOB"
-          if [ -n "$EXISTING_JOB" ]; then
-            gcloud scheduler jobs update http ${{ vars.MONITORING_FUNCTION }} \
-              --location="${{ secrets.GCP_PROJECT_REGION }}" \
-              --schedule="0 0 * * *" \
-              --time-zone="Etc/UTC" \
-              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
-              --http-method=GET \
-              --oidc-service-account-email="${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
-          else
-            gcloud scheduler jobs create http ${{ vars.MONITORING_FUNCTION }} \
-              --location="${{ secrets.GCP_PROJECT_REGION }}" \
-              --schedule="0 0 * * *" \
-              --time-zone="Etc/UTC" \
-              --uri="${{ steps.deploy_monitoring.outputs.url }}" \
-              --http-method=GET \
-              --oidc-service-account-email="${{ vars.MONITORING_FUNCTION }}-account@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-              --oidc-token-audience="${{ steps.deploy_monitoring.outputs.url }}"
-          fi
 
   smoke_test:
     environment:
