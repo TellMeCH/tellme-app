@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket = "tellme-infra-2a3048bca864-tfstate"
+    bucket = "tellme-app-infra-7eddd32754fb-tfstate"
     prefix = "infra/envs/infra"
   }
 }
