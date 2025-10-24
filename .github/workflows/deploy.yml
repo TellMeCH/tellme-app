@@ -88,6 +88,24 @@ jobs:
         working-directory: terraform/environments/staging
         run: terraform validate -no-color
 
+      - name: Get Database Admin Credentials
+        id: db_admin_creds
+        run: |
+          DB_ADMIN_SECRET=$(gcloud secrets versions access latest --secret=database_admin)
+          DB_ADMIN_USERNAME=$(echo "$DB_ADMIN_SECRET" | grep "^DB_ADMIN_USERNAME=" | cut -d'=' -f2 | sed "s/^'//;s/'$//")
+          DB_ADMIN_PASSWORD=$(echo "$DB_ADMIN_SECRET" | grep "^DB_ADMIN_PASSWORD=" | cut -d'=' -f2 | sed "s/^'//;s/'$//")
+          echo "admin_username=$DB_ADMIN_USERNAME" >> $GITHUB_OUTPUT
+          echo "admin_password=$DB_ADMIN_PASSWORD" >> $GITHUB_OUTPUT
+
+      - name: Get Django Settings Database Credentials
+        id: django_db_creds
+        run: |
+          DJANGO_SECRET=$(gcloud secrets versions access latest --secret=${{ vars.SETTINGS_NAME }})
+          DATABASE_USERNAME=$(echo "$DJANGO_SECRET" | grep "^DATABASE_USERNAME=" | cut -d'=' -f2)
+          DATABASE_PASSWORD=$(echo "$DJANGO_SECRET" | grep "^DATABASE_PASSWORD=" | cut -d'=' -f2)
+          echo "app_username=$DATABASE_USERNAME" >> $GITHUB_OUTPUT
+          echo "app_password=$DATABASE_PASSWORD" >> $GITHUB_OUTPUT
+
       - name: Terraform Plan
         working-directory: terraform/environments/staging
         run: |
@@ -107,10 +125,10 @@ jobs:
             -var "database_name=${{ vars.DATABASE_NAME }}" \
             -var "cloud_tasks_queue_name=${{ vars.CLOUD_TASKS_QUEUE_NAME }}" \
             -var "frontend_path=${{ secrets.FRONTEND_PATH }}" \
-            -var "admin_username=postgres" \
-            -var "admin_password=${{ secrets.DB_ADMIN_PASSWORD }}" \
-            -var "app_username=app_user" \
-            -var "app_password=${{ secrets.DB_APP_PASSWORD }}" \
+            -var "admin_username=${{ steps.db_admin_creds.outputs.admin_username }}" \
+            -var "admin_password=${{ steps.db_admin_creds.outputs.admin_password }}" \
+            -var "app_username=${{ steps.django_db_creds.outputs.app_username }}" \
+            -var "app_password=${{ steps.django_db_creds.outputs.app_password }}" \
             -var "create_app_user=1"
 
       - name: Terraform Apply
@@ -241,8 +259,9 @@ jobs:
         with:
           token_format: access_token
           project_id: ${{ secrets.GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.CICD_SERVICE_ACCOUNT_JSON_KEY }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.CICD_SERVICE_ACCOUNT }}
+          export_default_credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v4
