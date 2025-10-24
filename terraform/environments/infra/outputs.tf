@@ -35,7 +35,7 @@ output "backend_snippet_prod" {
 # Workload Identity Federation provider for GitHub Actions
 output "workload_identity_provider" {
   description = "WIF provider for GitHub Actions authentication"
-  value       = module.wif.pool_name
+  value       = module.wif.provider_name
 }
 
 # CI/CD service account emails by environment
