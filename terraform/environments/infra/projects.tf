@@ -24,7 +24,11 @@ locals {
     "monitoring.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
-    "servicecontrol.googleapis.com"
+    "servicecontrol.googleapis.com",
+    "firebase.googleapis.com",
+    "identitytoolkit.googleapis.com",
+    "iap.googleapis.com",
+    "apikeys.googleapis.com"
   ]
 }
 

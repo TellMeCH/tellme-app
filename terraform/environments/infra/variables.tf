@@ -35,13 +35,15 @@ variable "artifact_registry_repository_id" { type = string }
 variable "envs" {
   description = "Per-environment config"
   type = map(object({
-    org_id          = optional(string)
-    project_id      = string
-    name            = string
-    environment     = string
-    billing_account = string
-    folder_id       = optional(string)
-    services        = optional(set(string))
+    org_id             = optional(string)
+    project_id         = string
+    name               = string
+    environment        = string
+    billing_account    = string
+    folder_id          = optional(string)
+    services           = optional(set(string))
+    authorized_domains = optional(list(string))
+    redirect_uris      = optional(list(string))
   }))
 }
 
@@ -54,6 +56,20 @@ variable "github_org" {
 
 variable "backend_dev_group" {
   type = string
-  default = "backend_runners@tell-me.ch"
   description = "Google Group for backend developers"
+}
+
+variable "support_email" {
+  description = "Support email for OAuth brand configuration"
+  type        = string
+}
+
+variable "homepage_url" {
+  description = "URL of landing page for application"
+  type        = string
+}
+
+variable "app_name" {
+  description = "Display name of application"
+  type        = string
 }

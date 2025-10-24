@@ -37,7 +37,6 @@ resource "google_storage_bucket" "tfstate" {
   versioning {
     enabled = true
   }
-
 }
 
 # Create Workload Identity Federation so GitHub can use GCP for us.
@@ -57,4 +56,18 @@ resource "google_artifact_registry_repository" "artifact_repo" {
   repository_id = var.artifact_registry_repository_id
   description   = "Docker repo for backend"
   format        = "DOCKER"
+}
+
+# Firebase Authentication configuration for each environment
+module "firebase" {
+  for_each           = local.sa_envs
+  source             = "../../modules/firebase"
+  project_id         = module.project[each.key].project_id
+  support_email      = var.support_email
+  authorized_domains = var.envs[each.key].authorized_domains
+  redirect_uris      = var.envs[each.key].redirect_uris
+  homepage_url       = var.homepage_url
+  app_name           = var.app_name
+
+  depends_on = [module.project]
 }

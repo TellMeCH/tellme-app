@@ -114,12 +114,3 @@ resource "google_secret_manager_secret_iam_member" "backend_dev_django_settings"
   member = "group:${var.backend_dev_group}"
   depends_on = [module.secrets]
 }
-
-resource "google_secret_manager_secret_iam_member" "backend_dev_firebase_config" {
-  for_each = local.sa_envs
-  project = module.project[each.key].project_id
-  secret_id = "firebase_config"
-  role = "roles/secretmanager.secretAccessor"
-  member = "group:${var.backend_dev_group}"
-  depends_on = [module.secrets]
-}

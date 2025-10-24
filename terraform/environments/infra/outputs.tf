@@ -1,4 +1,15 @@
 # Ready-to-paste backend snippets (staging/prod use different prefixes)
+output "backend_snippet_infra" {
+  value = <<EOT
+  terraform {
+    backend "gcs" {
+      bucket = "${google_storage_bucket.tfstate.name}"
+      prefix = "infra/envs/infra"
+    }
+  }
+  EOT
+}
+
 output "backend_snippet_staging" {
   value = <<EOT
   terraform {
@@ -20,5 +31,3 @@ output "backend_snippet_prod" {
   }
   EOT
 }
-
-# TODO: What are these snippets useful for? I guess to define backends in infra/ staging/?
