@@ -37,8 +37,3 @@ output "tasks_queue_name" {
   value       = module.tasks.queue_name
   description = "Cloud Tasks queue name"
 }
-
-output "api_config_id" {
-  value       = local.api_config_id
-  description = "API Gateway configuration ID"
-}

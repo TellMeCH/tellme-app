@@ -1,4 +1,4 @@
-# Storage buckets moved from staging environment
+# Storage buckets
 resource "google_storage_bucket" "media_bucket" {
   project  = var.project_id
   name     = "${var.project_id}_${var.media_bucket}"
@@ -15,6 +15,18 @@ resource "google_storage_bucket" "call_processing_bucket" {
   uniform_bucket_level_access = false
   public_access_prevention    = "inherited"
   force_destroy               = false
+}
+
+# Search API Key
+resource "google_apikeys_key" "custom_search_key" {
+  name    = "revenue_at_stake_search_api_key"
+  project = var.project_id
+
+  restrictions {
+    api_targets {
+      service = "customsearch.googleapis.com"
+    }
+  }
 }
 
 # CloudSQL module

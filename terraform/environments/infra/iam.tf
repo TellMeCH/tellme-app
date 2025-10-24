@@ -105,6 +105,14 @@ resource "google_project_iam_member" "cloudscheduler_admin" {
   member = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
+# API Key Admin
+resource "google_project_iam_member" "api_keys_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/serviceusage.apiKeysAdmin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
 # Backend Developer role - group access to secrets
 resource "google_secret_manager_secret_iam_member" "backend_dev_django_settings" {
   for_each = local.sa_envs
