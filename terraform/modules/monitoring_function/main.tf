@@ -25,7 +25,7 @@ resource "google_cloudfunctions2_function" "monitoring_function" {
   build_config {
     runtime               = var.runtime
     entry_point           = var.entry_point
-    service_account = var.build_service_account_email
+    service_account = var.build_service_account_name
     source {
       repo_source {
         project_id   = var.project_id

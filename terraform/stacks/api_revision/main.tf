@@ -20,6 +20,7 @@ resource "google_storage_bucket" "call_processing_bucket" {
 # Search API Key
 resource "google_apikeys_key" "custom_search_key" {
   name    = "revenue-at-stake-search-api-key"
+  display_name    = "revenue_at_stake_search_api_key"
   project = var.project_id
 
   restrictions {

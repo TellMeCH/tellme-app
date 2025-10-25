@@ -30,9 +30,9 @@ variable "entry_point" {
   description = "Entry point for the Cloud Function"
 }
 
-variable "build_service_account_email" {
+variable "build_service_account_name" {
   type        = string
-  description = "Service account email for Cloud Function builds (GitHub SA)"
+  description = "Service account name for Cloud Function builds (GitHub SA)"
 }
 
 variable "repo_name" {
