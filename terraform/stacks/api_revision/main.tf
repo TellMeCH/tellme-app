@@ -62,19 +62,30 @@ module "cloud_run_v2" {
   create_service_account = false
   service_account        = var.service_account_email
   execution_environment  = "EXECUTION_ENVIRONMENT_GEN2"
+
   template_scaling = {
     min_instance_count = 0
     max_instance_count = 10
   }
-  allow_unauthenticated = true
-  cloudsql_instances = [module.cloudsql.instance_connection_name]
+
+  ingress = "INGRESS_TRAFFIC_ALL"  # Allows unauthenticated access
+  members = ["allUsers"]  # This makes it publicly accessible
 
   containers = [
     {
       container_image = var.image_url
+
       resources = {
         limits = { memory = "1Gi" }
       }
+
+      volume_mounts = [
+        {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      ]
+
       env_vars = {
         GOOGLE_CLOUD_PROJECT     = var.project_id
         REGION                   = var.region
@@ -88,6 +99,15 @@ module "cloud_run_v2" {
         CALL_PROCESSING_BUCKET  = google_storage_bucket.call_processing_bucket.name
         FRONTEND_PATH           = var.frontend_path
         CALL_PROCESSING_ENDPOINT = "None"
+      }
+    }
+  ]
+
+  volumes = [
+    {
+      name = "cloudsql"
+      cloud_sql_instance = {
+        instances = [module.cloudsql.instance_connection_name]
       }
     }
   ]
