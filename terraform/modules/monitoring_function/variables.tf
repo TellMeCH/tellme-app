@@ -35,20 +35,9 @@ variable "build_service_account_id" {
   description = "Service account ID for Cloud Function builds (GitHub SA)"
 }
 
-variable "repo_name" {
-  type        = string
-  description = "Cloud Source Repository name"
-}
-
-variable "branch_name" {
-  type        = string
-  description = "Branch name to deploy from"
-  default     = "main"
-}
-
 variable "source_dir" {
   type        = string
-  description = "Directory containing the function source code"
+  description = "Relative path from terraform root to the source directory (e.g., 'tellme/jobs/langfuse_exporter')"
 }
 
 variable "max_instance_count" {

@@ -1,3 +1,27 @@
+# Storage bucket for function source code
+resource "google_storage_bucket" "function_source" {
+  project  = var.project_id
+  name     = "${var.project_id}-${var.function_name}-source"
+  location = var.region
+
+  uniform_bucket_level_access = true
+  force_destroy               = true
+}
+
+# Archive the source code
+data "archive_file" "function_source" {
+  type        = "zip"
+  output_path = "${path.module}/function-source.zip"
+  source_dir  = "${path.root}/${var.source_dir}"
+}
+
+# Upload the zipped source to the bucket
+resource "google_storage_bucket_object" "function_source" {
+  name   = "function-source-${data.archive_file.function_source.output_md5}.zip"
+  bucket = google_storage_bucket.function_source.name
+  source = data.archive_file.function_source.output_path
+}
+
 # Service account for the monitoring function
 resource "google_service_account" "monitoring_function_sa" {
   project      = var.project_id
@@ -23,15 +47,14 @@ resource "google_cloudfunctions2_function" "monitoring_function" {
   location = var.region
 
   build_config {
-    runtime               = var.runtime
-    entry_point           = var.entry_point
-    service_account       = var.build_service_account_id
+    runtime         = var.runtime
+    entry_point     = var.entry_point
+    service_account = var.build_service_account_id
+
     source {
-      repo_source {
-        project_id   = var.project_id
-        repo_name    = var.repo_name
-        branch_name  = var.branch_name
-        dir          = var.source_dir
+      storage_source {
+        bucket = google_storage_bucket.function_source.name
+        object = google_storage_bucket_object.function_source.name
       }
     }
   }

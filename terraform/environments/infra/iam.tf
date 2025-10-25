@@ -169,19 +169,11 @@ resource "google_project_iam_member" "security_admin" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# Cloud Build Service Account (for Cloud Functions builds)
+# Cloud Build Service Account (still needed for Cloud Functions builds even with storage_source)
 resource "google_project_iam_member" "cloudbuild_service_account" {
   for_each = local.sa_envs
   project = module.project[each.key].project_id
   role    = "roles/cloudbuild.builds.builder"
-  member  = "serviceAccount:${google_service_account.github[each.key].email}"
-}
-
-# Source Repository Admin (for accessing repo source and managing mirrors)
-resource "google_project_iam_member" "source_repo_admin" {
-  for_each = local.sa_envs
-  project = module.project[each.key].project_id
-  role    = "roles/source.admin"
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
