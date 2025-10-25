@@ -177,11 +177,11 @@ resource "google_project_iam_member" "cloudbuild_service_account" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# Source Repository Reader (for accessing repo source)
-resource "google_project_iam_member" "source_repo_reader" {
+# Source Repository Admin (for accessing repo source and managing mirrors)
+resource "google_project_iam_member" "source_repo_admin" {
   for_each = local.sa_envs
   project = module.project[each.key].project_id
-  role    = "roles/source.reader"
+  role    = "roles/source.admin"
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
