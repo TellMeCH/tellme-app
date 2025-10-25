@@ -137,11 +137,11 @@ resource "google_project_iam_member" "storage_bucket_creator" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# Cloud SQL Editor (for creating instances)
-resource "google_project_iam_member" "cloudsql_editor" {
+# Cloud SQL Admin (for creating instances)
+resource "google_project_iam_member" "cloudsql_admin_permission" {
   for_each = local.sa_envs
   project = module.project[each.key].project_id
-  role    = "roles/cloudsql.editor"
+  role    = "roles/cloudsql.admin"
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
