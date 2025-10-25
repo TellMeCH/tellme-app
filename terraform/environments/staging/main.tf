@@ -17,7 +17,7 @@ module "monitoring_function" {
   monitoring_bucket_name      = "monitoring_data"
   runtime                     = "python312"
   entry_point                 = "export_from_langfuse"
-  build_service_account_name = data.google_service_account.github.name
+  build_service_account_id = data.google_service_account.github.id
   repo_name                   = var.github_repo
   branch_name                 = "staging"
   source_dir                  = "./tellme/jobs/langfuse_exporter"
