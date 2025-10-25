@@ -145,11 +145,11 @@ resource "google_project_iam_member" "cloudsql_editor" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
-# Cloud Tasks Editor (for creating queues)
-resource "google_project_iam_member" "cloudtasks_editor" {
+# Cloud Tasks Admin (for creating queues)
+resource "google_project_iam_member" "cloudtasks_admin_permission" {
   for_each = local.sa_envs
   project = module.project[each.key].project_id
-  role    = "roles/cloudtasks.editor"
+  role    = "roles/cloudtasks.admin"
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
