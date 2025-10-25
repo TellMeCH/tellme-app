@@ -113,6 +113,62 @@ resource "google_project_iam_member" "api_keys_admin" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
+# Minimal permissions for service account creation
+resource "google_project_iam_member" "service_account_creator" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/iam.serviceAccountCreator"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Storage Object Admin (for bucket creation and management)
+resource "google_project_iam_member" "storage_object_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Storage bucket creator
+resource "google_project_iam_member" "storage_bucket_creator" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Cloud SQL Editor (for creating instances)
+resource "google_project_iam_member" "cloudsql_editor" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/cloudsql.editor"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Cloud Tasks Admin (for creating queues)
+resource "google_project_iam_member" "cloudtasks_admin_permission" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/cloudtasks.admin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Cloud Functions Developer (for creating functions)
+resource "google_project_iam_member" "cloudfunctions_developer" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/cloudfunctions.developer"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Security Admin (for IAM policy management on specific resources)
+resource "google_project_iam_member" "security_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/iam.securityAdmin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
 # Backend Developer role - group access to secrets
 resource "google_secret_manager_secret_iam_member" "backend_dev_django_settings" {
   for_each = local.sa_envs
