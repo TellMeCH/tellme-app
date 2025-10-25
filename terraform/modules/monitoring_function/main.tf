@@ -64,7 +64,11 @@ resource "google_cloudfunctions2_function" "monitoring_function" {
     available_memory      = var.available_memory
     timeout_seconds       = var.timeout_seconds
     service_account_email = google_service_account.monitoring_function_sa.email
-    environment_variables = var.environment_variables
+    environment_variables = merge(var.environment_variables, {
+      SETTINGS_NAME        = var.settings_name
+      GOOGLE_CLOUD_PROJECT = var.project_id
+      MONITORING_BUCKET    = google_storage_bucket.monitoring_bucket.name
+    })
   }
 }
 

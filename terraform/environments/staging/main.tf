@@ -19,6 +19,7 @@ module "monitoring_function" {
   entry_point              = "export_from_langfuse"
   build_service_account_id = data.google_service_account.github.id
   source_dir               = "../../../tellme/jobs/langfuse_exporter"
+  settings_name            = var.settings_name
   schedule                 = "0 0 * * *"
   time_zone                = "Etc/UTC"
 }
