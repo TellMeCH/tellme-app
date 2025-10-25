@@ -184,6 +184,7 @@ jobs:
           CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
+          CALL_PROCESSING_ENDPOINT: "None"
         run: |
           uv run python manage.py migrate
 
@@ -198,6 +199,7 @@ jobs:
           CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
+          CALL_PROCESSING_ENDPOINT: "None"
         run: |
           uv run python manage.py collectstatic --noinput
 
@@ -213,6 +215,7 @@ jobs:
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
+          CALL_PROCESSING_ENDPOINT: "None"
         run: |
           uv run python manage.py create_superusers
 
