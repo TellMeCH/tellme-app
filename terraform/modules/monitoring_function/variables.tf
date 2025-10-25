@@ -40,6 +40,11 @@ variable "source_dir" {
   description = "Relative path from terraform root to the source directory (e.g., 'tellme/jobs/langfuse_exporter')"
 }
 
+variable "settings_name" {
+  type        = string
+  description = "Name of the settings secret"
+}
+
 variable "max_instance_count" {
   type        = number
   description = "Maximum number of instances"
