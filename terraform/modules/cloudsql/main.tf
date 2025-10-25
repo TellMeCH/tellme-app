@@ -62,6 +62,7 @@ provider "postgresql" {
   database        = google_sql_database.database.name
   sslmode         = "disable"  # Proxy handles SSL
   connect_timeout = 15
+  superuser       = false      # Admin user is not a superuser
 }
 
 # Create application database user
