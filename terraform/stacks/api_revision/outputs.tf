@@ -3,9 +3,9 @@ output "cloud_run_service_name" {
   value       = module.cloud_run_v2.service_name
 }
 
-output "service_url" {
-  value       = module.cloud_run_v2.service_url
-  description = "URL of the Cloud Run service"
+output "service_uri" {
+  value       = module.cloud_run_v2.service_uri
+  description = "URI of the Cloud Run service"
 }
 
 output "cloudsql_connection_name" {
