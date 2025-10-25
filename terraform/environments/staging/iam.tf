@@ -121,7 +121,7 @@ resource "google_project_iam_member" "github_cloudfunctions_admin" {
 
 # Allow GitHub to use monitoring function service account
 resource "google_service_account_iam_member" "github_monitoring_sa_user" {
-  service_account_id = module.monitoring_function.service_account_email
+  service_account_id = module.monitoring_function.service_account_name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${data.google_service_account.github.email}"
 }

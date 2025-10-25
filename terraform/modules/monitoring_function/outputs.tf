@@ -8,9 +8,9 @@ output "function_url" {
   description = "URL of the Cloud Function"
 }
 
-output "service_account_email" {
-  value       = google_service_account.monitoring_function_sa.email
-  description = "Email of the monitoring function service account"
+output "service_account_name" {
+  value       = google_service_account.monitoring_function_sa.name
+  description = "Name of the monitoring function service account"
 }
 
 output "monitoring_bucket_name" {
