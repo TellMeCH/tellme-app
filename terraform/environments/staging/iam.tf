@@ -112,13 +112,6 @@ resource "google_storage_bucket_iam_member" "github_call_processing_bucket" {
 }
 
 # Monitoring Function GitHub IAM bindings
-# Cloud Functions admin
-resource "google_project_iam_member" "github_cloudfunctions_admin" {
-  project = var.project_id
-  role    = "roles/cloudfunctions.admin"
-  member  = "serviceAccount:${data.google_service_account.github.email}"
-}
-
 # Allow GitHub to use monitoring function service account
 resource "google_service_account_iam_member" "github_monitoring_sa_user" {
   service_account_id = module.monitoring_function.service_account_name
@@ -127,11 +120,12 @@ resource "google_service_account_iam_member" "github_monitoring_sa_user" {
 }
 
 # Access to GCF v2 sources bucket
-resource "google_storage_bucket_iam_member" "github_gcf_sources_bucket_access" {
-  bucket = "gcf-v2-sources-${data.google_project.this.number}-${var.region}"
-  role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${data.google_service_account.github.email}"
-}
+# Note: Commented out because bucket doesn't exist until first function is deployed
+# resource "google_storage_bucket_iam_member" "github_gcf_sources_bucket_access" {
+#   bucket = "gcf-v2-sources-${data.google_project.this.number}-${var.region}"
+#   role   = "roles/storage.objectViewer"
+#   member = "serviceAccount:${data.google_service_account.github.email}"
+# }
 
 # Functions artifacts repository access
 resource "google_artifact_registry_repository_iam_member" "github_functions_artifacts_writer" {
