@@ -16,6 +16,8 @@ resource "google_cloud_run_v2_service_iam_member" "cloudrun_invoker_public" {
   name     = var.service_name
   role     = "roles/run.invoker"
   member   = "allUsers"
+
+  depends_on = [module.api_revision]
 }
 
 # Runtime service account IAM bindings (from resource_provisioning.sh)
@@ -128,10 +130,10 @@ resource "google_service_account_iam_member" "github_monitoring_sa_user" {
 # }
 
 # Functions artifacts repository access
-resource "google_artifact_registry_repository_iam_member" "github_functions_artifacts_writer" {
-  project    = var.project_id
-  location   = var.region
-  repository = "gcf-artifacts"
-  role       = "roles/artifactregistry.writer"
-  member     = "serviceAccount:${data.google_service_account.github.email}"
-}
+# resource "google_artifact_registry_repository_iam_member" "github_functions_artifacts_writer" {
+#   project    = var.project_id
+#   location   = var.region
+#   repository = "gcf-artifacts"
+#   role       = "roles/artifactregistry.writer"
+#   member     = "serviceAccount:${data.google_service_account.github.email}"
+# }
