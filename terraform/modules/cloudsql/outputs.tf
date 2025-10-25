@@ -29,6 +29,6 @@ output "admin_username" {
 }
 
 output "app_username" {
-  value       = var.create_app_user ? module.db_users[0].app_username : null
+  value       = var.create_app_user > 0 ? postgresql_role.app_user[0].name : null
   description = "PostgreSQL app user (database-level privileges)"
 }
