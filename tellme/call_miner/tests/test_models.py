@@ -77,6 +77,8 @@ def another_conversation_same_organization(agent, customer, another_topic_same_o
         duration=45,
         transcript="<agent>: How can I help you? <customer>: I have an issue.",
         sentiment=0.6,
+        starting_sentiment=1.0,
+        ending_sentiment=2.0,
         summary="Another Summary",
         title='Another Test Title',
         customer=customer,
@@ -763,3 +765,38 @@ class TestConversation:
                                                organization=another_organization)
         with pytest.raises(ValueError):
             conversation.topics.add(topic_other_org)
+
+    def test_get_avg_starting_sentiment_single_conversation(self, topic, conversation):
+        """
+        Test that get_trend for starting_sentiment returns the correct average starting sentiment for a single conversation.
+        """
+        avg_starting_sentiment = list(topic.get_trend(field='starting_sentiment', period='daily'))
+        assert len(avg_starting_sentiment) == 1
+        assert avg_starting_sentiment[0]['avg_starting_sentiment'] == conversation.starting_sentiment
+
+    def test_get_avg_ending_sentiment_single_conversation(self, topic, conversation):
+        """
+        Test that get_trend for ending_sentiment returns the correct average ending sentiment for a single conversation.
+        """
+        avg_ending_sentiment = list(topic.get_trend(field='ending_sentiment', period='daily'))
+        assert len(avg_ending_sentiment) == 1
+        assert avg_ending_sentiment[0]['avg_ending_sentiment'] == conversation.ending_sentiment
+
+    def test_get_avg_starting_ending_sentiment_multiple_conversations(self, topic, conversation,
+                                                                      another_conversation_same_organization):
+        """
+        Test that get_trend for starting/ending sentiment returns correct averages for multiple conversations.
+        """
+        another_conversation_same_organization.topics.add(topic)
+
+        # Test starting sentiment average
+        avg_starting_sentiment = list(topic.get_trend(field='starting_sentiment', period='weekly'))
+        assert len(avg_starting_sentiment) == 1
+        expected_starting_avg = (conversation.starting_sentiment + another_conversation_same_organization.starting_sentiment) / 2
+        assert avg_starting_sentiment[0]['avg_starting_sentiment'] == expected_starting_avg
+
+        # Test ending sentiment average
+        avg_ending_sentiment = list(topic.get_trend(field='ending_sentiment', period='weekly'))
+        assert len(avg_ending_sentiment) == 1
+        expected_ending_avg = (conversation.ending_sentiment + another_conversation_same_organization.ending_sentiment) / 2
+        assert avg_ending_sentiment[0]['avg_ending_sentiment'] == expected_ending_avg
