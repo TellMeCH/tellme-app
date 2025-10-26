@@ -775,6 +775,8 @@ class Command(BaseCommand):
                 naive_date = base_date + timedelta(days=random.randint(0, 90))  # Naive datetime
                 date = timezone.make_aware(naive_date)  # Convert to aware datetime
                 sentiment = random.uniform(0, 5)  # Sentiment between 0 and 5
+                starting_sentiment = random.uniform(0, 5)
+                ending_sentiment = random.uniform(0, 5)
                 duration = random.randint(30, 1800)  # Random duration in seconds
 
                 conversation = Conversation(
@@ -783,6 +785,8 @@ class Command(BaseCommand):
                     duration=duration,
                     transcript=data['transcript'],
                     sentiment=sentiment,
+                    starting_sentiment=starting_sentiment,
+                    ending_sentiment=ending_sentiment,
                     title=f"Conversation {i + 1} - {agent.user.email} assists {customer.external_id}",
                     summary=data['summary'],
                     input_tokens=random.randint(50, 200),

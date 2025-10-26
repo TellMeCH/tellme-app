@@ -132,6 +132,8 @@ def create_conversation(
     duration: float,
     transcript: str,
     sentiment: float,
+    starting_sentiment: float,
+    ending_sentiment: float,
     summary: str,
     title: str,
     input_tokens: int,
@@ -164,7 +166,9 @@ def create_conversation(
         timestamp (str): Call timestamp
         duration (float): Call duration in seconds
         transcript (str): Full call transcript
-        sentiment (float): Sentiment score
+        sentiment (float): Overall sentiment score (1-5)
+        starting_sentiment (float): Customer's sentiment at the beginning of the call (1-5)
+        ending_sentiment (float): Customer's sentiment at the end of the call (1-5)
         summary (str): AI-generated call summary
         title (str): AI-generated call title
         input_tokens (int): Number of input tokens used
@@ -225,6 +229,8 @@ def create_conversation(
         duration=duration,
         transcript=transcript,
         sentiment=sentiment,
+        starting_sentiment=starting_sentiment,
+        ending_sentiment=ending_sentiment,
         summary=summary,
         title=title,
         input_tokens=input_tokens,

@@ -316,9 +316,10 @@ class ConversationDetailSerializer(ConversationListSerializer):
 
     class Meta:
         model = Conversation
-        fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'topic_data',
-                  'suggested_topic_data', 'resolved', 'agent', 'agent_email', 'agent_first_name', 'agent_last_name',
-                  'customer', 'customer_id', 'revenue_at_stake', 'input_tokens', 'output_tokens', 'created']
+        fields = ['url', 'path', 'date', 'duration', 'summary', 'title', 'sentiment', 'starting_sentiment',
+                  'ending_sentiment', 'topic_data', 'suggested_topic_data', 'resolved', 'agent', 'agent_email',
+                  'agent_first_name', 'agent_last_name', 'customer', 'customer_id', 'revenue_at_stake', 'input_tokens',
+                  'output_tokens', 'created']
 
     def get_processed_transcript(self, obj):
         """

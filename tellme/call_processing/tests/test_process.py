@@ -165,6 +165,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -204,6 +206,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -264,6 +268,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -340,6 +346,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -425,6 +433,8 @@ class TestProcessRecordingView:
             "summary": "Customer inquiry about billing",
             "title": "Billing Inquiry",
             "sentiment": 3,
+            "starting_sentiment": 4,
+            "ending_sentiment": 5,
             "revenue_search_query": "",
             "resolved": True
         })
@@ -470,6 +480,8 @@ class TestProcessRecordingView:
             "summary": "Technical support request",
             "title": "Technical Support",
             "sentiment": 4,
+            "starting_sentiment": 4,
+            "ending_sentiment": 5,
             "revenue_search_query": "",
             "resolved": False
         })

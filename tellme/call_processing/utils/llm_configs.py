@@ -142,12 +142,28 @@ ENRICHMENT_PIPELINE = [
             outcome. Do not include customer or agent names.
 
             STEP 6: SATISFACTION ASSESSMENT
-            Evaluate the likelihood of customer churn on a scale of 1-5:
+            Evaluate customer satisfaction at three points in the conversation on a scale of 1-5:
+
+            Overall call sentiment (likelihood of customer churn):
             - 1: Customer will definitely not continue with the company (very dissatisfied)
             - 2: Customer is dissatisfied and likely to leave
             - 3: Customer is neutral, outcome uncertain
             - 4: Customer is satisfied and likely to remain
             - 5: Customer is highly satisfied and will definitely continue
+
+            Starting sentiment (customer's initial mood/satisfaction at the beginning of the call):
+            - 1: Very upset, frustrated, or angry when the call started
+            - 2: Dissatisfied or concerned at the beginning
+            - 3: Neutral or business-like at the start
+            - 4: Positive or friendly when the call began
+            - 5: Very happy or enthusiastic at the beginning
+
+            Ending sentiment (customer's final mood/satisfaction at the end of the call):
+            - 1: Very upset, frustrated, or angry when the call ended
+            - 2: Still dissatisfied or unresolved at the end
+            - 3: Neutral or indifferent when ending
+            - 4: Satisfied or pleased at the end
+            - 5: Very happy or grateful when the call concluded
 
             STEP 7: REVENUE SEARCH QUERY
             Identify any distinct products or services being discussed. For example, if the customer is calling to
@@ -173,8 +189,10 @@ ENRICHMENT_PIPELINE = [
                 "summary": "call summary text",
                 "title": "call title",
                 "sentiment": 3,
-                "revenue_search_query": "product search query or empty string"
-                "resolved": False
+                "starting_sentiment": 2,
+                "ending_sentiment": 4,
+                "revenue_search_query": "product search query or empty string",
+                "resolved": false
             }
             Do not add any text before or after the JSON.
             """,
@@ -216,10 +234,20 @@ ENRICHMENT_PIPELINE = [
                                 "minimum": 1,
                                 "maximum": 5
                             },
+                            "starting_sentiment": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "ending_sentiment": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
                             "revenue_search_query": {"type": "string"},
                             "resolved": {"type": "boolean"}
                         },
-                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "revenue_search_query", "resolved"]
+                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "starting_sentiment", "ending_sentiment", "revenue_search_query", "resolved"]
                     },
                     "strict": True
                 }
