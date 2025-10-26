@@ -643,7 +643,8 @@ class CustomerModifySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['id', 'created', 'organization', 'external_id', 'first_name', 'last_name', 'birth_date']
+        fields = ['id', 'created', 'organization', 'external_id', 'first_name', 'last_name', 'birth_date', 'postcode',
+                  'loyalty_number']
 
 
 class CustomerListSerializer(serializers.HyperlinkedModelSerializer):

@@ -796,11 +796,13 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     Calls act as a bridge between agents and customers
     """
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
-    external_id = models.CharField(max_length=128, null=False)  # Comes from call recording software
+    external_id = models.CharField(max_length=128, null=False)
     created = models.DateTimeField(auto_now_add=True)
     first_name = models.CharField(max_length=128, null=True)
     last_name = models.CharField(max_length=128, null=True)
     birth_date = models.DateField(null=True)
+    postcode = models.CharField(max_length=128, null=True)
+    loyalty_number = models.CharField(max_length=128, null=True)
 
     class Meta:
         unique_together = ('organization', 'external_id')
