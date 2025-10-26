@@ -61,13 +61,14 @@ class AgentAdmin(EmployeeAdmin):
 
 
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['external_id', 'organization']
-    search_fields = ['external_id', 'organization__name']
+    list_display = ['external_id', 'organization', 'first_name', 'last_name', 'birth_date', 'postcode', 'loyalty_number']
+    search_fields = ['external_id', 'organization__name', 'first_name', 'last_name']
     list_filter = ['organization']
 
 
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ['path', 'date', 'agent', 'customer', 'duration', 'sentiment']
+    list_display = ['path', 'date', 'agent', 'customer', 'duration', 'sentiment', 'starting_sentiment',
+                    'ending_sentiment']
     search_fields = ['path', 'agent__name', 'customer__name']
     list_filter = ['date', 'agent', 'customer']
 

@@ -165,6 +165,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -204,6 +206,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -264,6 +268,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -340,6 +346,8 @@ class TestProcessRecordingView:
             "summary": "Short summary",
             "title": "Test Call",
             "sentiment": 4,
+            "starting_sentiment": 3,
+            "ending_sentiment": 5,
             "revenue_at_stake": 3.4,
             "resolved": False,
         })
@@ -396,3 +404,98 @@ class TestProcessRecordingView:
         assert conv.transcript is not None
         assert conv.title == "Test Call"
         assert conv.summary == "Short summary"
+
+    def test_customer_identification_with_postcode_and_loyalty_number(
+        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        mock_groq, mock_openai, mock_pydub, mock_processing_user, mock_dlp
+    ):
+        """
+        Test that postcode and loyalty_number are extracted and stored correctly
+        """
+        payload_without_customer = valid_task_payload.copy()
+        del payload_without_customer["customer_id"]
+
+        # Mock enrichment response with postcode and loyalty number
+        mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
+            "agent_speaker_labels": ["Speaker 0"],
+            "customer_speaker_labels": ["Speaker 1"],
+            "customer_info": {
+                "full_name": "Alice Johnson",
+                "address": "123 Main St",
+                "birth_date": "1985-03-15",
+                "phone_number": "555-0123",
+                "postcode": "12345",
+                "loyalty_number": "LOYAL999"
+            },
+            "topics": ["Billing"],
+            "suggested_topics": [],
+            "new_topics": [],
+            "summary": "Customer inquiry about billing",
+            "title": "Billing Inquiry",
+            "sentiment": 3,
+            "starting_sentiment": 4,
+            "ending_sentiment": 5,
+            "revenue_search_query": "",
+            "resolved": True
+        })
+
+        url = reverse("process")
+        response = api_client.post(url, data=payload_without_customer, format="json")
+        assert response.status_code == status.HTTP_200_OK
+
+        conv = Conversation.objects.last()
+        customer = conv.customer
+
+        # Verify new customer fields are populated
+        assert customer.postcode == "12345"
+        assert customer.loyalty_number == "LOYAL999"
+        assert customer.first_name == "Alice"
+        assert customer.last_name == "Johnson"
+
+    def test_customer_identification_priority_hashing(
+        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        mock_groq, mock_openai, mock_pydub, mock_processing_user, mock_dlp
+    ):
+        """
+        Test that customer hashing works with fallback priority (name+postcode when no birth date)
+        """
+        payload_without_customer = valid_task_payload.copy()
+        del payload_without_customer["customer_id"]
+
+        # Mock enrichment response with name and postcode but no birth date
+        mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
+            "agent_speaker_labels": ["Speaker 0"],
+            "customer_speaker_labels": ["Speaker 1"],
+            "customer_info": {
+                "full_name": "Bob Smith",
+                "address": "",
+                "birth_date": "",
+                "phone_number": "",
+                "postcode": "54321",
+                "loyalty_number": ""
+            },
+            "topics": ["Technical Support"],
+            "suggested_topics": [],
+            "new_topics": [],
+            "summary": "Technical support request",
+            "title": "Technical Support",
+            "sentiment": 4,
+            "starting_sentiment": 4,
+            "ending_sentiment": 5,
+            "revenue_search_query": "",
+            "resolved": False
+        })
+
+        url = reverse("process")
+        response = api_client.post(url, data=payload_without_customer, format="json")
+        assert response.status_code == status.HTTP_200_OK
+
+        conv = Conversation.objects.last()
+        customer = conv.customer
+
+        # Verify customer was created with name+postcode hash
+        assert customer.first_name == "Bob"
+        assert customer.last_name == "Smith"
+        assert customer.birth_date is None
+        assert customer.postcode == "54321"
+        assert len(customer.external_id) == 64  # SHA-256 hash length

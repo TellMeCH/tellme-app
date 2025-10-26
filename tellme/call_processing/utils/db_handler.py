@@ -132,6 +132,8 @@ def create_conversation(
     duration: float,
     transcript: str,
     sentiment: float,
+    starting_sentiment: float,
+    ending_sentiment: float,
     summary: str,
     title: str,
     input_tokens: int,
@@ -141,6 +143,8 @@ def create_conversation(
     customer_first_name: str = None,
     customer_last_name: str = None,
     customer_birth_date: str = None,
+    customer_postcode: str = None,
+    customer_loyalty_number: str = None,
     **kwargs
 ):
     """
@@ -162,7 +166,9 @@ def create_conversation(
         timestamp (str): Call timestamp
         duration (float): Call duration in seconds
         transcript (str): Full call transcript
-        sentiment (float): Sentiment score
+        sentiment (float): Overall sentiment score (1-5)
+        starting_sentiment (float): Customer's sentiment at the beginning of the call (1-5)
+        ending_sentiment (float): Customer's sentiment at the end of the call (1-5)
         summary (str): AI-generated call summary
         title (str): AI-generated call title
         input_tokens (int): Number of input tokens used
@@ -172,6 +178,8 @@ def create_conversation(
         customer_first_name (str, optional): Customer's first name
         customer_last_name (str, optional): Customer's last name
         customer_birth_date (str, optional): Customer's birth date in YYYY-MM-DD format
+        customer_postcode (str, optional): Customer's postcode
+        customer_loyalty_number (str, optional): Customer's loyalty number
         **kwargs: Additional keyword arguments
 
     Raises:
@@ -182,9 +190,13 @@ def create_conversation(
     customer, _ = Customer.objects.get_or_create(
         organization=org,
         external_id=customer_id,
-        first_name=customer_first_name,
-        last_name=customer_last_name,
-        birth_date=customer_birth_date,
+        defaults={
+            'first_name': customer_first_name,
+            'last_name': customer_last_name,
+            'birth_date': customer_birth_date,
+            'postcode': customer_postcode,
+            'loyalty_number': customer_loyalty_number,
+        }
     )
     agent = Agent.objects.get(id=agent_id)
 
@@ -217,6 +229,8 @@ def create_conversation(
         duration=duration,
         transcript=transcript,
         sentiment=sentiment,
+        starting_sentiment=starting_sentiment,
+        ending_sentiment=ending_sentiment,
         summary=summary,
         title=title,
         input_tokens=input_tokens,

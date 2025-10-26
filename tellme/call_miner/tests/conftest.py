@@ -236,6 +236,8 @@ def conversation(agent, customer, topic, suggested_topic):
         <customer>: Thank you, it's driving me crazy!
         """ * 4,
         sentiment=4.5,
+        starting_sentiment=3.0,
+        ending_sentiment=5.0,
         agent=agent,
         customer=customer,
         input_tokens=100,
@@ -267,6 +269,8 @@ def conversation_today(agent, customer, topic):
         <customer>: Thank you, it's driving me crazy!
         """ * 4,
         sentiment=4.5,
+        starting_sentiment=4.0,
+        ending_sentiment=4.0,
         agent=agent,
         customer=customer,
         input_tokens=100,
@@ -295,6 +299,8 @@ def another_organization_conversation(another_organization_agent, another_organi
         summary='Another summary',
         transcript='Another test transcript',
         sentiment=3.5,
+        starting_sentiment=2.0,
+        ending_sentiment=4.0,
         agent=another_organization_agent,
         customer=another_organization_customer,
         input_tokens=100,
