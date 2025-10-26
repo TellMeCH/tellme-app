@@ -166,12 +166,16 @@ class CallEnricher:
         if 'customer_info' in enriched_response:
             hashed_id, first_name, last_name, birth_date = create_customer_id(
                 enriched_response['customer_info']['full_name'],
-                enriched_response['customer_info']['birth_date']
+                enriched_response['customer_info']['birth_date'],
+                enriched_response['customer_info'].get('postcode', ''),
+                enriched_response['customer_info'].get('loyalty_number', '')
             )
             enriched_response['customer_id'] = hashed_id
             enriched_response['customer_first_name'] = first_name
             enriched_response['customer_last_name'] = last_name
             enriched_response['customer_birth_date'] = birth_date
+            enriched_response['customer_postcode'] = enriched_response['customer_info'].get('postcode', '')
+            enriched_response['customer_loyalty_number'] = enriched_response['customer_info'].get('loyalty_number', '')
             del enriched_response['customer_info']
 
         return enriched_response, input_tokens, output_tokens
