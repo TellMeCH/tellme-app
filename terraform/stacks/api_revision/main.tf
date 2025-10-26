@@ -97,7 +97,7 @@ module "cloud_run_v2" {
         DATABASE_NAME           = var.database_name
         GS_BUCKET_NAME          = google_storage_bucket.media_bucket.name
         CLOUD_TASKS_QUEUE_NAME  = module.tasks.queue_name
-        CALL_PROCESSING_BUCKET  = google_storage_bucket.call_processing_bucket.name
+        CALL_PROCESSING_BUCKET  = var.call_processing_bucket
         FRONTEND_PATH           = var.frontend_path
         CALL_PROCESSING_ENDPOINT = "None"
       }
