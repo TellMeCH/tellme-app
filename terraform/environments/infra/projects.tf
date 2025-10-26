@@ -28,7 +28,8 @@ locals {
     "firebase.googleapis.com",
     "identitytoolkit.googleapis.com",
     "iap.googleapis.com",
-    "apikeys.googleapis.com"
+    "apikeys.googleapis.com",
+    "cloudbilling.googleapis.com"
   ]
 }
 
