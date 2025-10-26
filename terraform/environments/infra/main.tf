@@ -58,6 +58,21 @@ resource "google_artifact_registry_repository" "artifact_repo" {
   format        = "DOCKER"
 }
 
+# Generate service account key for CICD (needed for Firebase custom tokens)
+resource "google_service_account_key" "github_key" {
+  for_each           = local.sa_envs
+  service_account_id = google_service_account.github[each.key].name
+}
+
+# Store the key in the existing secret
+resource "google_secret_manager_secret_version" "cicd_service_account_key" {
+  for_each    = local.sa_envs
+  secret      = "projects/${module.project[each.key].project_id}/secrets/cicd_service_account_key"
+  secret_data = base64decode(google_service_account_key.github_key[each.key].private_key)
+
+  depends_on = [module.secrets]
+}
+
 # Firebase Authentication configuration for each environment
 module "firebase" {
   for_each           = local.sa_envs
