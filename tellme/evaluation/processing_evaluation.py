@@ -291,6 +291,20 @@ class CallProcessingEvaluator:
         results['sentiment_diff'] = abs(actual_sentiment - expected_sentiment)
         results['sentiment_close_match'] = results['sentiment_diff'] <= 1.0  # Within 1 point
 
+        # Starting sentiment comparison
+        actual_starting = float(actual.get('starting_sentiment', 0))
+        expected_starting = float(expected.get('starting_sentiment', 0))
+        results['starting_sentiment_exact_match'] = actual_starting == expected_starting
+        results['starting_sentiment_diff'] = abs(actual_starting - expected_starting)
+        results['starting_sentiment_close_match'] = results['starting_sentiment_diff'] <= 1.0
+
+        # Ending sentiment comparison
+        actual_ending = float(actual.get('ending_sentiment', 0))
+        expected_ending = float(expected.get('ending_sentiment', 0))
+        results['ending_sentiment_exact_match'] = actual_ending == expected_ending
+        results['ending_sentiment_diff'] = abs(actual_ending - expected_ending)
+        results['ending_sentiment_close_match'] = results['ending_sentiment_diff'] <= 1.0
+
         # Customer ID extraction
         results['customer_id_match'] = (actual.get('customer_id') == expected.get('customer_id')) or (expected.get('customer_id') is None)
 
@@ -471,13 +485,35 @@ class CallProcessingEvaluator:
         # Sentiment comparison
         expected_sentiment = expected_data.get('sentiment')
         actual_sentiment = actual_data.get('sentiment')
-        print(f"\nSentiment - Expected: {expected_sentiment}, Actual: {actual_sentiment}")
+        print(f"\nOverall Sentiment - Expected: {expected_sentiment}, Actual: {actual_sentiment}")
         if result.get('sentiment_exact_match', False):
-            print("✓ Sentiment: EXACT MATCH")
+            print("✓ Overall Sentiment: EXACT MATCH")
         elif result.get('sentiment_close_match', False):
-            print(f"~ Sentiment: CLOSE MATCH (diff: {result.get('sentiment_diff', 0):.1f})")
+            print(f"~ Overall Sentiment: CLOSE MATCH (diff: {result.get('sentiment_diff', 0):.1f})")
         else:
-            print(f"✗ Sentiment: MISMATCH (diff: {result.get('sentiment_diff', 0):.1f})")
+            print(f"✗ Overall Sentiment: MISMATCH (diff: {result.get('sentiment_diff', 0):.1f})")
+
+        # Starting sentiment comparison
+        expected_starting = expected_data.get('starting_sentiment')
+        actual_starting = actual_data.get('starting_sentiment')
+        print(f"\nStarting Sentiment - Expected: {expected_starting}, Actual: {actual_starting}")
+        if result.get('starting_sentiment_exact_match', False):
+            print("✓ Starting Sentiment: EXACT MATCH")
+        elif result.get('starting_sentiment_close_match', False):
+            print(f"~ Starting Sentiment: CLOSE MATCH (diff: {result.get('starting_sentiment_diff', 0):.1f})")
+        else:
+            print(f"✗ Starting Sentiment: MISMATCH (diff: {result.get('starting_sentiment_diff', 0):.1f})")
+
+        # Ending sentiment comparison
+        expected_ending = expected_data.get('ending_sentiment')
+        actual_ending = actual_data.get('ending_sentiment')
+        print(f"\nEnding Sentiment - Expected: {expected_ending}, Actual: {actual_ending}")
+        if result.get('ending_sentiment_exact_match', False):
+            print("✓ Ending Sentiment: EXACT MATCH")
+        elif result.get('ending_sentiment_close_match', False):
+            print(f"~ Ending Sentiment: CLOSE MATCH (diff: {result.get('ending_sentiment_diff', 0):.1f})")
+        else:
+            print(f"✗ Ending Sentiment: MISMATCH (diff: {result.get('ending_sentiment_diff', 0):.1f})")
 
         # Suggested topics comparison
         expected_suggested = set(expected_data.get('suggested_topics', []))
@@ -713,7 +749,7 @@ class CallProcessingEvaluator:
         numeric_metrics = [
             'topics_precision', 'topics_recall',
             'suggested_topics_precision', 'suggested_topics_recall',
-            'sentiment_diff',
+            'sentiment_diff', 'starting_sentiment_diff', 'ending_sentiment_diff',
             'revenue_diff', 'revenue_relative_diff',
             'summary_similarity', 'title_similarity', 'transcript_similarity',
             'new_topics_similarity', 'search_query_similarity', 'overall_quality'
@@ -729,6 +765,8 @@ class CallProcessingEvaluator:
             'topics_exact_match',
             'suggested_topics_exact_match',
             'sentiment_exact_match', 'sentiment_close_match',
+            'starting_sentiment_exact_match', 'starting_sentiment_close_match',
+            'ending_sentiment_exact_match', 'ending_sentiment_close_match',
             'customer_id_match',
             'revenue_match'
         ]
@@ -860,7 +898,11 @@ def main():
                 print(f"  {metric:33}: {value:.3f}")
 
         print("\n  Sentiment Performance:")
-        sentiment_metrics = ['avg_sentiment_diff', 'pct_sentiment_exact_match', 'pct_sentiment_close_match']
+        sentiment_metrics = [
+            'avg_sentiment_diff', 'pct_sentiment_exact_match', 'pct_sentiment_close_match',
+            'avg_starting_sentiment_diff', 'pct_starting_sentiment_exact_match', 'pct_starting_sentiment_close_match',
+            'avg_ending_sentiment_diff', 'pct_ending_sentiment_exact_match', 'pct_ending_sentiment_close_match'
+        ]
         for metric in sentiment_metrics:
             if metric in results['summary']:
                 value = results['summary'][metric]
