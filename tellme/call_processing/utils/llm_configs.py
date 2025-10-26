@@ -45,6 +45,8 @@ ENRICHMENT_PIPELINE = [
             - Address or location details
             - Birth date, age, or date-related information
             - Phone number or other contact information
+            - Postcode or postal code (from address or separately mentioned)
+            - Loyalty number, membership number, or customer ID
             Use empty strings for any information not mentioned in the call.
 
             STEP 3: OUTPUT FORMAT
@@ -56,7 +58,9 @@ ENRICHMENT_PIPELINE = [
                     "full_name": "extracted name or empty string",
                     "address": "extracted address or empty string",
                     "birth_date": "extracted birth date or empty string",
-                    "phone_number": "extracted phone number or empty string"
+                    "phone_number": "extracted phone number or empty string",
+                    "postcode": "extracted postcode or empty string",
+                    "loyalty_number": "extracted loyalty/membership number or empty string"
                 }
             }
             Do not add any text before or after the JSON.
@@ -87,14 +91,16 @@ ENRICHMENT_PIPELINE = [
                                     "full_name": {"type": "string"},
                                     "address": {"type": "string"},
                                     "birth_date": {"type": "string"},
-                                    "phone_number": {"type": "string"}
+                                    "phone_number": {"type": "string"},
+                                    "postcode": {"type": "string"},
+                                    "loyalty_number": {"type": "string"}
                                 },
-                                "required": ["full_name", "address", "birth_date", "phone_number"]
+                                "required": ["full_name", "address", "birth_date", "phone_number", "postcode", "loyalty_number"]
                             }
                         },
                         "required": ["agent_speaker_labels", "customer_speaker_labels", "customer_info"],
-                        "strict": True
-                    }
+                    },
+                    "strict": True
                 }
             }
         }

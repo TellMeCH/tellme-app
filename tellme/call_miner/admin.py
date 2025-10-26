@@ -61,8 +61,8 @@ class AgentAdmin(EmployeeAdmin):
 
 
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['external_id', 'organization']
-    search_fields = ['external_id', 'organization__name']
+    list_display = ['external_id', 'organization', 'first_name', 'last_name', 'birth_date', 'postcode', 'loyalty_number']
+    search_fields = ['external_id', 'organization__name', 'first_name', 'last_name']
     list_filter = ['organization']
 
 

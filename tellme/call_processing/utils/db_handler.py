@@ -141,6 +141,8 @@ def create_conversation(
     customer_first_name: str = None,
     customer_last_name: str = None,
     customer_birth_date: str = None,
+    customer_postcode: str = None,
+    customer_loyalty_number: str = None,
     **kwargs
 ):
     """
@@ -172,6 +174,8 @@ def create_conversation(
         customer_first_name (str, optional): Customer's first name
         customer_last_name (str, optional): Customer's last name
         customer_birth_date (str, optional): Customer's birth date in YYYY-MM-DD format
+        customer_postcode (str, optional): Customer's postcode
+        customer_loyalty_number (str, optional): Customer's loyalty number
         **kwargs: Additional keyword arguments
 
     Raises:
@@ -182,9 +186,13 @@ def create_conversation(
     customer, _ = Customer.objects.get_or_create(
         organization=org,
         external_id=customer_id,
-        first_name=customer_first_name,
-        last_name=customer_last_name,
-        birth_date=customer_birth_date,
+        defaults={
+            'first_name': customer_first_name,
+            'last_name': customer_last_name,
+            'birth_date': customer_birth_date,
+            'postcode': customer_postcode,
+            'loyalty_number': customer_loyalty_number,
+        }
     )
     agent = Agent.objects.get(id=agent_id)
 
