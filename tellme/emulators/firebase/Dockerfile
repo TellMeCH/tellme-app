@@ -13,4 +13,4 @@ COPY firebase.json .
 
 EXPOSE 9099 8085 9000 5001 4400 4500
 
-CMD ["firebase", "emulators:start", "--project", "tellme-app-dev", "--only", "auth"]
+CMD ["firebase", "emulators:start", "--project", "tellme-app-staging", "--only", "auth"]

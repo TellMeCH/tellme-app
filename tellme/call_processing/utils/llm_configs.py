@@ -45,6 +45,8 @@ ENRICHMENT_PIPELINE = [
             - Address or location details
             - Birth date, age, or date-related information
             - Phone number or other contact information
+            - Postcode or postal code (from address or separately mentioned)
+            - Loyalty number, membership number, or customer ID
             Use empty strings for any information not mentioned in the call.
 
             STEP 3: OUTPUT FORMAT
@@ -56,7 +58,9 @@ ENRICHMENT_PIPELINE = [
                     "full_name": "extracted name or empty string",
                     "address": "extracted address or empty string",
                     "birth_date": "extracted birth date or empty string",
-                    "phone_number": "extracted phone number or empty string"
+                    "phone_number": "extracted phone number or empty string",
+                    "postcode": "extracted postcode or empty string",
+                    "loyalty_number": "extracted loyalty/membership number or empty string"
                 }
             }
             Do not add any text before or after the JSON.
@@ -87,14 +91,16 @@ ENRICHMENT_PIPELINE = [
                                     "full_name": {"type": "string"},
                                     "address": {"type": "string"},
                                     "birth_date": {"type": "string"},
-                                    "phone_number": {"type": "string"}
+                                    "phone_number": {"type": "string"},
+                                    "postcode": {"type": "string"},
+                                    "loyalty_number": {"type": "string"}
                                 },
-                                "required": ["full_name", "address", "birth_date", "phone_number"]
+                                "required": ["full_name", "address", "birth_date", "phone_number", "postcode", "loyalty_number"]
                             }
                         },
                         "required": ["agent_speaker_labels", "customer_speaker_labels", "customer_info"],
-                        "strict": True
-                    }
+                    },
+                    "strict": True
                 }
             }
         }
@@ -136,12 +142,28 @@ ENRICHMENT_PIPELINE = [
             outcome. Do not include customer or agent names.
 
             STEP 6: SATISFACTION ASSESSMENT
-            Evaluate the likelihood of customer churn on a scale of 1-5:
+            Evaluate customer satisfaction at three points in the conversation on a scale of 1-5:
+
+            Overall call sentiment (likelihood of customer churn):
             - 1: Customer will definitely not continue with the company (very dissatisfied)
             - 2: Customer is dissatisfied and likely to leave
             - 3: Customer is neutral, outcome uncertain
             - 4: Customer is satisfied and likely to remain
             - 5: Customer is highly satisfied and will definitely continue
+
+            Starting sentiment (customer's initial mood/satisfaction at the beginning of the call):
+            - 1: Very upset, frustrated, or angry when the call started
+            - 2: Dissatisfied or concerned at the beginning
+            - 3: Neutral or business-like at the start
+            - 4: Positive or friendly when the call began
+            - 5: Very happy or enthusiastic at the beginning
+
+            Ending sentiment (customer's final mood/satisfaction at the end of the call):
+            - 1: Very upset, frustrated, or angry when the call ended
+            - 2: Still dissatisfied or unresolved at the end
+            - 3: Neutral or indifferent when ending
+            - 4: Satisfied or pleased at the end
+            - 5: Very happy or grateful when the call concluded
 
             STEP 7: REVENUE SEARCH QUERY
             Identify any distinct products or services being discussed. For example, if the customer is calling to
@@ -167,8 +189,10 @@ ENRICHMENT_PIPELINE = [
                 "summary": "call summary text",
                 "title": "call title",
                 "sentiment": 3,
-                "revenue_search_query": "product search query or empty string"
-                "resolved": False
+                "starting_sentiment": 2,
+                "ending_sentiment": 4,
+                "revenue_search_query": "product search query or empty string",
+                "resolved": false
             }
             Do not add any text before or after the JSON.
             """,
@@ -210,10 +234,20 @@ ENRICHMENT_PIPELINE = [
                                 "minimum": 1,
                                 "maximum": 5
                             },
+                            "starting_sentiment": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
+                            "ending_sentiment": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 5
+                            },
                             "revenue_search_query": {"type": "string"},
                             "resolved": {"type": "boolean"}
                         },
-                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "revenue_search_query", "resolved"]
+                        "required": ["topics", "suggested_topics", "new_topics", "summary", "title", "sentiment", "starting_sentiment", "ending_sentiment", "revenue_search_query", "resolved"]
                     },
                     "strict": True
                 }

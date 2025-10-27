@@ -234,6 +234,8 @@ class ConversationTrendMixin:
     field_aggregations = {
         'count': (models.Count('id'), 'count'),
         'sentiment': (models.Avg('sentiment'), 'avg_sentiment'),
+        'starting_sentiment': (models.Avg('starting_sentiment'), 'avg_starting_sentiment'),
+        'ending_sentiment': (models.Avg('ending_sentiment'), 'avg_ending_sentiment'),
         'duration': (models.Avg('duration'), 'avg_duration'),
         'revenue': (models.Sum('revenue_at_stake'), 'total_revenue')
     }
@@ -796,11 +798,13 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     Calls act as a bridge between agents and customers
     """
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
-    external_id = models.CharField(max_length=128, null=False)  # Comes from call recording software
+    external_id = models.CharField(max_length=128, null=False)
     created = models.DateTimeField(auto_now_add=True)
     first_name = models.CharField(max_length=128, null=True)
     last_name = models.CharField(max_length=128, null=True)
     birth_date = models.DateField(null=True)
+    postcode = models.CharField(max_length=128, null=True)
+    loyalty_number = models.CharField(max_length=128, null=True)
 
     class Meta:
         unique_together = ('organization', 'external_id')
@@ -824,6 +828,8 @@ class Conversation(models.Model):
     duration = models.FloatField()
     transcript = models.TextField()
     sentiment = models.FloatField(max_length=100)
+    starting_sentiment = models.FloatField(max_length=100, default=2.5)
+    ending_sentiment = models.FloatField(max_length=100, default=2.5)
     summary = models.TextField()
     title = models.TextField()
     input_tokens = models.IntegerField()

@@ -119,11 +119,13 @@ class TestCreateSuggestedTopics:
         old_conv1 = Conversation.objects.create(
             path="old_conv1.wav", date=timezone.now(), duration=60,
             title="Old1", summary="Old1", transcript="Old1", sentiment=3,
+            starting_sentiment=2, ending_sentiment=4,
             agent=agent, customer=customer, input_tokens=10, output_tokens=10
         )
         old_conv2 = Conversation.objects.create(
             path="old_conv2.wav", date=timezone.now(), duration=60,
             title="Old2", summary="Old2", transcript="Old2", sentiment=3,
+            starting_sentiment=2, ending_sentiment=4,
             agent=agent, customer=customer, input_tokens=10, output_tokens=10
         )
         
@@ -166,11 +168,13 @@ class TestCreateSuggestedTopics:
         conv1 = Conversation.objects.create(
             path="pop_conv1.wav", date=timezone.now(), duration=60,
             title="Pop1", summary="Pop1", transcript="Pop1", sentiment=3,
+            starting_sentiment=2, ending_sentiment=4,
             agent=agent, customer=customer, input_tokens=10, output_tokens=10
         )
         conv2 = Conversation.objects.create(
             path="pop_conv2.wav", date=timezone.now(), duration=60,
             title="Pop2", summary="Pop2", transcript="Pop2", sentiment=3,
+            starting_sentiment=2, ending_sentiment=4,
             agent=agent, customer=customer, input_tokens=10, output_tokens=10
         )
         
@@ -225,11 +229,13 @@ class TestCreateSuggestedTopics:
         Conversation.objects.create(
             path="duplicate.wav", date=timezone.now(), duration=60,
             title="Dup1", summary="Dup1", transcript="Dup1", sentiment=3,
+            starting_sentiment=2, ending_sentiment=4,
             agent=agent, customer=customer, input_tokens=10, output_tokens=10
         )
         Conversation.objects.create(
             path="duplicate.wav", date=timezone.now(), duration=60,
             title="Dup2", summary="Dup2", transcript="Dup2", sentiment=3,
+            starting_sentiment=2, ending_sentiment=4,
             agent=agent, customer=customer, input_tokens=10, output_tokens=10
         )
         
@@ -262,6 +268,8 @@ class TestCreateConversation:
             duration=120.5,
             transcript="Test transcript",
             sentiment=4.2,
+            starting_sentiment=3.0,
+            ending_sentiment=5.0,
             summary="Test summary",
             title="Test Call",
             input_tokens=100,
@@ -278,6 +286,8 @@ class TestCreateConversation:
         assert conversation.duration == 120.5
         assert conversation.transcript == "Test transcript"
         assert conversation.sentiment == 4.2
+        assert conversation.starting_sentiment == 3.0
+        assert conversation.ending_sentiment == 5.0
         assert conversation.summary == "Test summary"
         assert conversation.title == "Test Call"
         assert conversation.input_tokens == 100
@@ -309,6 +319,8 @@ class TestCreateConversation:
             duration=60.0,
             transcript="Test transcript",
             sentiment=3.0,
+            starting_sentiment=2.5,
+            ending_sentiment=3.5,
             summary="Test summary", 
             title="Test Call",
             input_tokens=80,
@@ -342,6 +354,8 @@ class TestCreateConversation:
             duration=90.0,
             transcript="Test transcript",
             sentiment=4.0,
+            starting_sentiment=3.5,
+            ending_sentiment=4.5,
             summary="Test summary",
             title="Test Call",
             input_tokens=120,
@@ -379,6 +393,8 @@ class TestCreateConversation:
             duration=180.0,
             transcript="Multi-topic transcript",
             sentiment=3.5,
+            starting_sentiment=3.0,
+            ending_sentiment=4.0,
             summary="Multi-topic summary",
             title="Multi-topic Call",
             input_tokens=200,
@@ -414,6 +430,8 @@ class TestCreateConversation:
             duration=45.0,
             transcript="Simple transcript",
             sentiment=3.8,
+            starting_sentiment=3.2,
+            ending_sentiment=4.4,
             summary="Simple summary",
             title="Simple Call",
             input_tokens=60,
@@ -442,6 +460,8 @@ class TestCreateConversation:
             duration=60.0,
             transcript="Timezone test",
             sentiment=4.0,
+            starting_sentiment=3.8,
+            ending_sentiment=4.2,
             summary="Timezone summary",
             title="Timezone Call",
             input_tokens=70,
@@ -471,6 +491,8 @@ class TestCreateConversation:
             duration=55.0,
             transcript="Datetime object test",
             sentiment=3.2,
+            starting_sentiment=3.0,
+            ending_sentiment=3.4,
             summary="Datetime summary",
             title="Datetime Call", 
             input_tokens=85,
@@ -498,6 +520,8 @@ class TestCreateConversation:
                 duration=60.0,
                 transcript="Test transcript",
                 sentiment=3.0,
+                starting_sentiment=2.8,
+                ending_sentiment=3.2,
                 summary="Test summary",
                 title="Test Call",
                 input_tokens=80,
