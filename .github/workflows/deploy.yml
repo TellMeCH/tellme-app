@@ -82,11 +82,11 @@ jobs:
           echo "image_ref=${{ secrets.GCP_PROJECT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REPO }}/${{ vars.SERVICE_NAME }}@${{ steps.build-image.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
       - name: Terraform Init
-        working-directory: terraform/environments/staging
+        working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: terraform init -input=false
 
       - name: Terraform Validate
-        working-directory: terraform/environments/staging
+        working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: terraform validate -no-color
 
       - name: Get Database and Django Credentials from Secret Manager
@@ -114,7 +114,7 @@ jobs:
           echo "app_password=$DATABASE_PASSWORD" >> $GITHUB_OUTPUT
 
       - name: Terraform Plan
-        working-directory: terraform/environments/staging
+        working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: |
           terraform plan \
             -no-color \
@@ -139,7 +139,7 @@ jobs:
             -var "create_app_user=${{ env.CREATE_APP_USER == 'true' && '1' || '0' }}"
 
       - name: Terraform Apply
-        working-directory: terraform/environments/staging
+        working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: terraform apply -auto-approve tfplan.bin
 
       - name: Start Cloud SQL Proxy
