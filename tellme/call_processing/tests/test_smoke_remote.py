@@ -359,7 +359,7 @@ class TestSmokeTestCloudRunWithLogs:
         for task in tasks_list:
             if task.http_request.url == f"{self.cloud_run_host}/processing/v1/process/":
                 test_tasks.append(task)
-        assert len(test_tasks) == 0, f"Expected 1 task in queue, found {len(test_tasks)}."
+        assert len(test_tasks) == 0, f"Expected 0 task in queue, found {len(test_tasks)}."
 
     def test_smoke_post_with_logs_excluding_customer_id(self):
         """
@@ -512,7 +512,7 @@ class TestSmokeTestCloudRunWithLogs:
         for task in tasks_list:
             if task.http_request.url == f"{self.cloud_run_host}/processing/v1/process/":
                 test_tasks.append(task)
-        assert len(test_tasks) == 0, f"Expected 1 task in queue, found {len(test_tasks)}."
+        assert len(test_tasks) == 0, f"Expected 0 tasks in queue, found {len(test_tasks)}."
 
     def teardown_method(self):
         # Delete the GCS blob
