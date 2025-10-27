@@ -44,20 +44,6 @@ resource "google_firebase_web_app" "default" {
   depends_on = [google_identity_platform_config.auth]
 }
 
-# Create Google OAuth 2.0 Client for Firebase Authentication
-resource "google_iap_client" "oauth_client" {
-  provider     = google-beta
-  display_name = "Firebase Auth Client - ${var.project_id}"
-  brand        = google_iap_brand.project_brand.name
-}
-
-# Create OAuth brand (required for OAuth client)
-resource "google_iap_brand" "project_brand" {
-  provider          = google-beta
-  support_email     = var.support_email
-  application_title = var.app_name
-  project           = var.project_id
-}
 
 # Azure AD App Registration for Microsoft Authentication
 resource "azuread_application" "firebase_auth" {
@@ -101,8 +87,8 @@ resource "google_identity_platform_default_supported_idp_config" "google" {
   project       = var.project_id
   enabled       = true
   idp_id        = "google.com"
-  client_id     = google_iap_client.oauth_client.client_id
-  client_secret = google_iap_client.oauth_client.secret
+  client_id     = var.google_oauth_client_id
+  client_secret = var.google_oauth_client_secret
 
   depends_on = [google_identity_platform_config.auth]
 }

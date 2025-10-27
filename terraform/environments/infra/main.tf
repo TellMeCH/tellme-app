@@ -19,6 +19,13 @@ terraform {
   }
 }
 
+# Configure the Google Beta provider with quota project
+provider "google-beta" {
+  project                 = module.project["infra"].project_id
+  billing_project         = module.project["infra"].project_id
+  user_project_override   = true
+}
+
 # Create a unique, versioned state bucket in the infra project.
 resource "random_id" "suffix" {
   byte_length = 6
@@ -75,14 +82,14 @@ resource "google_secret_manager_secret_version" "cicd_service_account_key" {
 
 # Firebase Authentication configuration for each environment
 module "firebase" {
-  for_each           = local.sa_envs
-  source             = "../../modules/firebase"
-  project_id         = module.project[each.key].project_id
-  support_email      = var.support_email
-  authorized_domains = var.envs[each.key].authorized_domains
-  redirect_uris      = var.envs[each.key].redirect_uris
-  homepage_url       = var.homepage_url
-  app_name           = var.app_name
+  for_each                    = local.sa_envs
+  source                      = "../../modules/firebase"
+  project_id                  = module.project[each.key].project_id
+  authorized_domains          = var.envs[each.key].authorized_domains
+  redirect_uris               = var.envs[each.key].redirect_uris
+  homepage_url                = var.homepage_url
+  google_oauth_client_id      = var.envs[each.key].google_oauth_client_id
+  google_oauth_client_secret  = var.envs[each.key].google_oauth_client_secret
 
   depends_on = [module.project]
 }
