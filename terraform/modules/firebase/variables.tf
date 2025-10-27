@@ -13,17 +13,18 @@ variable "redirect_uris" {
   type        = list(string)
 }
 
-variable "support_email" {
-  description = "Support email for OAuth brand (required for Google OAuth)"
-  type        = string
-}
-
 variable "homepage_url" {
   description = "URL of landing page for application"
   type        = string
 }
 
-variable "app_name" {
-  description = "Display name of application"
+variable "google_oauth_client_id" {
+  description = "Google OAuth client ID (manually created in Google Cloud Console)"
   type        = string
+}
+
+variable "google_oauth_client_secret" {
+  description = "Google OAuth client secret (manually created in Google Cloud Console)"
+  type        = string
+  sensitive   = true
 }
