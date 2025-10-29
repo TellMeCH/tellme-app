@@ -67,7 +67,6 @@ provider "postgresql" {
 
 # Create application database user
 resource "postgresql_role" "app_user" {
-  count    = var.create_app_user
   name     = var.app_username
   login    = true
   password = var.app_password
@@ -81,9 +80,8 @@ resource "postgresql_role" "app_user" {
 
 # Grant database-level privileges
 resource "postgresql_grant" "app_user_database" {
-  count       = var.create_app_user
   database    = google_sql_database.database.name
-  role        = postgresql_role.app_user[0].name
+  role        = postgresql_role.app_user.name
   object_type = "database"
   privileges  = ["CONNECT", "CREATE", "TEMPORARY"]
 
@@ -92,9 +90,8 @@ resource "postgresql_grant" "app_user_database" {
 
 # Grant schema-level privileges
 resource "postgresql_grant" "app_user_schema" {
-  count       = var.create_app_user
   database    = google_sql_database.database.name
-  role        = postgresql_role.app_user[0].name
+  role        = postgresql_role.app_user.name
   schema      = "public"
   object_type = "schema"
   privileges  = ["USAGE", "CREATE"]
@@ -104,9 +101,8 @@ resource "postgresql_grant" "app_user_schema" {
 
 # Grant privileges on existing tables
 resource "postgresql_grant" "app_user_tables" {
-  count       = var.create_app_user
   database    = google_sql_database.database.name
-  role        = postgresql_role.app_user[0].name
+  role        = postgresql_role.app_user.name
   schema      = "public"
   object_type = "table"
   privileges  = ["SELECT", "INSERT", "UPDATE", "DELETE"]
@@ -116,9 +112,8 @@ resource "postgresql_grant" "app_user_tables" {
 
 # Grant privileges on existing sequences
 resource "postgresql_grant" "app_user_sequences" {
-  count       = var.create_app_user
   database    = google_sql_database.database.name
-  role        = postgresql_role.app_user[0].name
+  role        = postgresql_role.app_user.name
   schema      = "public"
   object_type = "sequence"
   privileges  = ["USAGE", "SELECT", "UPDATE"]
@@ -128,9 +123,8 @@ resource "postgresql_grant" "app_user_sequences" {
 
 # Grant privileges on all future tables
 resource "postgresql_default_privileges" "app_user_future_tables" {
-  count       = var.create_app_user
   database    = google_sql_database.database.name
-  role        = postgresql_role.app_user[0].name
+  role        = postgresql_role.app_user.name
   schema      = "public"
   owner       = google_sql_user.admin_user.name
   object_type = "table"
@@ -141,9 +135,8 @@ resource "postgresql_default_privileges" "app_user_future_tables" {
 
 # Grant privileges on all future sequences
 resource "postgresql_default_privileges" "app_user_future_sequences" {
-  count       = var.create_app_user
   database    = google_sql_database.database.name
-  role        = postgresql_role.app_user[0].name
+  role        = postgresql_role.app_user.name
   schema      = "public"
   owner       = google_sql_user.admin_user.name
   object_type = "sequence"
