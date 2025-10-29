@@ -24,7 +24,6 @@ jobs:
       COLLECT_STATIC: false
       RUN_MIGRATIONS: false
       CREATE_SUPERUSERS: false
-      CREATE_APP_USER: false
     if: github.event.pull_request.merged == true
 
     permissions:
@@ -135,8 +134,7 @@ jobs:
             -var "admin_username=${{ steps.db_admin_creds.outputs.admin_username }}" \
             -var "admin_password=${{ steps.db_admin_creds.outputs.admin_password }}" \
             -var "app_username=${{ steps.django_db_creds.outputs.app_username }}" \
-            -var "app_password=${{ steps.django_db_creds.outputs.app_password }}" \
-            -var "create_app_user=${{ env.CREATE_APP_USER == 'true' && '1' || '0' }}"
+            -var "app_password=${{ steps.django_db_creds.outputs.app_password }}"
 
       - name: Terraform Apply
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
