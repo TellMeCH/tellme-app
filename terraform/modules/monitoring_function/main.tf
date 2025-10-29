@@ -105,6 +105,18 @@ resource "google_project_iam_member" "logging_logwriter" {
   member  = "serviceAccount:${google_service_account.monitoring_function_sa.email}"
 }
 
+# Allow Cloud Scheduler to impersonate the monitoring function service account
+resource "google_service_account_iam_member" "scheduler_impersonation" {
+  service_account_id = google_service_account.monitoring_function_sa.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+}
+
+# Get current project information for the Cloud Scheduler service account
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 # Cloud Scheduler job to trigger the monitoring function
 resource "google_cloud_scheduler_job" "monitoring_scheduler" {
   project     = var.project_id
