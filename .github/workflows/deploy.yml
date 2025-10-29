@@ -23,7 +23,7 @@ jobs:
       USE_CLOUD_SQL_AUTH_PROXY: 1
       COLLECT_STATIC: false
       RUN_MIGRATIONS: true
-      CREATE_SUPERUSERS: false
+      CREATE_SUPERUSERS: true
     if: github.event.pull_request.merged == true
 
     permissions:
