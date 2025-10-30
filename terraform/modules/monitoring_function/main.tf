@@ -98,6 +98,15 @@ resource "google_cloudfunctions2_function_iam_member" "invoker" {
   member         = "serviceAccount:${google_service_account.monitoring_function_sa.email}"
 }
 
+# Add Cloud Run invoker role for the underlying Cloud Run service
+resource "google_cloud_run_v2_service_iam_member" "run_invoker" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloudfunctions2_function.monitoring_function.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.monitoring_function_sa.email}"
+}
+
 # Logging permissions
 resource "google_project_iam_member" "logging_logwriter" {
   project = var.project_id
