@@ -168,3 +168,45 @@ class TestQueueView:
         # Verify Cloud Task was created for processing
         mock_cloud_tasks.assert_called_once()
 
+    def test_queue_allows_overlapping_calls_when_policy_permits(
+        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_cloud_tasks
+    ):
+        """
+        Test that overlapping agent calls are allowed when the organization's
+        allow_simultaneous_calls policy is enabled.
+        """
+        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+
+        # Enable simultaneous calls policy for the organization
+        organization = setup_db[0]  # setup_db[0] is the organization
+        organization.allow_simultaneous_calls = True
+        organization.save()
+
+        # Create a conversation that would normally cause overlap validation to fail
+        overlapping_conv = Conversation.objects.create(
+            agent=setup_db[1],  # setup_db[1] is the agent
+            date=valid_payload['timestamp'] - timedelta(minutes=1),
+            duration=120.0,  # 2 minutes, so it overlaps with the new call
+            transcript="Previous call transcript",
+            sentiment=3.0,
+            summary="Previous call summary",
+            title="Previous call title",
+            path="previous_call.wav",
+            input_tokens=10,
+            output_tokens=10,
+            customer=setup_db[4]  # setup_db[4] is the customer
+        )
+        overlapping_conv.save()
+
+        # Attempt to queue a new overlapping call
+        queue_url = reverse("queue")
+        response = api_client.post(queue_url, data=valid_payload, format="multipart")
+
+        # Should succeed because organization allows simultaneous calls
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert "file_name" in response.data
+
+        # Verify file was uploaded to GCS and task was created
+        mock_gcs_utils[0].assert_called_once()
+        mock_cloud_tasks.assert_called_once()
+
