@@ -61,9 +61,10 @@ def create_customer_id(full_name: str, birth_date: str, postcode: str = "", loya
             first_name, last_name = parsed_name.first, parsed_name.last
 
             # Priority 1: Full name + birth date
+            birth_date = dateparser.parse(birth_date)
             if birth_date:
-                date_component = dateparser.parse(birth_date).strftime("%d/%m/%Y")
-                django_formatted_date = dateparser.parse(birth_date).strftime("%Y-%m-%d")
+                date_component = birth_date.strftime("%d/%m/%Y")
+                django_formatted_date = birth_date.strftime("%Y-%m-%d")
                 raw_id = f'{name_component}{date_component}'
             # Priority 2: Full name + postcode
             elif postcode:
