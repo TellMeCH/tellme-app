@@ -45,10 +45,11 @@ module "cloudsql" {
 
 # Cloud Tasks module
 module "tasks" {
-  source     = "../../modules/tasks"
-  project_id = var.project_id
-  region     = var.region
-  queue_name = var.cloud_tasks_queue_name
+  source                       = "../../modules/tasks"
+  project_id                   = var.project_id
+  region                       = var.region
+  call_processing_queue_name   = var.processing_queue_name
+  summarization_queue_name     = var.summarization_queue_name
 }
 
 # Cloud Run service that depends on the above resources
@@ -95,7 +96,8 @@ module "cloud_run_v2" {
         SQL_INSTANCE_NAME       = var.sql_instance_name
         DATABASE_NAME           = var.database_name
         GS_BUCKET_NAME          = google_storage_bucket.media_bucket.name
-        CLOUD_TASKS_QUEUE_NAME  = module.tasks.queue_name
+        PROCESSING_QUEUE_NAME  = module.tasks.call_processing_queue_name
+        SUMMARIZATION_QUEUE_NAME = module.tasks.summarization_queue_name
         CALL_PROCESSING_BUCKET  = var.call_processing_bucket
         FRONTEND_PATH           = var.frontend_path
         CALL_PROCESSING_ENDPOINT = "None"

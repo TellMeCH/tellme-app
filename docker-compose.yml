@@ -25,7 +25,8 @@ services:
     image: ghcr.io/aertje/cloud-tasks-emulator:latest
     command:
       - --host=tasks
-      - "-queue=projects/${GOOGLE_CLOUD_PROJECT}/locations/${REGION}/queues/${CLOUD_TASKS_QUEUE_NAME}"
+      - "-queue=projects/${GOOGLE_CLOUD_PROJECT}/locations/${REGION}/queues/${PROCESSING_QUEUE_NAME}"
+      - "-queue=projects/${GOOGLE_CLOUD_PROJECT}/locations/${REGION}/queues/${SUMMARIZATION_QUEUE_NAME}"
     ports:
       - "8123:8123"
     networks:

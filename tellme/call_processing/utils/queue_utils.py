@@ -104,11 +104,11 @@ def create_task(
     parent = client.queue_path(
         settings.GOOGLE_CLOUD_PROJECT,
         settings.REGION,
-        settings.CLOUD_TASKS_QUEUE_NAME
+        settings.PROCESSING_QUEUE_NAME
     )
     logger.info(f'Creating task in queue with parent {parent}')
     client.create_task(parent=parent, task=task)
-    logger.info(f'Created task in {settings.CLOUD_TASKS_QUEUE_NAME}')
+    logger.info(f'Created task in {settings.PROCESSING_QUEUE_NAME}')
 
 
 def upload_and_create_task(

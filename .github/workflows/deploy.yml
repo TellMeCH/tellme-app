@@ -129,7 +129,8 @@ jobs:
             -var "image_url=${{ steps.imgref.outputs.image_ref }}" \
             -var "settings_name=${{ vars.SETTINGS_NAME }}" \
             -var "database_name=${{ vars.DATABASE_NAME }}" \
-            -var "cloud_tasks_queue_name=${{ vars.CLOUD_TASKS_QUEUE_NAME }}" \
+            -var "processing_queue_name=${{ vars.PROCESSING_QUEUE_NAME }}" \
+            -var "summarization_queue_name=${{ vars.SUMMARIZATION_QUEUE_NAME }}" \
             -var "frontend_path=${{ secrets.FRONTEND_PATH }}" \
             -var "admin_username=${{ steps.db_admin_creds.outputs.admin_username }}" \
             -var "admin_password=${{ steps.db_admin_creds.outputs.admin_password }}" \
@@ -185,7 +186,8 @@ jobs:
           SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ vars.DATABASE_NAME }}
           GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
+          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
@@ -200,7 +202,8 @@ jobs:
           SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ vars.DATABASE_NAME }}
           GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
+          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
@@ -215,7 +218,8 @@ jobs:
           SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
           DATABASE_NAME: ${{ vars.DATABASE_NAME }}
           GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
+          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
@@ -321,7 +325,8 @@ jobs:
           GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
           SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
-          CLOUD_TASKS_QUEUE_NAME: ${{ vars.CLOUD_TASKS_QUEUE_NAME }}
+          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
+          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}${{ vars.CALL_PROCESSING_ADDRESS }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
@@ -331,3 +336,5 @@ jobs:
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         run: |
           uv run pytest -v ./tellme/call_processing/tests/test_smoke_remote.py
+
+# TODO: Change processing and summarization queue names in GitHub variables

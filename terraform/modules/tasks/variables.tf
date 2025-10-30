@@ -8,9 +8,14 @@ variable "region" {
   description = "GCP region"
 }
 
-variable "queue_name" {
+variable "call_processing_queue_name" {
   type        = string
-  description = "Name of the Cloud Tasks queue"
+  description = "Name of the call processing Cloud Tasks queue"
+}
+
+variable "summarization_queue_name" {
+  type        = string
+  description = "Name of the summarization Cloud Tasks queue"
 }
 
 variable "max_attempts" {

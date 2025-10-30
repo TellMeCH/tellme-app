@@ -315,8 +315,8 @@ class TestSmokeTestCloudRunWithLogs:
             r"^Created: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+00:00$",
             rf"^Organization: {self.org_id}$",
             rf"^File: {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}\.wav$",
-            rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.CLOUD_TASKS_QUEUE_NAME}$",
-            rf"^Created task in {settings.CLOUD_TASKS_QUEUE_NAME}$",
+            rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.PROCESSING_QUEUE_NAME}$",
+            rf"^Created task in {settings.PROCESSING_QUEUE_NAME}$",
             rf"^Processing file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, size \d+ bytes\.$",
             rf"^Processed file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, required \d+ seconds$"
         ]
@@ -351,7 +351,7 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Check Cloud Tasks creation, verifying the payload contains the org_id & agent_id
         client = tasks_v2.CloudTasksClient()
-        parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.CLOUD_TASKS_QUEUE_NAME)
+        parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.PROCESSING_QUEUE_NAME)
         tasks_list = list(client.list_tasks(parent=parent))
 
         # Iterate over existing task and identify those that are test-related. Check that none remain
@@ -471,8 +471,8 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Verify produced logs
         expected_patterns = [
-            rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.CLOUD_TASKS_QUEUE_NAME}$",
-            rf"^Created task in {settings.CLOUD_TASKS_QUEUE_NAME}$",
+            rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.PROCESSING_QUEUE_NAME}$",
+            rf"^Created task in {settings.PROCESSING_QUEUE_NAME}$",
             rf"^Processing file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav, size \d+ bytes\.$",
             rf"^Processed file {self.org_id}/{self.uuid_pattern}__{self.agent_id}_{self.timestamp_pattern}\.wav, required \d+ seconds$"
         ]
@@ -504,7 +504,7 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Check Cloud Tasks creation, verifying the payload contains the org_id & agent_id
         client = tasks_v2.CloudTasksClient()
-        parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.CLOUD_TASKS_QUEUE_NAME)
+        parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.PROCESSING_QUEUE_NAME)
         tasks_list = list(client.list_tasks(parent=parent))
 
         # Iterate over existing task and identify those that are test-related. Check that none remain
@@ -526,7 +526,7 @@ class TestSmokeTestCloudRunWithLogs:
 
         # List tasks again and delete any whose payload references our org/agent
         client = tasks_v2.CloudTasksClient()
-        parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.CLOUD_TASKS_QUEUE_NAME)
+        parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.PROCESSING_QUEUE_NAME)
         for task in client.list_tasks(parent=parent):
             body = json.loads(task.http_request.body.decode("utf-8"))
             if (body.get("organization_id") == self.org_id) or (body.get("agent_id") == self.agent_id):
