@@ -90,7 +90,7 @@ class CallTranscriber:
         )
 
     @observe(capture_output=False)
-    def transcribe(self, file_name: str, transcription_method: str) -> tuple[str, str, float]:
+    def transcribe(self, file_name: str, transcription_method: str) -> tuple[str, list[str], float]:
         """
         Handle the full transcription process for audio files.
 
@@ -99,7 +99,7 @@ class CallTranscriber:
         2. Creating a list of target file paths
         3. Processing each file by splitting into chunks
         4. Transcribing each chunk
-        5. Checking for consistent language detection
+        5. Collecting detected languages from all chunks
         6. Applying diarization if needed
 
         Args:
@@ -107,10 +107,9 @@ class CallTranscriber:
             transcription_method (str): Transcription method to use ('deepgram' or 'groq')
 
         Returns:
-            tuple[str, str, float]: Full transcript, detected language, call duration in seconds
+            tuple[str, list[str], float]: Full transcript, list of detected languages, call duration in seconds
 
         Raises:
-            Warning: If language changes across chunks
             ValueError: If transcription method is not supported
             RuntimeError: If file is empty or transcription fails
         """
@@ -140,7 +139,7 @@ class CallTranscriber:
         total_duration = 0
         total_size = 0
         chunk_count = 0
-        base_language = None
+        languages = []
         full_transcript = ''
         go_to_fallback = False
 
@@ -165,17 +164,14 @@ class CallTranscriber:
                     try:
                         chunk_transcript, chunk_language = methods[transcription_method](chunk)
                     except fallback_exceptions:
-                        base_language = None
                         file_transcript = ''
                         go_to_fallback = True
                         break
 
                     if not file_transcript:
-                        base_language = chunk_language
                         file_transcript = chunk_transcript
                     else:
-                        if base_language != chunk_language:
-                            raise Warning(f'Language changed from {base_language} to {chunk_language}.')
+                        languages.append(chunk_language)
                         file_transcript += '\n' + chunk_transcript
 
             # Fallback method
@@ -187,17 +183,15 @@ class CallTranscriber:
                         raise RuntimeError(f'Fallback transcription failed: {e}')
 
                     if not file_transcript:
-                        base_language = chunk_language
                         file_transcript = chunk_transcript
                     else:
-                        if base_language != chunk_language:
-                            raise Warning(f'Language changed from {base_language} to {chunk_language}.')
+                        languages.append(chunk_language)
                         file_transcript += '\n' + chunk_transcript
 
             full_transcript += ('\n' if full_transcript else '') + file_transcript
 
-        if base_language is None:
-            base_language = "unknown"
+        if len(languages) == 0:
+            languages = ["unknown"]
 
         # Apply diarization if transcription was done with Groq or fallback
         if transcription_method == 'groq' or (transcription_method != 'groq' and go_to_fallback):
@@ -211,7 +205,7 @@ class CallTranscriber:
             }
         )
 
-        return full_transcript, base_language, total_duration / 1000
+        return full_transcript, languages, total_duration / 1000
 
     @staticmethod
     def cut_into_chunks(file_data: bytes, audio_format: str = "wav") -> tuple[list[bytes], int]:

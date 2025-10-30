@@ -121,6 +121,26 @@ def obtain_suggested_topics(organization_id: int):
     return suggested_topics
 
 
+def obtain_simultaneous_call_policy(organization_id: int) -> bool:
+    """
+    Retrieves the organization's policy on whether to allow simultaneous calls from the same agent.
+
+    This function queries the organization's `allow_simultaneous_calls` setting to determine
+    whether agent overlap validation should be enforced. When this policy is enabled (True),
+    agents can have overlapping calls without validation errors. When disabled (False),
+    the system enforces that agents cannot have simultaneous calls.
+
+    Args:
+        organization_id (int): ID of the organization to query
+
+    Returns:
+        bool: True if the organization allows simultaneous calls for agents,
+              False if agent call overlap should be prevented
+    """
+    org = Organization.objects.get(id=organization_id)
+    return org.allow_simultaneous_calls
+
+
 def create_conversation(
     customer_id: str,
     organization_id: int,

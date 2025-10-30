@@ -272,7 +272,7 @@ class AudioHookConsumer(WebsocketConsumer):
             blob_name = f"{self.org.id}/{self.customer_id}_{self.agent_id}_{self.connection_timestamp.isoformat()}.wav"
             message, status_code = queue_utils.upload_and_create_task(
                 blob_name, self.agent_id, self.customer_id, self.org.id, self.connection_timestamp, logger,
-                False, wav_data  # Note to self: Consider whether checking agent validity is reasonable
+                True, wav_data  # Note to self: Consider whether checking agent validity is reasonable
             )
             logger.info(message['message'])
 
