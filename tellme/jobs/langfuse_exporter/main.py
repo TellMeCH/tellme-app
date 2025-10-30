@@ -14,7 +14,7 @@ from typing import Callable, Any
 env = environ.Env()
 SECRET_NAME = env('SETTINGS_NAME')
 GOOGLE_CLOUD_PROJECT = env('GOOGLE_CLOUD_PROJECT')
-MONITORING_BUCKET = f"{GOOGLE_CLOUD_PROJECT}_{os.getenv('MONITORING_BUCKET')}"
+MONITORING_BUCKET = os.getenv('MONITORING_BUCKET')
 FILE_PREFIX = 'langfuse_data/langfuse_traces_'
 DESIRED_SCHEMA = {
     "id": "object",
