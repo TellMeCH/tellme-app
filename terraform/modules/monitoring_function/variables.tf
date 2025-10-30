@@ -54,7 +54,7 @@ variable "max_instance_count" {
 variable "available_memory" {
   type        = string
   description = "Available memory for the function"
-  default     = "256M"
+  default     = "512M"
 }
 
 variable "timeout_seconds" {
