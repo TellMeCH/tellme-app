@@ -128,45 +128,6 @@ class TestCallTranscriber:
         assert len(chunks) == 2
         assert total_duration == 600000
 
-    def test_transcribe_language_change_warns(self, transcriber, mock_deepgram, mock_pydub, mock_gcs_utils):
-        """
-        If chunk #2 has a different language, we raise a Warning.
-        """
-        def mock_side_effect(payload, options, timeout):
-            if not hasattr(mock_side_effect, "call_count"):
-                mock_side_effect.call_count = 0
-            mock_side_effect.call_count += 1
-
-            if mock_side_effect.call_count == 1:
-                return {
-                    "results": {
-                        "channels": [
-                            {
-                                "alternatives": [{"paragraphs": {"transcript": "Hello world"}}],
-                                "detected_language": "en"
-                            }
-                        ]
-                    },
-                    "metadata": {"duration": 5.0}
-                }
-            else:
-                return {
-                    "results": {
-                        "channels": [
-                            {
-                                "alternatives": [{"paragraphs": {"transcript": "Hola mundo"}}],
-                                "detected_language": "es"
-                            }
-                        ]
-                    },
-                    "metadata": {"duration": 5.0}
-                }
-
-        mock_deepgram.listen.rest.v('1').transcribe_file.side_effect = mock_side_effect
-
-        with pytest.raises(Warning) as exc:
-            transcriber.transcribe("test.wav", "deepgram")
-        assert "Language changed from" in str(exc.value)
 
     def test_fallback_transcription_if_deepgram_fails(
         self, transcriber, mock_deepgram, mock_groq, mock_pydub, mock_gcs_utils

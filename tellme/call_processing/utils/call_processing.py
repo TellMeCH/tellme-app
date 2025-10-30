@@ -92,7 +92,7 @@ class CallProcessingPipeline:
         Returns:
             dict: A dictionary containing the complete enriched result, including:
                 - 'transcript' (str): Final (redacted + diarized) call transcript.
-                - 'language' (str): Detected primary spoken language.
+                - 'language' (list): List of detected languages from all transcribed chunks.
                 - 'duration' (float): Call duration in seconds.
                 - 'agent_speaker_labels' (list): Original speaker labels assigned to the agent.
                 - 'customer_speaker_labels' (list): Original speaker labels assigned to the customer.
@@ -108,7 +108,6 @@ class CallProcessingPipeline:
 
         Raises:
             ValueError: If the transcription output is empty or an API key is missing.
-            Warning: If detected language changes between audio chunks.
             Exception: If fallback transcription also fails.
         """
 
@@ -140,7 +139,7 @@ class CallProcessingPipeline:
         )
 
         # Transcribe the audio file
-        transcript, language, total_duration = self.transcriber.transcribe(file_name, transcription_method)
+        transcript, languages, total_duration = self.transcriber.transcribe(file_name, transcription_method)
 
         if len(transcript) == 0:
             raise RuntimeError('Call Processing: Produced transcript is empty.')
@@ -168,7 +167,7 @@ class CallProcessingPipeline:
         if 'revenue_search_query' in enriched_data:
             revenue, product_url, revenue_failure_reason = self.valuer.infer_revenue(enriched_data['revenue_search_query'], file_metadata['organization_id'])
 
-        enriched_data['language'] = language
+        enriched_data['language'] = languages
         enriched_data['input_tokens'] = input_tokens
         enriched_data['output_tokens'] = output_tokens
         enriched_data['duration'] = total_duration
