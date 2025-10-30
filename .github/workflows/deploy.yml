@@ -22,8 +22,8 @@ jobs:
       REGION: ${{ secrets.GCP_PROJECT_REGION }}
       USE_CLOUD_SQL_AUTH_PROXY: 1
       COLLECT_STATIC: false
-      RUN_MIGRATIONS: true
-      CREATE_SUPERUSERS: true
+      RUN_MIGRATIONS: false
+      CREATE_SUPERUSERS: false
     if: github.event.pull_request.merged == true
 
     permissions:
