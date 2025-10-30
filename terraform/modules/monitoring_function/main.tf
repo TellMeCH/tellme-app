@@ -98,11 +98,32 @@ resource "google_cloudfunctions2_function_iam_member" "invoker" {
   member         = "serviceAccount:${google_service_account.monitoring_function_sa.email}"
 }
 
+# Add Cloud Run invoker role for the underlying Cloud Run service
+resource "google_cloud_run_v2_service_iam_member" "run_invoker" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloudfunctions2_function.monitoring_function.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.monitoring_function_sa.email}"
+}
+
 # Logging permissions
 resource "google_project_iam_member" "logging_logwriter" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.monitoring_function_sa.email}"
+}
+
+# Allow Cloud Scheduler to impersonate the monitoring function service account
+resource "google_service_account_iam_member" "scheduler_impersonation" {
+  service_account_id = google_service_account.monitoring_function_sa.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+}
+
+# Get current project information for the Cloud Scheduler service account
+data "google_project" "current" {
+  project_id = var.project_id
 }
 
 # Cloud Scheduler job to trigger the monitoring function

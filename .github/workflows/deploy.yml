@@ -21,10 +21,9 @@ jobs:
       GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
       REGION: ${{ secrets.GCP_PROJECT_REGION }}
       USE_CLOUD_SQL_AUTH_PROXY: 1
-      COLLECT_STATIC: true
-      RUN_MIGRATIONS: true
-      CREATE_SUPERUSERS: true
-      CREATE_APP_USER: true
+      COLLECT_STATIC: false
+      RUN_MIGRATIONS: false
+      CREATE_SUPERUSERS: false
     if: github.event.pull_request.merged == true
 
     permissions:
@@ -135,15 +134,14 @@ jobs:
             -var "admin_username=${{ steps.db_admin_creds.outputs.admin_username }}" \
             -var "admin_password=${{ steps.db_admin_creds.outputs.admin_password }}" \
             -var "app_username=${{ steps.django_db_creds.outputs.app_username }}" \
-            -var "app_password=${{ steps.django_db_creds.outputs.app_password }}" \
-            -var "create_app_user=${{ env.CREATE_APP_USER == 'true' && '1' || '0' }}"
+            -var "app_password=${{ steps.django_db_creds.outputs.app_password }}"
 
       - name: Terraform Apply
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: terraform apply -auto-approve tfplan.bin
 
       - name: Start Cloud SQL Proxy
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
         run: |
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
@@ -154,24 +152,24 @@ jobs:
           sleep 10
 
       - name: Set up Python
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
 
       - name: Install uv
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Dependencies
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
         run: |
           uv sync --dev
 
       - name: Check Cloud SQL Proxy Is Running
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true'
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
         run: |
           cat cloud_sql_proxy.log
           if ! pgrep -f cloud-sql-proxy; then

@@ -118,7 +118,7 @@ def upload_and_create_task(
         organization_id: int,
         call_timestamp: datetime.datetime,
         logger,
-        check_agent: bool = True,
+        allow_simultaneous_calls: bool = False,
         file_obj=None
 ):
     """
@@ -135,7 +135,7 @@ def upload_and_create_task(
         organization_id (int): The ID of the organization.
         call_timestamp (datetime.datetime): The timestamp of the call.
         logger: Logger instance for logging events.
-        check_agent (bool, optional): Whether to validate the agent before processing. Defaults to True.
+        allow_simultaneous_calls (bool, optional): Whether to allow simultaneous agent calls. Defaults to False.
         file_obj: The file object containing the call recording data.
 
     Returns:
@@ -143,13 +143,13 @@ def upload_and_create_task(
             - dict: A response dictionary with a success or error message.
             - int: The corresponding HTTP status code.
     """
-
-    if check_agent:
-        # Check Validity of Request
-        agent_valid, validity_message = db_handler.check_agent_validity(agent_id, organization_id, call_timestamp)
-    else:
+    # Unless the call explictly overrides the org policy, the org policy is followed
+    if allow_simultaneous_calls or db_handler.obtain_simultaneous_call_policy(organization_id):
         agent_valid = True
         validity_message = None
+    else:
+        # Check Validity of Request
+        agent_valid, validity_message = db_handler.check_agent_validity(agent_id, organization_id, call_timestamp)
 
     if agent_valid:
         # Upload to GCS
