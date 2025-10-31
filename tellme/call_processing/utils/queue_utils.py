@@ -5,6 +5,7 @@ This module provides functions for creating and managing Google Cloud Tasks
 for call processing workflows, including file uploads and task scheduling.
 """
 
+import uuid
 import datetime
 import json
 from google.cloud import tasks_v2
@@ -47,7 +48,7 @@ def create_storage_path(
     return f"{organization_id}/{customer_part}_{agent_id}_{call_timestamp.isoformat()}{format}"
 
 
-def create_task(
+def create_processing_task(
         process_url: str, file_name: str, organization_id: int, customer_id: str, agent_id: int,
         timestamp: datetime.datetime, transcription_method: str, enrichment_method: str, logger
 ):
@@ -107,11 +108,11 @@ def create_task(
         settings.PROCESSING_QUEUE_NAME
     )
     logger.info(f'Creating task in queue with parent {parent}')
-    client.create_task(parent=parent, task=task)
+    client.create_processing_task(parent=parent, task=task)
     logger.info(f'Created task in {settings.PROCESSING_QUEUE_NAME}')
 
 
-def upload_and_create_task(
+def upload_file_and_create_processing_task(
         file_name: str,
         agent_id: int,
         customer_id: str,
@@ -163,7 +164,7 @@ def upload_and_create_task(
         # Create a task to process this recording
         process_url = settings.CALL_PROCESSING_ENDPOINT
         logger.info(f'Creating an HTTP Task Targeting: {process_url}')
-        create_task(
+        create_processing_task(
             process_url,
             file_name,
             organization_id,
@@ -181,3 +182,75 @@ def upload_and_create_task(
         status_code = status.HTTP_400_BAD_REQUEST
 
     return response, status_code
+
+
+def create_summarization_task(
+        summarize_url: str,
+        object_id: int,
+        object_type: str,
+        summary_period: str,
+        summary_rolling_period: bool,
+        logger,
+        task_id: str = None
+):
+    """
+    Create a Google Cloud Task for summarizing an object (Topic, Customer, or Agent).
+
+    Args:
+        summarize_url (str): URL endpoint for processing the summarization
+        object_id (int): ID of the object to summarize
+        object_type (str): Type of object ('topic', 'customer', 'agent')
+        summary_period (str): Period to use for summarization ('week', 'month', 'quarter')
+        summary_rolling_period (bool): Whether to use rolling period
+        logger: Logger instance for logging events
+        task_id (str, optional): Optional task ID for tracking
+    """
+    if task_id is None:
+        task_id = str(uuid.uuid4())
+
+    payload = {
+        "object_id": object_id,
+        "object_type": object_type,
+        "summary_period": summary_period,
+        "summary_rolling_period": summary_rolling_period,
+        "task_id": task_id
+    }
+
+    task = {
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": summarize_url,
+            "headers": {
+                "Content-Type": "application/json",
+                "Authorization": f"Token {settings.PROCESSING_PIPELINE_KEY}"
+            },
+            "body": json.dumps(payload).encode()
+        }
+    }
+
+    # Specify the task schedule time
+    timestamp = timestamp_pb2.Timestamp()
+    timestamp.FromDatetime(datetime.datetime.now(datetime.UTC))
+    task['schedule_time'] = timestamp
+
+    # Create a Cloud Task Client, using the Cloud Tasks emulator when necessary
+    if settings.TASKS_EMULATOR_ADDRESS:
+        # Create a gRPC channel to the local emulator
+        channel = grpc.insecure_channel(settings.TASKS_EMULATOR_ADDRESS)
+        transport = tasks_v2.services.cloud_tasks.transports.CloudTasksGrpcTransport(channel=channel)
+        client = tasks_v2.CloudTasksClient(transport=transport)
+    else:
+        # Use the default CloudTasksClient configuration
+        client = tasks_v2.CloudTasksClient()
+
+    # Create the task in the summarization queue
+    parent = client.queue_path(
+        settings.GOOGLE_CLOUD_PROJECT,
+        settings.REGION,
+        settings.SUMMARIZATION_QUEUE_NAME
+    )
+    logger.info(f'Creating summarization task in queue with parent {parent}')
+    client.create_processing_task(parent=parent, task=task)
+    logger.info(f'Created summarization task in {settings.SUMMARIZATION_QUEUE_NAME} for {object_type} {object_id}')
+
+    return task_id
