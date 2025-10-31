@@ -16,7 +16,7 @@ variable "queue_name" {
 variable "max_attempts" {
   type        = number
   description = "Maximum number of retry attempts"
-  default     = 10
+  default     = 2
 }
 
 variable "max_retry_duration" {
@@ -46,7 +46,7 @@ variable "max_doublings" {
 variable "max_concurrent_dispatches" {
   type        = number
   description = "Maximum concurrent dispatches"
-  default     = 4
+  default     = 10
 }
 
 variable "log_sampling_ratio" {
