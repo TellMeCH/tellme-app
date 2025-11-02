@@ -16,7 +16,7 @@ variable "queue_name" {
 variable "max_attempts" {
   type        = number
   description = "Maximum number of retry attempts"
-  default     = 2
+  default     = 5
 }
 
 variable "max_retry_duration" {
