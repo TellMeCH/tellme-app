@@ -844,6 +844,7 @@ class Conversation(models.Model):
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        unique_together = ('organization', 'path')
         verbose_name_plural = "Conversations"
         indexes = [
             models.Index(fields=['customer']),

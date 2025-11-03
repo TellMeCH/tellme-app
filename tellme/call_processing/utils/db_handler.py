@@ -140,6 +140,15 @@ def obtain_simultaneous_call_policy(organization_id: int) -> bool:
     org = Organization.objects.get(id=organization_id)
     return org.allow_simultaneous_calls
 
+def check_same_path_conversations(path: str):
+    """
+    Checks to see whether any conversation has been created for the audio file in the specified path.
+    :param path: str, Audio file path
+    :return: bool, True if the conversation has been created
+    """
+    conversation_qs = Conversation.objects.filter(path=path)
+    return conversation_qs.exists()
+
 
 def create_conversation(
     customer_id: str,
