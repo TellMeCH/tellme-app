@@ -10,7 +10,9 @@ from tellme.call_processing.authentication import OrganizationAPIKeyAuthenticati
 from tellme.call_processing.permissions import IsAuthenticatedOrganization
 from tellme.call_processing.utils import queue_utils
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
-from tellme.call_processing.utils.db_handler import create_conversation, create_suggested_topics
+from tellme.call_processing.utils.db_handler import (
+    check_same_path_conversations, create_conversation, create_suggested_topics
+)
 from tellme.call_processing.utils.webhook_processing import process_webhook_recordings
 
 logger = logging.getLogger('django')
@@ -144,6 +146,13 @@ class ProcessRecordingView(APIView):
 
         logger.info(f"Processing file {file_name}")
         processing_start = datetime.datetime.now()
+
+        already_exists = check_same_path_conversations(file_name)
+        if already_exists:
+            return Response(
+                {"message": "File has already been processed and saved to DB."},
+                status=status.HTTP_200_OK
+            )
 
         try:
             enriched_data = self.pipeline(
