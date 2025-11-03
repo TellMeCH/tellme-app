@@ -60,7 +60,7 @@ class TestQueueView:
         response = api_client.post(url, data=current_payload, format="multipart")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         mock_gcs_utils[0].assert_not_called()
-        mock_cloud_tasks.create_task.assert_not_called()
+        mock_cloud_tasks.create_processing_task.assert_not_called()
 
     def test_check_agent_validity_timestamp_overlap(
         self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_deepgram, mock_groq, mock_openai
@@ -105,7 +105,7 @@ class TestQueueView:
             url = reverse("queue")
             response = api_client.post(url, data=current_payload, format="multipart")
             assert response.status_code == status.HTTP_400_BAD_REQUEST
-            mock_cloud_tasks.create_task.assert_not_called()
+            mock_cloud_tasks.create_processing_task.assert_not_called()
 
     def test_queue_without_customer_id_succeeds(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks, setup_db):
         """

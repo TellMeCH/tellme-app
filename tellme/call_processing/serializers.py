@@ -34,3 +34,14 @@ class ProcessRecordingSerializer(serializers.Serializer):
     timestamp = serializers.DateTimeField(required=True)
     transcription_method = serializers.ChoiceField(choices=TRANSCRIPTION_METHOD_CHOICES, required=True)
     enrichment_method = serializers.ChoiceField(choices=ENRICHMENT_METHOD_CHOICES, required=True)
+
+
+class SummarizationSerializer(serializers.Serializer):
+    """
+    A serializer for requests from the Cloud Task Manager to create summaries
+    """
+    object_id = serializers.IntegerField(required=True)
+    object_type = serializers.CharField(required=True)
+    summary_period = serializers.CharField(required=True)
+    summary_rolling_period = serializers.BooleanField(required=True)
+    task_id = serializers.CharField(required=False, allow_null=True)
