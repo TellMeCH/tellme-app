@@ -310,6 +310,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'google': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
     },
 }
 

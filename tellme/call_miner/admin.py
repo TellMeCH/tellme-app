@@ -70,7 +70,8 @@ class ConversationAdmin(admin.ModelAdmin):
     list_display = ['path', 'date', 'agent', 'customer', 'duration', 'sentiment', 'starting_sentiment',
                     'ending_sentiment']
     search_fields = ['path', 'agent__name', 'customer__name']
-    list_filter = ['date', 'agent', 'customer']
+    list_filter = ['date', 'agent']
+    sortable_by = ['date', 'agent']
 
 
 # Register the models and their customized admin interfaces
