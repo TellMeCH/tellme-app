@@ -70,7 +70,7 @@ class CallTranscriber:
         self.vertexai = genai.Client(
             vertexai=True,
             project=settings.GOOGLE_CLOUD_PROJECT,
-            location='us-central1'
+            location='global'
         )
 
         # Initialize transcription options
@@ -376,6 +376,7 @@ class CallTranscriber:
             config=types.GenerateContentConfig(
                 system_instruction=self.diarization_prompt.prompt,
                 temperature=config_kwargs['temperature'],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
             ),
         )
 

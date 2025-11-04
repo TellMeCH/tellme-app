@@ -310,7 +310,7 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
-        'google': {
+        'google.genai': {
             'handlers': ['console'],
             'level': 'WARNING',
             'propagate': False,

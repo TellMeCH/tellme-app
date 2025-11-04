@@ -51,7 +51,7 @@ class CallEnricher:
         self.openai = openai.OpenAI()
 
         # Initialize Vertex AI client
-        self.vertexai = genai.Client(vertexai=True, project=settings.GOOGLE_CLOUD_PROJECT, location='us-central1')
+        self.vertexai = genai.Client(vertexai=True, project=settings.GOOGLE_CLOUD_PROJECT, location='global')
 
         # Initialize enrichment prompts
         self.enrichment_prompts = []
@@ -247,7 +247,8 @@ class CallEnricher:
                 system_instruction=system_message,
                 temperature=config['temperature'],
                 response_mime_type="application/json",
-                response_schema=config["response_format"]["json_schema"]["schema"]
+                response_schema=config["response_format"]["json_schema"]["schema"],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
             ),
         )
 

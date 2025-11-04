@@ -23,6 +23,15 @@ variable "service_account_email" {
   description = "Service account email for Cloud Run"
 }
 
+variable "min_instance_count" {
+  type        = number
+  description = "Minimum number of Cloud Run container instances"
+}
+
+variable "max_instance_count" {
+  type        = number
+  description = "Maximum number of Cloud Run container instances"
+}
 
 variable "tellme_env" {
   type        = string
