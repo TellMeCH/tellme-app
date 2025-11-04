@@ -31,6 +31,8 @@ module "api_revision" {
   project_id            = var.project_id
   region                = var.region
   service_account_email = google_service_account.app.email
+  min_instance_count    = 0
+  max_instance_count    = 10
   tellme_env            = "staging"
   settings_name         = var.settings_name
   sql_instance_name     = var.sql_instance
