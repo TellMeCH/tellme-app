@@ -376,6 +376,7 @@ class CallTranscriber:
             config=types.GenerateContentConfig(
                 system_instruction=self.diarization_prompt.prompt,
                 temperature=config_kwargs['temperature'],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
             ),
         )
 

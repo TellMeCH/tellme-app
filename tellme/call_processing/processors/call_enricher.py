@@ -247,7 +247,8 @@ class CallEnricher:
                 system_instruction=system_message,
                 temperature=config['temperature'],
                 response_mime_type="application/json",
-                response_schema=config["response_format"]["json_schema"]["schema"]
+                response_schema=config["response_format"]["json_schema"]["schema"],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
             ),
         )
 
