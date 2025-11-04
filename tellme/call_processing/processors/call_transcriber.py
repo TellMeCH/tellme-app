@@ -70,7 +70,7 @@ class CallTranscriber:
         self.vertexai = genai.Client(
             vertexai=True,
             project=settings.GOOGLE_CLOUD_PROJECT,
-            location='us-central1'
+            location='global'
         )
 
         # Initialize transcription options
