@@ -64,8 +64,8 @@ module "cloud_run_v2" {
   execution_environment  = "EXECUTION_ENVIRONMENT_GEN2"
 
   template_scaling = {
-    min_instance_count = 0
-    max_instance_count = 10
+    min_instance_count = var.min_instance_count
+    max_instance_count = var.max_instance_count
   }
 
   ingress = "INGRESS_TRAFFIC_ALL"  # Allows unauthenticated access
