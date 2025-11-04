@@ -67,7 +67,7 @@ class CallValuer:
         if hasattr(settings, 'SEARCH_API_KEY') and hasattr(settings, 'SEARCH_ENGINE_ID'):
             try:
                 self.search_service = build(
-                    "customsearch", "v1", developerKey=settings.SEARCH_API_KEY
+                    "customsearch", "v1", developerKey=settings.SEARCH_API_KEY, cache_discovery=False
                 )
                 self.search_engine_id = settings.SEARCH_ENGINE_ID
             except Exception as e:

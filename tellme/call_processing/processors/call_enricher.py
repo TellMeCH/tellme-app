@@ -51,7 +51,7 @@ class CallEnricher:
         self.openai = openai.OpenAI()
 
         # Initialize Vertex AI client
-        self.vertexai = genai.Client(vertexai=True, project=settings.GOOGLE_CLOUD_PROJECT, location='us-central1')
+        self.vertexai = genai.Client(vertexai=True, project=settings.GOOGLE_CLOUD_PROJECT, location='global')
 
         # Initialize enrichment prompts
         self.enrichment_prompts = []
