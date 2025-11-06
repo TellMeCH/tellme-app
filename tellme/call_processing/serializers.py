@@ -43,5 +43,5 @@ class SummarizationSerializer(serializers.Serializer):
     object_id = serializers.IntegerField(required=True)
     object_type = serializers.CharField(required=True)
     summary_period = serializers.CharField(required=True)
-    summary_rolling_period = serializers.BooleanField(required=True)
+    rolling_period = serializers.BooleanField(required=True)
     task_id = serializers.CharField(required=False, allow_null=True)

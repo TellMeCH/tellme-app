@@ -297,6 +297,8 @@ def setup_db(db):
         input_tokens=100,
         output_tokens=50
     )
+    # Link the topic to the conversation
+    conversation.topics.add(topic)
     return org, agent, topic, suggested_topic, customer, plain_key, conversation
 
 
