@@ -185,7 +185,6 @@ def upload_file_and_create_processing_task(
 
 
 def create_summarization_task(
-        summarize_url: str,
         object_id: int,
         object_type: str,
         summary_period: str,
@@ -197,7 +196,6 @@ def create_summarization_task(
     Create a Google Cloud Task for summarizing an object (Topic, Customer, or Agent).
 
     Args:
-        summarize_url (str): URL endpoint for processing the summarization
         object_id (int): ID of the object to summarize
         object_type (str): Type of object ('topic', 'customer', 'agent')
         summary_period (str): Period to use for summarization ('week', 'month', 'quarter')
@@ -219,7 +217,7 @@ def create_summarization_task(
     task = {
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
-            "url": summarize_url,
+            "url": settings.SUMMARIZATION_ENDPOINT,
             "headers": {
                 "Content-Type": "application/json",
                 "Authorization": f"Token {settings.PROCESSING_PIPELINE_KEY}"
