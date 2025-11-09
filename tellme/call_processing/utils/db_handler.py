@@ -1,7 +1,13 @@
 import datetime
+from django.db import transaction
 from django.utils import timezone
+from django.conf import settings
 from django.utils.dateparse import parse_datetime
-from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic
+from django.contrib.contenttypes.models import ContentType
+from tellme.call_miner.utils.period_utils import period_bounds
+from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary
+from tellme.call_processing.utils.summary_utils import check_if_refresh_needed
+from tellme.call_processing.utils.queue_utils import create_summarization_task
 
 
 def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: datetime.datetime) -> (bool, str):
@@ -273,6 +279,8 @@ def create_conversation(
     conversation.topics.set(topics_qs)
     conversation.suggested_topics.set(suggested_topics_qs)
 
+    return conversation
+
 
 def create_suggested_topics(
         new_topics: list[dict[str, str]],
@@ -378,69 +386,43 @@ def trigger_summarization_tasks(conversation, logger):
     Trigger summarization tasks for the associated topics, customer, and agent
     after a new conversation is created.
 
-    This function checks if summaries need to be refreshed based on the same logic
-    as MetaSummaryAbstractModel._needs_refresh, and creates summarization tasks
+    This function checks if summaries need to be refreshed and creates summarization tasks
     for objects that need updates.
 
     Args:
         conversation: The newly created Conversation object
         logger: Logger instance for logging events
     """
-    from tellme.call_processing.utils.summarization import needs_refresh
-    from tellme.call_processing.utils.queue_utils import create_summarization_task
-    from tellme.call_miner.utils.period_utils import period_bounds
-    from tellme.call_miner.models import PeriodSummary
-    from django.contrib.contenttypes.models import ContentType
-    from django.conf import settings
-
-    # Get summarization parameters from ViewSet defaults
-    # Topic summarization parameters (from TopicViewSet)
-    topic_period = 'quarter'
-    topic_rolling = True
-
-    # Customer summarization parameters (from CustomerViewSet)
-    customer_period = 'quarter'
-    customer_rolling = True
-
-    # Agent summarization parameters (from MetaSummaryAbstractViewSet)
-    agent_period = 'month'
-    agent_rolling = False
-
-    summarize_url = f"{settings.CALL_PROCESSING_ENDPOINT.rstrip('/')}/summarize/"
-
     # Check topics
     for topic in conversation.topics.all():
-        _check_and_create_summarization_task(
+        check_and_create_summarization_task(
             obj=topic,
             obj_type='topic',
             period=topic_period,
             rolling=topic_rolling,
-            summarize_url=summarize_url,
             logger=logger
         )
 
     # Check customer
-    _check_and_create_summarization_task(
+    check_and_create_summarization_task(
         obj=conversation.customer,
         obj_type='customer',
         period=customer_period,
         rolling=customer_rolling,
-        summarize_url=summarize_url,
         logger=logger
     )
 
     # Check agent
-    _check_and_create_summarization_task(
+    check_and_create_summarization_task(
         obj=conversation.agent,
         obj_type='agent',
         period=agent_period,
         rolling=agent_rolling,
-        summarize_url=summarize_url,
         logger=logger
     )
 
 
-def _check_and_create_summarization_task(obj, obj_type, period, rolling, summarize_url, logger):
+def check_and_create_summarization_task(obj, obj_type, period, rolling, logger):
     """
     Check if an object needs summarization and create a task if needed.
 
@@ -449,14 +431,8 @@ def _check_and_create_summarization_task(obj, obj_type, period, rolling, summari
         obj_type: String type ('topic', 'customer', 'agent')
         period: Period to use for summarization
         rolling: Whether to use rolling period
-        summarize_url: URL for the summarization endpoint
         logger: Logger instance
     """
-    from tellme.call_processing.utils.summarization import needs_refresh
-    from tellme.call_processing.utils.queue_utils import create_summarization_task
-    from tellme.call_miner.utils.period_utils import period_bounds
-    from tellme.call_miner.models import PeriodSummary
-    from django.contrib.contenttypes.models import ContentType
 
     try:
         start, end, label = period_bounds(period, rolling)
@@ -478,7 +454,7 @@ def _check_and_create_summarization_task(obj, obj_type, period, rolling, summari
             )
 
             # Check if refresh is needed
-            refresh_needed, call_count = needs_refresh(summary_obj, conversations, rolling, start)
+            refresh_needed, call_count = check_if_refresh_needed(summary_obj, conversations, rolling, start)
 
             if not refresh_needed:
                 logger.debug(f"Summary for {obj_type} {obj.id} does not need refresh")
@@ -490,7 +466,6 @@ def _check_and_create_summarization_task(obj, obj_type, period, rolling, summari
 
         # Create summarization task
         task_id = create_summarization_task(
-            summarize_url=summarize_url,
             object_id=obj.id,
             object_type=obj_type,
             summary_period=period,
@@ -503,3 +478,60 @@ def _check_and_create_summarization_task(obj, obj_type, period, rolling, summari
     except Exception as e:
         logger.error(f"Error checking summarization for {obj_type} {obj.id}: {str(e)}")
         # Don't raise the exception to avoid breaking conversation creation
+
+
+def get_object_by_class_string_and_id(class_str, obj_id):
+    """
+    Get a Django model instance given its class string representation and ID.
+
+    Args:
+        class_str: String like "<class 'tellme.call_miner.models.Topic'>"
+        obj_id: Primary key of the object
+
+    Returns:
+        Model instance
+    """
+    # Parse the class string to get ContentType
+    module_path = class_str.split("'")[1]
+    app_label = module_path.split('.')[-3]
+    model_name = module_path.split('.')[-1].lower()
+
+    # Get the object directly using ContentType
+    content_type = ContentType.objects.get(app_label=app_label, model=model_name)
+    return content_type.get_object_for_this_type(id=obj_id)
+
+
+def create_periodsummary(obj, summary, latest_date, call_count, label, period):
+    """
+    Create or update a PeriodSummary instance after summarization is complete.
+
+    Args:
+        obj: The object (Topic, Customer, or Agent) that was summarized
+        summary: The generated summary dictionary from MetaSummarizer
+        latest_date: The latest conversation date in the period
+        call_count: Number of conversations in the period
+        label: Period label (e.g., "2025-Q1", "2025-01")
+        period: Period type ('week', 'month', 'quarter')
+    """
+
+    content_type = ContentType.objects.get_for_model(obj.__class__)
+
+    with transaction.atomic():
+        period_summary, created = PeriodSummary.objects.select_for_update().get_or_create(
+            content_type=content_type,
+            object_id=obj.pk,
+            period_type=period,
+            period_label=label,
+            defaults=dict(
+                summary=summary,
+                last_call_at=latest_date,
+                call_count=call_count,
+            )
+        )
+
+        # If it already existed, update it with new data
+        if not created:
+            period_summary.summary = summary
+            period_summary.last_call_at = latest_date
+            period_summary.call_count = call_count
+            period_summary.save(update_fields=["summary", "last_call_at", "call_count"])
