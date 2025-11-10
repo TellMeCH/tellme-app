@@ -184,7 +184,7 @@ class ProcessRecordingView(APIView):
             create_suggested_topics(enriched_data['new_topics'], file_name, organization_id)
 
             # Trigger summarization tasks for associated objects
-            trigger_summarization_tasks(conversation, logger)
+            trigger_summarization_tasks(conversation)
         except RuntimeError as exc:
             logger.error(f"Could not store results of Processing Pipeline: {str(exc)}")
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

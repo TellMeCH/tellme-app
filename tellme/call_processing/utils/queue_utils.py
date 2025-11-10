@@ -8,12 +8,15 @@ for call processing workflows, including file uploads and task scheduling.
 import uuid
 import datetime
 import json
+import logging
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 import grpc
 from django.conf import settings
 from rest_framework import status
 from tellme.call_processing.utils import gcs_utils, db_handler
+
+logger = logging.getLogger(__name__)
 
 
 def create_storage_path(
@@ -189,7 +192,6 @@ def create_summarization_task(
         object_type: str,
         summary_period: str,
         summary_rolling_period: bool,
-        logger,
         task_id: str = None
 ):
     """
@@ -200,7 +202,6 @@ def create_summarization_task(
         object_type (str): Type of object ('topic', 'customer', 'agent')
         summary_period (str): Period to use for summarization ('week', 'month', 'quarter')
         summary_rolling_period (bool): Whether to use rolling period
-        logger: Logger instance for logging events
         task_id (str, optional): Optional task ID for tracking
     """
     if task_id is None:
