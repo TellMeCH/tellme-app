@@ -1,4 +1,5 @@
 import datetime
+import logging
 from django.db import transaction
 from django.utils import timezone
 from django.conf import settings
@@ -8,6 +9,8 @@ from tellme.call_miner.utils.period_utils import period_bounds
 from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary
 from tellme.call_processing.utils.summary_utils import check_if_refresh_needed
 from tellme.call_processing.utils.queue_utils import create_summarization_task
+
+logger = logging.getLogger(__name__)
 
 
 def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: datetime.datetime) -> (bool, str):
@@ -239,13 +242,13 @@ def create_conversation(
     topics_qs = Topic.objects.filter(name__in=topics, organization=org)
     if len(topics_qs) != len(topics):
         missing = set(topics) - set(t.name for t in topics_qs)
-        print(f"Some topics were not found in org {organization_id}: {missing}")
+        logger.info(f"Some topics were not found in org {organization_id}: {missing}")
 
     # Instantiate the SuggestedTopics based on their names, filtering by this org
     suggested_topics_qs = SuggestedTopic.objects.filter(name__in=suggested_topics, organization=org)
     if len(suggested_topics_qs) != len(suggested_topics):
         missing = set(suggested_topics) - set(t.name for t in suggested_topics_qs)
-        print(f"Some suggested topics were not found in org {organization_id}: {missing}")
+        logger.info(f"Some suggested topics were not found in org {organization_id}: {missing}")
 
     # Convert date_str to a timezone-aware DateTime
     if timestamp is None:
@@ -381,48 +384,74 @@ def create_suggested_topics(
         conversation.suggested_topics.add(suggested_topic)
 
 
-def trigger_summarization_tasks(conversation, logger):
+def get_default_summary_settings():
+    """
+    Get default summary period and rolling window settings from ViewSets.
+
+    Returns:
+        dict: Default settings for each object type
+    """
+    # Import here to avoid circular imports
+    from tellme.call_miner.views import TopicViewSet, CustomerViewSet, SummaryActionsViewSet
+
+    return {
+        'topic': {
+            'period': getattr(TopicViewSet, 'summary_period', 'month'),
+            'rolling': getattr(TopicViewSet, 'summary_rolling_window', False)
+        },
+        'customer': {
+            'period': getattr(CustomerViewSet, 'summary_period', 'quarter'),
+            'rolling': getattr(CustomerViewSet, 'summary_rolling_window', True)
+        },
+        'agent': {
+            # AgentViewSet inherits from SummaryActionsViewSet
+            'period': getattr(SummaryActionsViewSet, 'summary_period', 'month'),
+            'rolling': getattr(SummaryActionsViewSet, 'summary_rolling_window', False)
+        }
+    }
+
+
+def trigger_summarization_tasks(conversation):
     """
     Trigger summarization tasks for the associated topics, customer, and agent
     after a new conversation is created.
 
     This function checks if summaries need to be refreshed and creates summarization tasks
-    for objects that need updates.
+    for objects that need updates using the default period settings from ViewSets.
 
     Args:
         conversation: The newly created Conversation object
-        logger: Logger instance for logging events
     """
+    # Get default settings from ViewSets
+    settings = get_default_summary_settings()
+
     # Check topics
     for topic in conversation.topics.all():
         check_and_create_summarization_task(
             obj=topic,
             obj_type='topic',
-            period=topic_period,
-            rolling=topic_rolling,
-            logger=logger
+            period=settings['topic']['period'],
+            rolling=settings['topic']['rolling']
         )
 
     # Check customer
     check_and_create_summarization_task(
         obj=conversation.customer,
         obj_type='customer',
-        period=customer_period,
-        rolling=customer_rolling,
-        logger=logger
+        period=settings['customer']['period'],
+        rolling=settings['customer']['rolling']
     )
 
     # Check agent
     check_and_create_summarization_task(
         obj=conversation.agent,
         obj_type='agent',
-        period=agent_period,
-        rolling=agent_rolling,
-        logger=logger
+        period=settings['agent']['period'],
+        rolling=settings['agent']['rolling']
     )
 
 
-def check_and_create_summarization_task(obj, obj_type, period, rolling, logger):
+def check_and_create_summarization_task(obj, obj_type, period, rolling):
     """
     Check if an object needs summarization and create a task if needed.
 
@@ -431,9 +460,7 @@ def check_and_create_summarization_task(obj, obj_type, period, rolling, logger):
         obj_type: String type ('topic', 'customer', 'agent')
         period: Period to use for summarization
         rolling: Whether to use rolling period
-        logger: Logger instance
     """
-
     try:
         start, end, label = period_bounds(period, rolling)
 
@@ -469,8 +496,7 @@ def check_and_create_summarization_task(obj, obj_type, period, rolling, logger):
             object_id=obj.id,
             object_type=obj_type,
             summary_period=period,
-            summary_rolling_period=rolling,
-            logger=logger
+            summary_rolling_period=rolling
         )
 
         logger.info(f"Created summarization task {task_id} for {obj_type} {obj.id}")
