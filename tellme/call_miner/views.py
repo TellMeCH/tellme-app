@@ -54,33 +54,6 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         """
         return getattr(obj, "name", None)
 
-    def define_trace_data(self, request, obj, name: str):
-        """
-        This method defines trace data to be used by Langfuse when recording an LLM trace
-        """
-        period = request.query_params.get("period", self.summary_period)
-        rolling = request.query_params.get("rolling", self.summary_rolling_window)
-        if hasattr(request.user, 'employee'):
-            role = request.user.employee.role.lower()
-            organization = request.user.employee.organization
-        else:
-            organization = None
-            if request.user.is_superuser:
-                role = 'superuser'
-            else:
-                role = 'unknown'
-        return {
-            'name': name, 'user_id': request.user.id, 'tags': [settings.TELLME_ENV],
-            'metadata': {
-                'organization': organization,
-                'role': role,
-                'object': str(type(obj)),
-                'id': obj.id,
-                'period': period,
-                'rolling': rolling
-            }
-        }
-
     @extend_schema(
         description=MetaSummarySerializer.get_summary_data.__doc__,
         parameters=[ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA],
@@ -92,15 +65,13 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         }
     )
     @decorators.action(detail=True, methods=['get'])
-    def summary_data(self, request, pk=None):
+    def summary_data(self, pk=None):
         obj = self.get_object()
         context = self.get_serializer_context()
 
         # Inject trace data and period to the default serializer context
-        trace_data = self.define_trace_data(request, obj, 'get_summary_data')
         period = self.request.query_params.get("period", self.summary_period)
         rolling = self.request.query_params.get("rolling", self.summary_rolling_window)
-        context['trace_data'] = trace_data
         context['period'] = period
         context['rolling'] = rolling
         serializer = self.get_serializer(obj, context=context)
@@ -118,7 +89,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         }
     )
     @decorators.action(detail=False, methods=['get'], url_path='all_summaries')
-    def all_summaries(self, request):
+    def all_summaries(self):
         """
         This method takes get_summary_data a step further, obtaining the summary data of all objects in the queryset.
         The response is now a dictionary, where the key corresponds to the object ID.
@@ -132,10 +103,6 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
             context['period'] = self.summary_period
             context['rolling'] = self.summary_rolling_window
             for obj in queryset:
-                # Inject trace data to the default serializer context
-                trace_data = self.define_trace_data(request, obj, 'get_all_summaries')
-                context['trace_data'] = trace_data
-
                 serializer = self.get_serializer(obj, context=context)
                 summary_data = serializer.get_summary_data(obj)
                 summary_data['name'] = self.get_summary_name(obj)
