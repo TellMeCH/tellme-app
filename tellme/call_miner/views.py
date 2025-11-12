@@ -20,6 +20,7 @@ from tellme.call_miner.permissions import (ConversationPermission, OrganizationP
                                     TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
 from tellme.call_miner.utils.paginators import CustomListViewPaginator
 from tellme.call_miner.utils.period_utils import period_bounds
+from tellme.call_miner.utils.summary_utils import DEFAULT_SUMMARY_SETTINGS
 from tellme.call_miner.authentication import FirebaseAuthentication
 from tellme.call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA,
@@ -41,10 +42,10 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         summary_order_desc (bool): Indicates whether order the summary dictionaries in descending order of the order key
         summary_rolling_window (bool): Indicates whether to use a rolling window when selecting conversations
     """
-    summary_period = "month"
+    summary_period = DEFAULT_SUMMARY_SETTINGS['agent']['period']
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
-    summary_rolling_window = False
+    summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['agent']['rolling']
 
     @staticmethod
     def get_summary_name(obj):
@@ -65,7 +66,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         }
     )
     @decorators.action(detail=True, methods=['get'])
-    def summary_data(self, pk=None):
+    def summary_data(self, request, pk=None):
         obj = self.get_object()
         context = self.get_serializer_context()
 
@@ -89,7 +90,7 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         }
     )
     @decorators.action(detail=False, methods=['get'], url_path='all_summaries')
-    def all_summaries(self):
+    def all_summaries(self, request):
         """
         This method takes get_summary_data a step further, obtaining the summary data of all objects in the queryset.
         The response is now a dictionary, where the key corresponds to the object ID.
@@ -463,10 +464,10 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
-    summary_period = 'quarter'
+    summary_period = DEFAULT_SUMMARY_SETTINGS['topic']['period']
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
-    summary_rolling_window = True
+    summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['topic']['rolling']
 
     def get_serializer_class(self):
         if self.action in ['list', 'list_active', 'retrieve', 'list_recent']:
@@ -664,10 +665,10 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-last_conversation_date', 'conversation_count']
-    summary_period = 'quarter'
+    summary_period = DEFAULT_SUMMARY_SETTINGS['customer']['period']
     summary_order_keys = ['summary', 'Customer Value']
     summary_order_desc = True
-    summary_rolling_window = True
+    summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['customer']['rolling']
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
