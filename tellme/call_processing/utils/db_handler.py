@@ -5,10 +5,8 @@ from django.utils import timezone
 from django.conf import settings
 from django.utils.dateparse import parse_datetime
 from django.contrib.contenttypes.models import ContentType
-from tellme.call_miner.utils.period_utils import period_bounds
 from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary
-from tellme.call_processing.utils.summary_utils import check_if_refresh_needed
-from tellme.call_processing.utils.queue_utils import create_summarization_task
+from tellme.call_miner.utils.summary_utils import get_default_summary_settings
 
 logger = logging.getLogger(__name__)
 
@@ -384,126 +382,38 @@ def create_suggested_topics(
         conversation.suggested_topics.add(suggested_topic)
 
 
-def get_default_summary_settings():
-    """
-    Get default summary period and rolling window settings from ViewSets.
-
-    Returns:
-        dict: Default settings for each object type
-    """
-    # Import here to avoid circular imports
-    from tellme.call_miner.views import TopicViewSet, CustomerViewSet, SummaryActionsViewSet
-
-    return {
-        'topic': {
-            'period': getattr(TopicViewSet, 'summary_period', 'month'),
-            'rolling': getattr(TopicViewSet, 'summary_rolling_window', False)
-        },
-        'customer': {
-            'period': getattr(CustomerViewSet, 'summary_period', 'quarter'),
-            'rolling': getattr(CustomerViewSet, 'summary_rolling_window', True)
-        },
-        'agent': {
-            # AgentViewSet inherits from SummaryActionsViewSet
-            'period': getattr(SummaryActionsViewSet, 'summary_period', 'month'),
-            'rolling': getattr(SummaryActionsViewSet, 'summary_rolling_window', False)
-        }
-    }
-
-
 def trigger_summarization_tasks(conversation):
     """
     Trigger summarization tasks for the associated topics, customer, and agent
     after a new conversation is created.
 
     This function checks if summaries need to be refreshed and creates summarization tasks
-    for objects that need updates using the default period settings from ViewSets.
+    for objects that need updates using the default period settings.
 
     Args:
         conversation: The newly created Conversation object
     """
-    # Get default settings from ViewSets
+    # Get default settings
     settings = get_default_summary_settings()
 
     # Check topics
     for topic in conversation.topics.all():
-        check_and_create_summarization_task(
-            obj=topic,
-            obj_type='topic',
+        topic.check_and_create_summarization_task(
             period=settings['topic']['period'],
             rolling=settings['topic']['rolling']
         )
 
     # Check customer
-    check_and_create_summarization_task(
-        obj=conversation.customer,
-        obj_type='customer',
+    conversation.customer.check_and_create_summarization_task(
         period=settings['customer']['period'],
         rolling=settings['customer']['rolling']
     )
 
     # Check agent
-    check_and_create_summarization_task(
-        obj=conversation.agent,
-        obj_type='agent',
+    conversation.agent.check_and_create_summarization_task(
         period=settings['agent']['period'],
         rolling=settings['agent']['rolling']
     )
-
-
-def check_and_create_summarization_task(obj, obj_type, period, rolling):
-    """
-    Check if an object needs summarization and create a task if needed.
-
-    Args:
-        obj: The object (Topic, Customer, or Agent) to check
-        obj_type: String type ('topic', 'customer', 'agent')
-        period: Period to use for summarization
-        rolling: Whether to use rolling period
-    """
-    try:
-        start, end, label = period_bounds(period, rolling)
-
-        # Get conversations in the relevant time period
-        conversations = obj.conversations.filter(date__gte=start, date__lt=end)
-        if not conversations.exists():
-            logger.debug(f"No conversations found for {obj_type} {obj.id} in period {label}")
-            return
-
-        # Check if there's an existing summary
-        content_type = ContentType.objects.get_for_model(obj.__class__)
-        try:
-            summary_obj = PeriodSummary.objects.get(
-                content_type=content_type,
-                object_id=obj.pk,
-                period_type=period,
-                period_label=label
-            )
-
-            # Check if refresh is needed
-            refresh_needed, call_count = check_if_refresh_needed(summary_obj, conversations, rolling, start)
-
-            if not refresh_needed:
-                logger.debug(f"Summary for {obj_type} {obj.id} does not need refresh")
-                return
-
-        except PeriodSummary.DoesNotExist:
-            # No existing summary, create task
-            logger.info(f"No existing summary for {obj_type} {obj.id}, creating summarization task")
-
-        # Create summarization task
-        task_id = create_summarization_task(
-            object_id=obj.id,
-            object_type=obj_type,
-            summary_period=period,
-            summary_rolling_period=rolling
-        )
-
-        logger.info(f"Created summarization task {task_id} for {obj_type} {obj.id}")
-
-    except Exception as e:
-        logger.error(f"Error checking summarization for {obj_type} {obj.id}: {str(e)}")
-        # Don't raise the exception to avoid breaking conversation creation
 
 
 def get_object_by_class_string_and_id(class_str, obj_id):

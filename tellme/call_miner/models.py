@@ -5,6 +5,7 @@ import hashlib
 import datetime
 import zoneinfo
 import threading
+import logging
 from django.utils import timezone
 from django.db import models, transaction
 from django.conf import settings
@@ -14,8 +15,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from tellme.call_miner.utils.period_utils import period_bounds
 import tellme.call_miner.utils.email_utils as email
+from tellme.call_miner.utils.summary_utils import create_summarization_task
 from tellme.call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
-from tellme.call_processing.utils.db_handler import check_and_create_summarization_task
 
 
 class PeriodSummary(models.Model):
@@ -27,13 +28,14 @@ class PeriodSummary(models.Model):
         ('month', 'Month'),
         ('quarter', 'Quarter')
     ]
+    DEVIATION_THRESHOLD = 10
 
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveBigIntegerField()
     target = GenericForeignKey("content_type", "object_id")
     period_type = models.CharField(choices=PERIOD_CHOICES)
     period_label = models.CharField(max_length=12)  # '2025-W20', '2025-05', '2025-Q2'...
-    summary = models.JSONField()
+    summary = models.JSONField(null=True)
     last_call_at = models.DateTimeField()
     call_count = models.PositiveIntegerField()
     created = models.DateTimeField(auto_now_add=True)
@@ -43,11 +45,46 @@ class PeriodSummary(models.Model):
         unique_together = ("content_type", "object_id", "period_type", "period_label")
         indexes = [models.Index(fields=["period_type", "period_label"])]
 
+    def check_if_refresh_needed(self, conversations: models.query.QuerySet, rolling: bool, window_start: datetime) -> bool:
+        """
+        Decide whether the summary should be recalculated based on conversation volume changes.
+
+        In period based mode, if the conversation count has changed significantly, a refresh is triggered
+        In rolling mode, if enough new conversations have been added or the previous summary is too old,
+        a refresh is triggered.
+
+        Parameters:
+            conversations : QuerySet, All conversations within the target time window.
+            rolling : bool, Whether the summary is for a rolling window (uses new conversations after last_call_at).
+            window_start: datetime, Date bound of the time window used to obtain relevant conversations
+
+        Returns:
+        (needs_refresh, current_count) : tuple[bool, int]
+            - True if a summary refresh is needed, False otherwise.
+            - The current number of relevant conversations.
+        """
+        current = conversations.count()
+        previous = self.call_count
+        if previous == 0:
+            return current > 0, current
+        if not rolling:
+            deviation = abs(current - previous) * 100 / previous
+        else:
+            old_latest_call = self.last_call_at
+            if window_start > old_latest_call:
+                deviation = self.DEVIATION_THRESHOLD + 1
+            else:
+                new_call_count = conversations.filter(date__gt=old_latest_call).count()
+                deviation = new_call_count * 100 / previous
+        return deviation > self.DEVIATION_THRESHOLD, current
+
 
 class MetaSummaryAbstractModel(models.Model):
     """
     An abstract model that handles the creation and retrieval of summaries objects for Agent, Customer, and Topic models
     """
+    DEFAULT_SUMMARY = 'Default Summary. Still being created.'
+
     class Meta:
         abstract = True
 
@@ -65,7 +102,8 @@ class MetaSummaryAbstractModel(models.Model):
         # Extract all conversations in the relevant time period
         conversations = self.conversations.filter(date__gte=start, date__lt=end)
         if not conversations.exists():
-            return None, None, 0, label
+            status = 'no conversations found'
+            return None, None, 0, label, status
 
         # Fetch existing PeriodSummary (if it exists)
         content_type = ContentType.objects.get_for_model(self.__class__)
@@ -75,7 +113,7 @@ class MetaSummaryAbstractModel(models.Model):
             period_type=period,
             period_label=label,
             defaults={
-                'summary': {},
+                'summary': None,
                 'last_call_at': conversations.order_by('-date').first().date,
                 'call_count': conversations.count()
             }
@@ -83,28 +121,76 @@ class MetaSummaryAbstractModel(models.Model):
 
         # If we just created a new summary, trigger async task to populate it
         if created:
-            # Determine object type for task creation
-            obj_type_map = {
-                'Topic': 'topic',
-                'Customer': 'customer',
-                'Agent': 'agent'
-            }
-            obj_type = obj_type_map.get(self.__class__.__name__)
-
-            if obj_type:
-                check_and_create_summarization_task(
-                    obj=self,
-                    obj_type=obj_type,
-                    period=period,
-                    rolling=rolling
-                )
-                status = 'generating'
-            else:
-                status = 'error'
+            self.check_and_create_summarization_task(period=period, rolling=rolling, created=created)
+            status = 'generating'
+        elif summary.summary is None:
+            status = 'generating'
         else:
             status = 'ready'
 
         return summary.summary, summary.last_call_at, summary.call_count, label, status
+
+    def check_and_create_summarization_task(self, period, rolling, created: bool = False):
+        """
+        Check if an object needs summarization and create a task if needed.
+
+        Args:
+            period: Period to use for summarization
+            rolling: Whether to use rolling period
+            created: Indicates whether an empty period summary was just created, and it should be populated regardless
+
+        Returns:
+            task_id if task was created, None otherwise
+        """
+        # Infer object type from class name
+        obj_type = str(type(self))
+        if not obj_type:
+            return None
+
+        try:
+            start, end, label = period_bounds(period, rolling)
+
+            # Get conversations in the relevant time period
+            conversations = self.conversations.filter(date__gte=start, date__lt=end)
+            if not conversations.exists():
+                return None
+
+            # Check if there's an existing summary
+            content_type = ContentType.objects.get_for_model(self.__class__)
+
+            # If the PeriodSummary object was not created in a get_or_create_summary call calling this method, check
+            if not created:
+                try:
+                    summary_obj = PeriodSummary.objects.get(
+                        content_type=content_type,
+                        object_id=self.pk,
+                        period_type=period,
+                        period_label=label
+                    )
+
+                    # Check if refresh is needed
+                    refresh_needed, call_count = summary_obj.check_if_refresh_needed(conversations, rolling, start)
+
+                    if not refresh_needed:
+                        return None
+
+                except PeriodSummary.DoesNotExist:
+                    # No existing summary, create task
+                    pass
+
+            # Create summarization task
+            task_id = create_summarization_task(
+                object_id=self.id,
+                object_type=obj_type,
+                summary_period=period,
+                rolling_period=rolling
+            )
+
+            return task_id
+
+        except Exception as e:
+            logging.error(f'Failed to create summarization task for {self.__class__.__name__} of ID {self.id}: {e}')
+            return None
 
 
 class ConversationStatsAbstractModel(models.Model):
