@@ -213,6 +213,7 @@ class SummarizationView(APIView):
 
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data)
+        logger.debug(f"Received payload: {request.data}")
         serializer.is_valid(raise_exception=True)
 
         # Extract validated data
@@ -225,21 +226,21 @@ class SummarizationView(APIView):
         logger.info(f"Processing summarization for {object_type} {object_id}")
 
         if object_type not in self.summarizer.allowed_objects:
-            return Response({"error": f"Unsupported object type: {object_type}"}, status=status.HTTP_400_BAD_REQUEST)
+            message = f"Unsupported object type: {object_type}"
+            logger.error(message)
+            return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
         # Get the object instance
         try:
             obj = get_object_by_class_string_and_id(object_type, object_id)
         except ObjectDoesNotExist:
-            return Response(
-                {"error": f"Object with id {object_id} not found for type {object_type}"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            message = f"Object with id {object_id} not found for type {object_type}"
+            logger.error(message)
+            return Response({"error": message}, status=status.HTTP_404_NOT_FOUND)
         except ContentType.DoesNotExist:
-            return Response(
-                {"error": f"Unsupported object type: {object_type}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            message = f"Unsupported object type: {object_type}"
+            logger.error(message)
+            return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
         # TODO: Check if there's a newer task in the queue for the same object
         # This would require implementing queue inspection logic
@@ -283,7 +284,8 @@ class SummarizationView(APIView):
 
             return Response({
                 "message": message,
-                "summary_id": period_summary.id,
+                "object_type": object_type,
+                "object_id": object_id,
                 "call_count": call_count,
                 "period_label": label
             }, status=status.HTTP_200_OK)
