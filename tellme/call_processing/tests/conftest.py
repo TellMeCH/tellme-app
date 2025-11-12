@@ -56,8 +56,17 @@ def mock_cloud_tasks():
     """
     Mocks out the Google Cloud Tasks create_task call.
     """
-    with patch("tellme.call_processing.utils.queue_utils.create_task") as mock_create:
+    with patch("tellme.call_processing.utils.queue_utils.create_processing_task") as mock_create:
         mock_create.return_value = None
+        yield mock_create
+
+@pytest.fixture
+def mock_summarization_tasks():
+    """
+    Mocks out the Google Cloud Tasks create_summarization_task call.
+    """
+    with patch("tellme.call_processing.tests.test_queue.create_summarization_task") as mock_create:
+        mock_create.return_value = "test-task-id-12345"
         yield mock_create
 
 

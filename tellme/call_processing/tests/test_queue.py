@@ -2,8 +2,9 @@ import pytest
 from datetime import datetime, timedelta
 from django.urls import reverse
 from rest_framework import status
-from tellme.call_miner.models import Conversation, OrganizationAPIKey
+from tellme.call_miner.models import Conversation
 from django.core.files.uploadedfile import SimpleUploadedFile
+from tellme.call_miner.utils.summary_utils import create_summarization_task
 
 
 @pytest.mark.django_db
@@ -210,3 +211,89 @@ class TestQueueView:
         mock_gcs_utils[0].assert_called_once()
         mock_cloud_tasks.assert_called_once()
 
+
+@pytest.mark.django_db
+class TestSummarizationQueue:
+    """Test the summarization queue functionality."""
+
+    def test_create_summarization_task_success(self, mock_summarization_tasks, setup_db):
+        """
+        Test that create_summarization_task creates a task with correct parameters.
+        """
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        task_id = create_summarization_task(
+            object_id=topic.id,
+            object_type='topic',
+            summary_period='quarter',
+            rolling_period=True
+        )
+
+        # Verify task was created and returned task ID
+        assert task_id == "test-task-id-12345"
+        mock_summarization_tasks.assert_called_once()
+
+        # Verify the call arguments
+        call_args = mock_summarization_tasks.call_args
+        assert call_args[1]['object_id'] == topic.id
+        assert call_args[1]['object_type'] == 'topic'
+        assert call_args[1]['summary_period'] == 'quarter'
+        assert call_args[1]['summary_rolling_period'] is True
+
+    def test_create_summarization_task_different_object_types(self, mock_summarization_tasks, setup_db):
+        """
+        Test create_summarization_task with different object types (topic, customer, agent).
+        """
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        test_cases = [
+            (topic.id, 'topic', 'quarter', True),
+            (customer.id, 'customer', 'quarter', True),
+            (agent.id, 'agent', 'month', False)
+        ]
+
+        for object_id, object_type, period, rolling in test_cases:
+            mock_summarization_tasks.reset_mock()
+
+            task_id = create_summarization_task(
+                object_id=object_id,
+                object_type=object_type,
+                summary_period=period,
+                rolling_period=rolling
+            )
+
+            assert task_id == "test-task-id-12345"
+            mock_summarization_tasks.assert_called_once()
+
+            # Verify correct parameters were passed
+            call_args = mock_summarization_tasks.call_args
+            assert call_args[1]['object_id'] == object_id
+            assert call_args[1]['object_type'] == object_type
+            assert call_args[1]['summary_period'] == period
+            assert call_args[1]['summary_rolling_period'] == rolling
+
+    def test_create_summarization_task_with_custom_task_id(self, mock_summarization_tasks, setup_db):
+        """
+        Test create_summarization_task with a custom task ID.
+        """
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        custom_task_id = "custom-task-id-789"
+
+        task_id = create_summarization_task(
+            object_id=topic.id,
+            object_type='topic',
+            summary_period='month',
+            rolling_period=False,
+            task_id=custom_task_id
+        )
+
+        # Should return the mocked task ID
+        assert task_id == "test-task-id-12345"
+        mock_summarization_tasks.assert_called_once()
+
+# A brief summary of summarization testing
+# - test_queue: Tests create_summarization_task in call_miner/utils/summary_utils.py
+# - test_agents, test_customers, test_topics: Test the whole summary-data view, as well as get_or_create_summary
+# - test_db_handler: Tests call_processing/utils/db_handler.py's trigger_summarization_tasks
+# - test_models: Tests check_and_create_summarization_task, which both get_or_create_summary and trigger_summarization_tasks call

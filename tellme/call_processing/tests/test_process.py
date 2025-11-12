@@ -63,8 +63,9 @@ class TestProcessRecordingView:
 
     @patch("tellme.call_processing.views.create_conversation")
     @patch("tellme.call_processing.views.create_suggested_topics")
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_process_success(
-            self, mock_create_suggested_topics, mock_create_conversation, api_client, valid_task_payload, setup_db,
+            self, mock_trigger_summarization_tasks, mock_create_suggested_topics, mock_create_conversation, api_client, valid_task_payload, setup_db,
             mock_gcs_utils, mock_deepgram, mock_groq, mock_openai, mock_pydub, mock_processing_user
     ):
         """
@@ -76,10 +77,12 @@ class TestProcessRecordingView:
         assert response.status_code == status.HTTP_200_OK
         mock_create_conversation.assert_called_once()
         mock_create_suggested_topics.assert_called_once()
+        mock_trigger_summarization_tasks.assert_called_once()
         assert response.data["message"] == "File processed and saved to DB."
 
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_create_conversation_in_db(
-            self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram, mock_groq,
+            self, mock_trigger_summarization_tasks, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram, mock_groq,
             mock_openai, mock_pydub, mock_processing_user
     ):
         """
@@ -98,8 +101,9 @@ class TestProcessRecordingView:
         assert conv.title == "Test Call"
         assert conv.summary == "Short summary"
 
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_create_conversation_with_suggested_topics(
-        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram, 
+        self, mock_trigger_summarization_tasks, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
         mock_groq, mock_openai, mock_pydub, mock_processing_user
     ):
         """
@@ -290,8 +294,9 @@ class TestProcessRecordingView:
         assert new_topics_arg[0]["name"] == "Product Demo"
         assert new_topics_arg[0]["description"] == "Customer requesting product demo"
 
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_conversation_stats_updated_after_processing(
-        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        self, mock_trigger_summarization_tasks, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
         mock_groq, mock_openai, mock_pydub, mock_processing_user
     ):
         """
@@ -299,8 +304,11 @@ class TestProcessRecordingView:
         """
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
+        topic.refresh_from_db()
+        suggested_topic.refresh_from_db()
+
         # Initial stats should be zero
-        assert topic.conversation_count == 0
+        assert topic.conversation_count == 1
         assert suggested_topic.conversation_count == 0
 
         url = reverse("process")
@@ -311,11 +319,12 @@ class TestProcessRecordingView:
         topic.refresh_from_db()
         suggested_topic.refresh_from_db()
 
-        assert topic.conversation_count == 1
+        assert topic.conversation_count == 2
         assert suggested_topic.conversation_count == 1
 
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_process_without_customer_id_generates_new_customer(
-        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        self, mock_trigger_summarization_tasks, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
         mock_groq, mock_openai, mock_pydub, mock_processing_user, mock_dlp
     ):
         """
@@ -376,8 +385,9 @@ class TestProcessRecordingView:
         assert conv.summary == "Short summary"
         assert conv.sentiment == 4
 
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_process_mp3_file_success(
-        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        self, mock_trigger_summarization_tasks, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
         mock_groq, mock_openai, mock_pydub, mock_processing_user
     ):
         """
@@ -405,8 +415,9 @@ class TestProcessRecordingView:
         assert conv.title == "Test Call"
         assert conv.summary == "Short summary"
 
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_customer_identification_with_postcode_and_loyalty_number(
-        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        self, mock_trigger_summarization_tasks, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
         mock_groq, mock_openai, mock_pydub, mock_processing_user, mock_dlp
     ):
         """
@@ -452,8 +463,9 @@ class TestProcessRecordingView:
         assert customer.first_name == "Alice"
         assert customer.last_name == "Johnson"
 
+    @patch("tellme.call_processing.views.trigger_summarization_tasks")
     def test_customer_identification_priority_hashing(
-        self, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
+        self, mock_trigger_summarization_tasks, api_client, setup_db, valid_task_payload, mock_gcs_utils, mock_deepgram,
         mock_groq, mock_openai, mock_pydub, mock_processing_user, mock_dlp
     ):
         """

@@ -58,6 +58,26 @@ class TestMetaSummarizer:
         assert token_count > 0
         assert token_count < 50  # Should be reasonable for a short sentence
 
+    def test_count_tokens_empty_string(self):
+        """Test the count_tokens function with an empty string."""
+        token_count = MetaSummarizer._count_tokens('', 'gpt-4o')
+        assert token_count == 0
+
+    def test_count_tokens_specific_text(self):
+        """Test the count_tokens function with a known text for consistency."""
+        text = 'Hello, world!'
+        model_name = 'gpt-4o'
+        token_count = MetaSummarizer._count_tokens(text, model_name)
+        # This is a known token count for this specific text
+        assert token_count == 4
+
+    def test_count_tokens_invalid_model(self):
+        """Test the count_tokens function with an invalid model name."""
+        text = 'Test text'
+        model_name = 'invalid-model'
+        with pytest.raises(Exception):
+            MetaSummarizer._count_tokens(text, model_name)
+
     def test_get_token_cutoff(self):
         """
         Test token cutoff calculation with safety margin.
@@ -374,3 +394,33 @@ class TestMetaSummarizer:
 
             # Verify that shuffle was called on the summaries
             mock_shuffle.assert_called_once_with(summaries)
+
+    def test_prompt_category_for_customer(self, meta_summarizer):
+        """Verify that a Customer object triggers the customer_summary prompt."""
+        with patch.object(meta_summarizer, '_condense_summaries') as mock_condense:
+            mock_condense.return_value = {"test": "customer summary"}
+
+            # Check that customer prompts are loaded
+            assert 'customer_summary' in meta_summarizer.prompts
+            assert 'customer_summary' in meta_summarizer.configs
+
+    def test_prompt_category_for_agent(self, meta_summarizer):
+        """Verify that an Agent object triggers the agent_summary prompt."""
+        with patch.object(meta_summarizer, '_condense_summaries') as mock_condense:
+            mock_condense.return_value = {"test": "agent summary"}
+
+            # Check that agent prompts are loaded
+            assert 'agent_summary' in meta_summarizer.prompts
+            assert 'agent_summary' in meta_summarizer.configs
+
+    def test_invalid_object_type_raises(self, meta_summarizer):
+        """Test that invalid object types raise ValueError."""
+        summaries = ["Test summary"]
+        trace_data = {
+            'metadata': {
+                'object': "<class 'tellme.call_miner.models.UnsupportedModel'>"
+            }
+        }
+
+        with pytest.raises(ValueError, match="Object of type .* is not expected to receive summarization"):
+            meta_summarizer._condense_summaries(summaries, trace_data)

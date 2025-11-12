@@ -3,8 +3,10 @@ import zoneinfo
 from datetime import datetime, timedelta
 from unittest.mock import patch
 from django.urls import reverse
+from django.contrib.contenttypes.models import ContentType
 from rest_framework import status
-from tellme.call_miner.models import Customer, Conversation
+from tellme.call_miner.models import Customer, Conversation, PeriodSummary
+from tellme.call_miner.utils.period_utils import period_bounds
 
 TREND_ACTIONS = ['conversations', 'trend', 'summary-data']
 
@@ -458,37 +460,54 @@ class TestCustomerActions:
     def test_customer_summary_data_returns_expected_content(self, client, agent_user, customer, conversation_today):
         """
         Test that the 'summary-data' action for a customer retrieves the expected summary data.
+        Uses actual PeriodSummary objects instead of mocking the old sync logic.
         """
-        with patch('tellme.call_miner.models.condense_summaries') as mock_condense_summaries:
-            mock_condense_summaries.return_value = 'Mocked summary text'
-            client.force_authenticate(user=agent_user)
-            url = reverse('customer-summary-data', args=[customer.id])
-            response = client.get(url)
-            assert response.status_code == status.HTTP_200_OK
-            assert 'summary' in response.data
-            assert response.data['summary'] == 'Mocked summary text'
-            assert 'period_label' in response.data
-            assert response.data['period_label'] == 'Rolling90D'
+        client.force_authenticate(user=agent_user)
+        url = reverse('customer-summary-data', args=[customer.id])
+        content_type = ContentType.objects.get_for_model(customer.__class__)
 
-            for period in ['week', 'month', 'quarter']:
-                for rolling in [True, False]:
-                    response = client.get(url, {'period': period, 'rolling': rolling})
-                    assert response.status_code == status.HTTP_200_OK
-                    assert 'summary' in response.data
-                    assert response.data['summary'] == 'Mocked summary text'
-                    assert 'period_label' in response.data
-                    if rolling:
-                        days = {'week': 7, 'month': 30, 'quarter': 90}
-                        label = f'Rolling{days[period]}D'
-                    else:
-                        today = datetime.today()
-                        if period == 'week':
-                            label = today.strftime("%G-W%V")
-                        elif period == 'month':
-                            label = today.strftime("%Y-%m")
-                        else:
-                            label = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
-                    assert response.data['period_label'] == label
+        summary_data = {
+            'Favorite Products/Services': 'Premium subscription',
+            'Churn Potential': 'Low risk, satisfied customer',
+            'Customer Value': 'High value customer'
+        }
+
+        # Create PeriodSummary for each combination we'll test
+        for period in ['week', 'month', 'quarter']:
+            for rolling in [True, False]:
+                start, end, label = period_bounds(period, rolling)
+
+                PeriodSummary.objects.create(
+                    content_type=content_type,
+                    object_id=customer.id,
+                    period_type=period,
+                    period_label=label,
+                    summary=summary_data,
+                    last_call_at=conversation_today.date,
+                    call_count=1
+                )
+
+        # Test default request (customer uses quarter period with rolling=True by default)
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'summary' in response.data
+        assert response.data['summary'] == summary_data
+        assert 'period_label' in response.data
+        assert response.data['status'] == 'ready'
+
+        # Test all period/rolling combinations
+        for period in ['week', 'month', 'quarter']:
+            for rolling in [True, False]:
+                response = client.get(url, {'period': period, 'rolling': rolling})
+                assert response.status_code == status.HTTP_200_OK
+                assert 'summary' in response.data
+                assert response.data['summary'] == summary_data
+                assert 'period_label' in response.data
+                assert response.data['status'] == 'ready'
+
+                # Verify the correct period label is returned
+                start, end, expected_label = period_bounds(period, rolling)
+                assert response.data['period_label'] == expected_label
 
     def test_all_summaries_respects_minimum_call_count_and_period(
             self, client, organization_admin_user, agent, customer, topic, conversation_today
