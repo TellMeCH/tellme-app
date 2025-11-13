@@ -65,6 +65,13 @@ resource "google_project_iam_member" "runtime_cloudtasks_enqueuer" {
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
+# Cloud Tasks viewer
+resource "google_project_iam_member" "runtime_cloudtasks_viewer" {
+  project = var.project_id
+  role    = "roles/cloudtasks.viewer"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
 # DLP user
 resource "google_project_iam_member" "runtime_dlp_user" {
   project = var.project_id
