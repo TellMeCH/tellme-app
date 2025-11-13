@@ -242,10 +242,6 @@ class SummarizationView(APIView):
             logger.error(message)
             return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
 
-        # TODO: Check if there's a newer task in the queue for the same object
-        # This would require implementing queue inspection logic
-        # For now, we'll proceed with the summarization
-
         try:
             # Create trace data for langfuse tracking
             trace_data = {

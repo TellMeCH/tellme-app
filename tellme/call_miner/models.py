@@ -15,7 +15,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from tellme.call_miner.utils.period_utils import period_bounds
 import tellme.call_miner.utils.email_utils as email
-from tellme.call_miner.utils.summary_utils import create_summarization_task
+from tellme.call_miner.utils.summary_utils import create_summarization_task, check_summarization_tasks
 from tellme.call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
 
 
@@ -84,6 +84,7 @@ class MetaSummaryAbstractModel(models.Model):
     An abstract model that handles the creation and retrieval of summaries objects for Agent, Customer, and Topic models
     """
     DEFAULT_SUMMARY = 'Default Summary. Still being created.'
+    EXPECTED_SUMMARIZATION_TIME = 3  # minutes
 
     class Meta:
         abstract = True
@@ -125,6 +126,11 @@ class MetaSummaryAbstractModel(models.Model):
             status = 'generating'
         elif summary.summary is None:
             status = 'generating'
+
+            # Check if the task might have failed - if created more than EXPECTED_SUMMARIZATION_TIME ago and still None
+            task_timeout_threshold = timezone.now() - datetime.timedelta(minutes=self.EXPECTED_SUMMARIZATION_TIME)
+            if summary.created < task_timeout_threshold:
+                self.check_and_create_summarization_task(period=period, rolling=rolling, created=False)
         else:
             status = 'ready'
 
@@ -155,10 +161,8 @@ class MetaSummaryAbstractModel(models.Model):
             if not conversations.exists():
                 return None
 
-            # Check if there's an existing summary
-            content_type = ContentType.objects.get_for_model(self.__class__)
-
             # If the PeriodSummary object was not created in a get_or_create_summary call calling this method, check
+            content_type = ContentType.objects.get_for_model(self.__class__)
             if not created:
                 try:
                     summary_obj = PeriodSummary.objects.get(
@@ -169,7 +173,10 @@ class MetaSummaryAbstractModel(models.Model):
                     )
 
                     # Check if refresh is needed
-                    refresh_needed, call_count = summary_obj.check_if_refresh_needed(conversations, rolling, start)
+                    if summary_obj.summary is None:
+                        refresh_needed = True
+                    else:
+                        refresh_needed, call_count = summary_obj.check_if_refresh_needed(conversations, rolling, start)
 
                     if not refresh_needed:
                         return None
@@ -177,6 +184,18 @@ class MetaSummaryAbstractModel(models.Model):
                 except PeriodSummary.DoesNotExist:
                     # No existing summary, create task
                     pass
+
+            # Check if a similar task already exists in the queue
+            task_exists = check_summarization_tasks(
+                object_id=self.id,
+                object_type=obj_type,
+                summary_period=period,
+                rolling_period=rolling
+            )
+
+            if task_exists:
+                logging.debug(f'Summarization task already exists for {self.__class__.__name__} {self.id}, skipping')
+                return None
 
             # Create summarization task
             task_id = create_summarization_task(

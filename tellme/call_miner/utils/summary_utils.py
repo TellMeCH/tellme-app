@@ -38,6 +38,76 @@ def get_default_summary_settings():
     return DEFAULT_SUMMARY_SETTINGS.copy()
 
 
+def get_tasks_client_and_parent():
+    # Create a Cloud Task Client, using the Cloud Tasks emulator when necessary
+    if settings.TASKS_EMULATOR_ADDRESS:
+        # Create a gRPC channel to the local emulator
+        channel = grpc.insecure_channel(settings.TASKS_EMULATOR_ADDRESS)
+        transport = tasks_v2.services.cloud_tasks.transports.CloudTasksGrpcTransport(channel=channel)
+        client = tasks_v2.CloudTasksClient(transport=transport)
+    else:
+        # Use the default CloudTasksClient configuration
+        client = tasks_v2.CloudTasksClient()
+
+    # Get the queue path
+    parent = client.queue_path(
+        settings.GOOGLE_CLOUD_PROJECT,
+        settings.REGION,
+        settings.SUMMARIZATION_QUEUE_NAME
+    )
+    return client, parent
+
+
+def check_summarization_tasks(
+        object_id: int,
+        object_type: str,
+        summary_period: str,
+        rolling_period: bool
+) -> bool:
+    """
+    Check if a summarization task with the same parameters already exists in the queue.
+
+    Args:
+        object_id (int): ID of the object to summarize
+        object_type (str): Type of object ('topic', 'customer', 'agent')
+        summary_period (str): Period to use for summarization ('week', 'month', 'quarter')
+        rolling_period (bool): Whether to use rolling period
+
+    Returns:
+        bool: True if a matching task exists in the queue, False otherwise
+    """
+    try:
+        client, parent = get_tasks_client_and_parent()
+
+        # List tasks in the queue
+        tasks = client.list_tasks(parent=parent)
+
+        # Check each task for matching parameters
+        for task in tasks:
+            if hasattr(task, 'http_request') and task.http_request.body:
+                try:
+                    # Parse the task payload
+                    payload = json.loads(task.http_request.body.decode())
+
+                    # Check if this task matches our parameters
+                    if (payload.get('object_id') == object_id and
+                        payload.get('object_type') == object_type and
+                        payload.get('summary_period') == summary_period and
+                        payload.get('rolling_period') == rolling_period):
+                        return True
+
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    # Skip tasks with invalid payloads
+                    continue
+
+        return False
+
+    except Exception as e:
+        logger.error(f'Failed to check summarization tasks: {e}')
+        # If we can't check the queue, assume no duplicates (safer to create task)
+        return False
+
+
 def create_summarization_task(
         object_id: int,
         object_type: str,
@@ -83,22 +153,7 @@ def create_summarization_task(
     timestamp.FromDatetime(datetime.datetime.now(datetime.UTC))
     task['schedule_time'] = timestamp
 
-    # Create a Cloud Task Client, using the Cloud Tasks emulator when necessary
-    if settings.TASKS_EMULATOR_ADDRESS:
-        # Create a gRPC channel to the local emulator
-        channel = grpc.insecure_channel(settings.TASKS_EMULATOR_ADDRESS)
-        transport = tasks_v2.services.cloud_tasks.transports.CloudTasksGrpcTransport(channel=channel)
-        client = tasks_v2.CloudTasksClient(transport=transport)
-    else:
-        # Use the default CloudTasksClient configuration
-        client = tasks_v2.CloudTasksClient()
-
-    # Create the task in the summarization queue
-    parent = client.queue_path(
-        settings.GOOGLE_CLOUD_PROJECT,
-        settings.REGION,
-        settings.SUMMARIZATION_QUEUE_NAME
-    )
+    client, parent = get_tasks_client_and_parent()
     logger.info(f'Creating summarization task in queue with parent {parent}')
     client.create_task(parent=parent, task=task)
     logger.info(f'Created summarization task in {settings.SUMMARIZATION_QUEUE_NAME} for {object_type} {object_id}')

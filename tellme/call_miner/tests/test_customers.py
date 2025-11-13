@@ -559,6 +559,29 @@ class TestCustomerActions:
             organization=customer.organization,
         )
 
+        # Create pre-existing PeriodSummaries for all customers with "Customer Value" field
+        customers_to_create_summaries = [customer, low_customer, zero_customer]
+        period_types = ['week', 'month', 'quarter']
+
+        content_type = ContentType.objects.get_for_model(Customer)
+
+        for test_customer in customers_to_create_summaries:
+            for period_type in period_types:
+                start, end, label = period_bounds(period_type, True)  # Rolling period
+                PeriodSummary.objects.create(
+                    content_type=content_type,
+                    object_id=test_customer.id,
+                    period_type=period_type,
+                    period_label=label,
+                    summary={
+                        "Customer Value": f"High value customer for {period_type}",
+                        "Engagement Level": "Active",
+                        "Issues Resolved": 85
+                    },
+                    last_call_at=datetime.now(tz=zoneinfo.ZoneInfo("UTC")) - timedelta(days=1),
+                    call_count=2 if test_customer == customer else (1 if test_customer == low_customer else 0)
+                )
+
         client.force_authenticate(user=organization_admin_user)
         resp = client.get(reverse("customer-all-summaries"))
         assert resp.status_code == status.HTTP_200_OK

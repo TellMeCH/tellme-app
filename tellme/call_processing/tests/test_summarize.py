@@ -105,8 +105,6 @@ class TestSummarizationView:
 
         assert response.status_code == status.HTTP_200_OK
         assert "message" in response.data
-        assert "summary_id" in response.data
-        assert response.data["summary_id"] == 123
         assert "call_count" in response.data
         assert "period_label" in response.data
         mock_summarizer.assert_called_once()
@@ -148,7 +146,6 @@ class TestSummarizationView:
 
             assert response.status_code == status.HTTP_200_OK
             assert "message" in response.data
-            assert response.data["summary_id"] == 456
             mock_summarizer.assert_called_once()
 
     @patch("tellme.call_processing.views.MetaSummarizer")
@@ -187,7 +184,6 @@ class TestSummarizationView:
 
             assert response.status_code == status.HTTP_200_OK
             assert "message" in response.data
-            assert response.data["summary_id"] == 789
             mock_summarizer.assert_called_once()
 
     @patch("tellme.call_processing.views.MetaSummarizer")

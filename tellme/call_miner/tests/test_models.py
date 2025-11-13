@@ -1,6 +1,7 @@
 import pytest
 import pytz
 import zoneinfo
+from django.utils import timezone
 from datetime import timedelta, datetime
 from unittest.mock import patch
 from django.db import IntegrityError
@@ -123,14 +124,15 @@ class TestMetaSummaryAbstractModel:
 
             # Verify task was triggered and placeholder returned
             assert status == 'generating'
-            assert summary == {}  # placeholder summary
+            assert summary is None # placeholder summary
             assert count == 1  # conversation count
             assert date == conversation_today.date  # latest conversation date
 
             # Verify async task creation was called with updated signature
             mock_task_creation.assert_called_once_with(
                 period='month',
-                rolling=False
+                rolling=False,
+                created=True,
             )
 
         # Verify PeriodSummary was created with placeholder data
@@ -139,7 +141,7 @@ class TestMetaSummaryAbstractModel:
             object_id=topic.id,
             period_type='month'
         )
-        assert period_summary.summary == {}
+        assert period_summary.summary == None
         assert period_summary.call_count == 1
 
     def test_get_or_create_summary_no_conversations(self, topic):
@@ -173,12 +175,12 @@ class TestMetaSummaryAbstractModel:
         # Test Customer
         with patch.object(customer, 'check_and_create_summarization_task') as mock_customer:
             customer.get_or_create_summary('quarter', True)
-            mock_customer.assert_called_with(period='quarter', rolling=True)
+            mock_customer.assert_called_with(period='quarter', rolling=True, created=True)
 
         # Test Agent
         with patch.object(agent, 'check_and_create_summarization_task') as mock_agent:
             agent.get_or_create_summary('month', False)
-            mock_agent.assert_called_with(period='month', rolling=False)
+            mock_agent.assert_called_with(period='month', rolling=False, created=True)
 
     @patch('tellme.call_miner.models.create_summarization_task')
     def test_does_not_create_task_when_summary_exists(self, mock_create_task, topic, conversation_today):
@@ -187,7 +189,6 @@ class TestMetaSummaryAbstractModel:
         conversation_today.topics.add(topic)
 
         # Create an existing PeriodSummary for the current period
-        from tellme.call_miner.utils.period_utils import period_bounds
         start, end, label = period_bounds('month', True)
 
         content_type = ContentType.objects.get_for_model(topic)
@@ -217,7 +218,6 @@ class TestMetaSummaryAbstractModel:
         conversation_today.topics.add(topic)
 
         # Create an existing PeriodSummary for month/rolling=True
-        from tellme.call_miner.utils.period_utils import period_bounds
         start, end, label = period_bounds('month', True)
 
         content_type = ContentType.objects.get_for_model(topic)
@@ -242,9 +242,9 @@ class TestMetaSummaryAbstractModel:
         assert result == "different-task-id"
         mock_create_task.assert_called_once_with(
             object_id=topic.id,
-            object_type='topic',
+            object_type="<class 'tellme.call_miner.models.Topic'>",
             summary_period='month',
-            summary_rolling_period=False
+            rolling_period=False
         )
 
     @patch('tellme.call_miner.models.create_summarization_task')
@@ -263,6 +263,103 @@ class TestMetaSummaryAbstractModel:
 
         # Should return None when exception occurs
         assert result is None
+
+    @patch('tellme.call_miner.models.check_summarization_tasks')
+    @patch('tellme.call_miner.models.create_summarization_task')
+    def test_prevents_duplicate_task_creation_when_task_exists(self, mock_create_task, mock_check_tasks, topic, conversation_today):
+        """Test that check_and_create_summarization_task prevents duplicate task creation when a task already exists in queue."""
+        # Link conversation to topic
+        conversation_today.topics.add(topic)
+
+        # Mock that a matching task already exists in the queue
+        mock_check_tasks.return_value = True
+
+        # Call the function
+        result = topic.check_and_create_summarization_task(
+            period='quarter', rolling=True
+        )
+
+        # Verify no task was created due to duplicate prevention
+        assert result is None
+        mock_check_tasks.assert_called_once_with(
+            object_id=topic.id,
+            object_type=str(type(topic)),
+            summary_period='quarter',
+            rolling_period=True
+        )
+        mock_create_task.assert_not_called()
+
+    @patch('tellme.call_miner.models.check_summarization_tasks')
+    @patch('tellme.call_miner.models.create_summarization_task')
+    def test_creates_task_when_no_duplicate_exists(self, mock_create_task, mock_check_tasks, topic, conversation_today):
+        """Test that check_and_create_summarization_task creates task when no duplicate exists in queue."""
+        # Link conversation to topic
+        conversation_today.topics.add(topic)
+
+        # Mock that no matching task exists in the queue
+        mock_check_tasks.return_value = False
+        mock_create_task.return_value = "new-task-id-123"
+
+        # Call the function
+        result = topic.check_and_create_summarization_task(
+            period='quarter', rolling=True
+        )
+
+        # Verify task was created after duplicate check passed
+        assert result == "new-task-id-123"
+        mock_check_tasks.assert_called_once_with(
+            object_id=topic.id,
+            object_type=str(type(topic)),
+            summary_period='quarter',
+            rolling_period=True
+        )
+        mock_create_task.assert_called_once_with(
+            object_id=topic.id,
+            object_type=str(type(topic)),
+            summary_period='quarter',
+            rolling_period=True
+        )
+
+    @patch('tellme.call_miner.models.check_summarization_tasks')
+    @patch('tellme.call_miner.models.create_summarization_task')
+    def test_failed_task_detection_triggers_new_task(self, mock_create_task, mock_check_tasks, topic, conversation_today):
+        """Test that get_or_create_summary detects failed tasks and triggers new task creation."""
+        # Link conversation to topic
+        conversation_today.topics.add(topic)
+
+        # Create a PeriodSummary with no summary (indicating failed/stuck task) and created more than EXPECTED_SUMMARIZATION_TIME ago
+        start, end, label = period_bounds('month', False)
+        content_type = ContentType.objects.get_for_model(topic)
+
+        # Create summary that's older than the timeout threshold
+        old_time = timezone.now() - timedelta(minutes=5)  # EXPECTED_SUMMARIZATION_TIME is 3 minutes
+
+        with patch('django.utils.timezone.now', return_value=old_time):
+            failed_summary = PeriodSummary.objects.create(
+                content_type=content_type,
+                object_id=topic.id,
+                period_type='month',
+                period_label=label,
+                summary=None,  # No summary indicates task failed or is stuck
+                last_call_at=conversation_today.date,
+                call_count=1
+            )
+
+        # Mock no duplicate task exists when checked
+        mock_check_tasks.return_value = False
+        mock_create_task.return_value = "retry-task-id-456"
+
+        # Call get_or_create_summary - should detect failed task and create new one
+        summary, date, count, period_label, status = topic.get_or_create_summary('month', False)
+
+        # Verify failed task was detected and new task created
+        assert status == 'generating'  # Should trigger new task
+        mock_check_tasks.assert_called_once()
+        mock_create_task.assert_called_once()
+
+        # Verify the old summary still exists but status indicates retrying
+        failed_summary.refresh_from_db()
+        assert failed_summary.summary is None  # Still None until new task completes
 
 
 @pytest.mark.django_db
