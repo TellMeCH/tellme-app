@@ -4,14 +4,19 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from tellme.call_processing.serializers import (WebhookProcessingSerializer, QueueRecordingSerializer,
-                                         ProcessRecordingSerializer)
+                                         ProcessRecordingSerializer, SummarizationSerializer)
 from tellme.call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
 from tellme.call_processing.permissions import IsAuthenticatedOrganization
 from tellme.call_processing.utils import queue_utils
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
+from tellme.call_processing.utils.meta_summarization import MetaSummarizer
 from tellme.call_processing.utils.db_handler import (
-    check_same_path_conversations, create_conversation, create_suggested_topics
+    check_same_path_conversations, create_conversation, create_suggested_topics, trigger_summarization_tasks,
+    get_object_by_class_string_and_id, create_periodsummary
 )
 from tellme.call_processing.utils.webhook_processing import process_webhook_recordings
 
@@ -66,7 +71,7 @@ class WebhookProcessingView(APIView):
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Queue processing with the downloaded data
-        message, status_code = queue_utils.upload_and_create_task(
+        message, status_code = queue_utils.upload_file_and_create_processing_task(
             recordings_folder,
             agent_id,
             customer_id,
@@ -107,7 +112,7 @@ class QueueRecordingView(APIView):
             logger.info(f"Organization: {organization_id}")
             logger.info(f"File: {file_name}")
 
-            message, status_code = queue_utils.upload_and_create_task(
+            message, status_code = queue_utils.upload_file_and_create_processing_task(
                 file_name, agent_id, customer_id, organization_id, timestamp, logger, file_obj=file_obj
             )
             return Response(message, status=status_code)
@@ -173,10 +178,13 @@ class ProcessRecordingView(APIView):
 
         try:
             # Persist the conversation or any other records as needed
-            create_conversation(**enriched_data)
+            conversation = create_conversation(**enriched_data)
 
             # Handle new suggested topics
             create_suggested_topics(enriched_data['new_topics'], file_name, organization_id)
+
+            # Trigger summarization tasks for associated objects
+            trigger_summarization_tasks(conversation)
         except RuntimeError as exc:
             logger.error(f"Could not store results of Processing Pipeline: {str(exc)}")
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -185,3 +193,99 @@ class ProcessRecordingView(APIView):
             {"message": "File processed and saved to DB."},
             status=status.HTTP_200_OK
         )
+
+
+class SummarizationView(APIView):
+    """
+    Execute summarization for a specific object (Topic, Customer, or Agent).
+
+    This view carries out summarization for the specified object using the existing
+    summary mining logic. It checks for newer tasks in the queue before proceeding
+    and only creates summaries if they need to be refreshed.
+    """
+    serializer_class = SummarizationSerializer
+    authentication_classes = [ProcessingKeyAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.summarizer = MetaSummarizer()
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        logger.debug(f"Received payload: {request.data}")
+        serializer.is_valid(raise_exception=True)
+
+        # Extract validated data
+        object_id = serializer.validated_data.get("object_id")
+        object_type = serializer.validated_data.get("object_type")  # str(type(obj))
+        summary_period = serializer.validated_data.get("summary_period")
+        rolling_period = serializer.validated_data.get("rolling_period")
+        task_id = serializer.validated_data.get("task_id")
+
+        logger.info(f"Processing summarization for {object_type} {object_id}")
+
+        if object_type not in self.summarizer.allowed_objects:
+            message = f"Unsupported object type: {object_type}"
+            logger.error(message)
+            return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get the object instance
+        try:
+            obj = get_object_by_class_string_and_id(object_type, object_id)
+        except ObjectDoesNotExist:
+            message = f"Object with id {object_id} not found for type {object_type}"
+            logger.error(message)
+            return Response({"error": message}, status=status.HTTP_404_NOT_FOUND)
+        except ContentType.DoesNotExist:
+            message = f"Unsupported object type: {object_type}"
+            logger.error(message)
+            return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Create trace data for langfuse tracking
+            trace_data = {
+                'name': 'get_summary_data',
+                'tags': [settings.TELLME_ENV],
+                'metadata': {
+                    'organization': obj.organization,
+                    'object': object_type,
+                    'id': object_id,
+                    'period': summary_period,
+                    'rolling': rolling_period,
+                    'task_id': task_id
+                }
+            }
+
+            # Call the summarization method
+            summary, latest_date, call_count, label = self.summarizer(obj, summary_period, rolling_period, trace_data)
+
+            if summary is None:
+                message = f"No conversations found for {object_type} {object_id} in period {label}"
+                logger.info(message)
+                return Response({"message": message}, status=status.HTTP_200_OK)
+
+            # Save the summary to the database
+            period_summary = create_periodsummary(
+                obj=obj,
+                summary=summary,
+                latest_date=latest_date,
+                call_count=call_count,
+                label=label,
+                period=summary_period
+            )
+
+            message = f"Summary created/updated for {object_type} {object_id} (period: {label}, calls: {call_count})"
+            logger.info(message)
+
+            return Response({
+                "message": message,
+                "object_type": object_type,
+                "object_id": object_id,
+                "call_count": call_count,
+                "period_label": label
+            }, status=status.HTTP_200_OK)
+
+        except Exception as exc:
+            logger.error(f"Summarization failed for {object_type} {object_id}: {str(exc)}")
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

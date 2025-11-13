@@ -1,7 +1,14 @@
 import datetime
+import logging
+from django.db import transaction
 from django.utils import timezone
+from django.conf import settings
 from django.utils.dateparse import parse_datetime
-from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic
+from django.contrib.contenttypes.models import ContentType
+from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary
+from tellme.call_miner.utils.summary_utils import get_default_summary_settings
+
+logger = logging.getLogger(__name__)
 
 
 def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: datetime.datetime) -> (bool, str):
@@ -233,13 +240,13 @@ def create_conversation(
     topics_qs = Topic.objects.filter(name__in=topics, organization=org)
     if len(topics_qs) != len(topics):
         missing = set(topics) - set(t.name for t in topics_qs)
-        print(f"Some topics were not found in org {organization_id}: {missing}")
+        logger.info(f"Some topics were not found in org {organization_id}: {missing}")
 
     # Instantiate the SuggestedTopics based on their names, filtering by this org
     suggested_topics_qs = SuggestedTopic.objects.filter(name__in=suggested_topics, organization=org)
     if len(suggested_topics_qs) != len(suggested_topics):
         missing = set(suggested_topics) - set(t.name for t in suggested_topics_qs)
-        print(f"Some suggested topics were not found in org {organization_id}: {missing}")
+        logger.info(f"Some suggested topics were not found in org {organization_id}: {missing}")
 
     # Convert date_str to a timezone-aware DateTime
     if timestamp is None:
@@ -272,6 +279,8 @@ def create_conversation(
     conversation.save()
     conversation.topics.set(topics_qs)
     conversation.suggested_topics.set(suggested_topics_qs)
+
+    return conversation
 
 
 def create_suggested_topics(
@@ -371,3 +380,94 @@ def create_suggested_topics(
         )
         suggested_topic.save()
         conversation.suggested_topics.add(suggested_topic)
+
+
+def trigger_summarization_tasks(conversation):
+    """
+    Trigger summarization tasks for the associated topics, customer, and agent
+    after a new conversation is created.
+
+    This function checks if summaries need to be refreshed and creates summarization tasks
+    for objects that need updates using the default period settings.
+
+    Args:
+        conversation: The newly created Conversation object
+    """
+    # Get default settings
+    settings = get_default_summary_settings()
+
+    # Check topics
+    for topic in conversation.topics.all():
+        topic.check_and_create_summarization_task(
+            period=settings['topic']['period'],
+            rolling=settings['topic']['rolling']
+        )
+
+    # Check customer
+    conversation.customer.check_and_create_summarization_task(
+        period=settings['customer']['period'],
+        rolling=settings['customer']['rolling']
+    )
+
+    # Check agent
+    conversation.agent.check_and_create_summarization_task(
+        period=settings['agent']['period'],
+        rolling=settings['agent']['rolling']
+    )
+
+
+def get_object_by_class_string_and_id(class_str, obj_id):
+    """
+    Get a Django model instance given its class string representation and ID.
+
+    Args:
+        class_str: String like "<class 'tellme.call_miner.models.Topic'>"
+        obj_id: Primary key of the object
+
+    Returns:
+        Model instance
+    """
+    # Parse the class string to get ContentType
+    module_path = class_str.split("'")[1]
+    app_label = module_path.split('.')[-3]
+    model_name = module_path.split('.')[-1].lower()
+
+    # Get the object directly using ContentType
+    content_type = ContentType.objects.get(app_label=app_label, model=model_name)
+    return content_type.get_object_for_this_type(id=obj_id)
+
+
+def create_periodsummary(obj, summary, latest_date, call_count, label, period):
+    """
+    Create or update a PeriodSummary instance after summarization is complete.
+
+    Args:
+        obj: The object (Topic, Customer, or Agent) that was summarized
+        summary: The generated summary dictionary from MetaSummarizer
+        latest_date: The latest conversation date in the period
+        call_count: Number of conversations in the period
+        label: Period label (e.g., "2025-Q1", "2025-01")
+        period: Period type ('week', 'month', 'quarter')
+    """
+
+    content_type = ContentType.objects.get_for_model(obj.__class__)
+
+    with transaction.atomic():
+        period_summary, created = PeriodSummary.objects.select_for_update().get_or_create(
+            content_type=content_type,
+            object_id=obj.pk,
+            period_type=period,
+            period_label=label,
+            defaults=dict(
+                summary=summary,
+                last_call_at=latest_date,
+                call_count=call_count,
+            )
+        )
+
+        # If it already existed, update it with new data
+        if not created:
+            period_summary.summary = summary
+            period_summary.last_call_at = latest_date
+            period_summary.call_count = call_count
+            period_summary.save(update_fields=["summary", "last_call_at", "call_count"])

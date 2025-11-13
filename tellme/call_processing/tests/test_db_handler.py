@@ -1,8 +1,13 @@
 import pytest
+from unittest.mock import patch
 from datetime import datetime
 from django.utils import timezone
-from tellme.call_miner.models import SuggestedTopic, Topic, Conversation, Organization, Customer
+from django.contrib.contenttypes.models import ContentType
+from tellme.call_miner.models import SuggestedTopic, Topic, Conversation, Organization, Customer, Agent, PeriodSummary
 from tellme.call_processing.utils import db_handler
+from tellme.call_processing.utils.db_handler import (
+    trigger_summarization_tasks, create_periodsummary
+)
 
 
 @pytest.mark.django_db
@@ -531,3 +536,218 @@ class TestCreateConversation:
             )
         
         assert "Could not parse datetime from" in str(exc_info.value)
+
+
+@pytest.mark.django_db
+class TestTriggerSummarizationTasks:
+    """Test the trigger_summarization_tasks function."""
+
+    @patch('tellme.call_miner.models.create_summarization_task')
+    def test_trigger_summarization_tasks_with_conversation(self, mock_create_task, setup_db):
+        """Test triggering summarization tasks for a conversation with linked objects."""
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Mock the task creation to return a task ID
+        mock_create_task.return_value = "task-id-123"
+
+        # Call the function with the conversation
+        trigger_summarization_tasks(conversation)
+
+        # Verify that summarization tasks were created for topic, customer, and agent
+        # Default settings typically use 'quarter' period and rolling=True, but this depends on settings
+        # At minimum, there should be calls for the 3 objects (topic, customer, agent)
+        assert mock_create_task.call_count >= 3
+
+        # Verify that tasks were created for all linked objects
+        call_args_list = mock_create_task.call_args_list
+        created_object_ids = [call[1]['object_id'] for call in call_args_list]
+
+        assert topic.id in created_object_ids
+        assert customer.id in created_object_ids
+        assert agent.id in created_object_ids
+
+    @patch('tellme.call_miner.models.create_summarization_task')
+    def test_trigger_summarization_tasks_with_multiple_topics(self, mock_create_task, setup_db):
+        """Test triggering summarization tasks for conversation with multiple topics."""
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Create additional topics and link them to the conversation
+        topic2 = Topic.objects.create(
+            name="Additional Topic",
+            description="Another test topic",
+            organization=org,
+            is_active=True
+        )
+        conversation.topics.add(topic2)
+
+        # Mock the task creation to return a task ID
+        mock_create_task.return_value = "task-id-456"
+
+        # Call the function
+        trigger_summarization_tasks(conversation)
+
+        # Verify that summarization tasks were created for both topics plus customer and agent
+        call_args_list = mock_create_task.call_args_list
+        created_object_ids = [call[1]['object_id'] for call in call_args_list]
+
+        # Should have tasks for both topics, customer, and agent
+        assert topic.id in created_object_ids
+        assert topic2.id in created_object_ids
+        assert customer.id in created_object_ids
+        assert agent.id in created_object_ids
+
+    @patch('tellme.call_miner.models.create_summarization_task')
+    def test_trigger_summarization_tasks_handles_failures(self, mock_create_task, setup_db):
+        """Test that function handles task creation failures gracefully."""
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Mock one of the calls to raise an exception
+        def side_effect(*args, **kwargs):
+            if kwargs.get('object_type') == 'topic':
+                raise Exception("Task creation failed")
+            return "task-id-success"
+
+        mock_create_task.side_effect = side_effect
+
+        # Call the function - should not raise exception
+        trigger_summarization_tasks(conversation)
+
+        # Verify that task creation was attempted for all objects
+        # Even if one fails, the others should still be attempted
+        assert mock_create_task.call_count >= 3
+
+
+@pytest.mark.django_db
+class TestCreatePeriodSummary:
+    """Test the create_periodsummary function."""
+
+    def test_create_periodsummary_success(self, setup_db):
+        """Test successful creation of a PeriodSummary object."""
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Call the function
+        result = create_periodsummary(
+            obj=topic,
+            summary="Test summary content",
+            latest_date="2024-01-15",
+            call_count=10,
+            label="January 2024",
+            period="month"
+        )
+
+        # Verify the function returns None
+        assert result is None
+
+        # Verify it was saved to the database
+        content_type = ContentType.objects.get_for_model(topic)
+        saved_summary = PeriodSummary.objects.get(
+            content_type=content_type,
+            object_id=topic.id,
+            period_type="month",
+            period_label="January 2024"
+        )
+
+        # Verify the saved object has correct attributes
+        assert saved_summary.summary == "Test summary content"
+        assert str(saved_summary.last_call_at) == '2024-01-15 00:00:00+00:00'
+        assert saved_summary.call_count == 10
+        assert saved_summary.period_label == "January 2024"
+        assert saved_summary.period_type == "month"
+
+    def test_create_periodsummary_different_object_types(self, setup_db):
+        """Test creating PeriodSummary for different object types."""
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        objects_to_test = [
+            (topic, "Topic summary"),
+            (customer, "Customer summary"),
+            (agent, "Agent summary")
+        ]
+
+        for obj, summary_text in objects_to_test:
+            result = create_periodsummary(
+                obj=obj,
+                summary=summary_text,
+                latest_date="2024-01-01",
+                call_count=1,
+                label="Rolling90D",
+                period="quarter"
+            )
+
+            # Verify the function returns None
+            assert result is None
+
+            # Verify correct object type association in database
+            content_type = ContentType.objects.get_for_model(obj)
+            saved_summary = PeriodSummary.objects.get(
+                content_type=content_type,
+                object_id=obj.id,
+                period_type="quarter",
+                period_label="Rolling90D"
+            )
+            assert saved_summary.content_type == content_type
+            assert saved_summary.object_id == obj.id
+            assert saved_summary.summary == summary_text
+
+    def test_create_periodsummary_updates_existing(self, setup_db):
+        """Test that creating a PeriodSummary updates existing ones with same parameters."""
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Create first summary
+        first_result = create_periodsummary(
+            obj=topic,
+            summary="Original summary",
+            latest_date="2024-01-01",
+            call_count=5,
+            label="Test Label",
+            period="month"
+        )
+
+        # Verify first call returns None
+        assert first_result is None
+
+        # Get the created summary from database
+        content_type = ContentType.objects.get_for_model(topic)
+        first_summary = PeriodSummary.objects.get(
+            content_type=content_type,
+            object_id=topic.id,
+            period_type="month",
+            period_label="Test Label"
+        )
+        first_id = first_summary.id
+
+        # Create another with same label - should update existing
+        second_result = create_periodsummary(
+            obj=topic,
+            summary="Updated summary",
+            latest_date="2024-01-15",
+            call_count=10,
+            label="Test Label",
+            period="month"
+        )
+
+        # Verify second call also returns None
+        assert second_result is None
+
+        # Get the updated summary from database
+        updated_summary = PeriodSummary.objects.get(
+            content_type=content_type,
+            object_id=topic.id,
+            period_type="month",
+            period_label="Test Label"
+        )
+
+        # Should be the same object (updated)
+        assert updated_summary.id == first_id
+        assert updated_summary.summary == "Updated summary"
+        assert str(updated_summary.last_call_at) == '2024-01-15 00:00:00+00:00'
+        assert updated_summary.call_count == 10
+        assert updated_summary.period_label == "Test Label"
+
+        # Verify only one object exists in the database
+        count = PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=topic.id,
+            period_type="month"
+        ).count()
+        assert count == 1

@@ -5,14 +5,18 @@ This module provides functions for creating and managing Google Cloud Tasks
 for call processing workflows, including file uploads and task scheduling.
 """
 
+import uuid
 import datetime
 import json
+import logging
 from google.cloud import tasks_v2
 from google.protobuf import timestamp_pb2
 import grpc
 from django.conf import settings
 from rest_framework import status
 from tellme.call_processing.utils import gcs_utils, db_handler
+
+logger = logging.getLogger(__name__)
 
 
 def create_storage_path(
@@ -47,7 +51,7 @@ def create_storage_path(
     return f"{organization_id}/{customer_part}_{agent_id}_{call_timestamp.isoformat()}{format}"
 
 
-def create_task(
+def create_processing_task(
         process_url: str, file_name: str, organization_id: int, customer_id: str, agent_id: int,
         timestamp: datetime.datetime, transcription_method: str, enrichment_method: str, logger
 ):
@@ -104,14 +108,14 @@ def create_task(
     parent = client.queue_path(
         settings.GOOGLE_CLOUD_PROJECT,
         settings.REGION,
-        settings.CLOUD_TASKS_QUEUE_NAME
+        settings.PROCESSING_QUEUE_NAME
     )
     logger.info(f'Creating task in queue with parent {parent}')
     client.create_task(parent=parent, task=task)
-    logger.info(f'Created task in {settings.CLOUD_TASKS_QUEUE_NAME}')
+    logger.info(f'Created task in {settings.PROCESSING_QUEUE_NAME}')
 
 
-def upload_and_create_task(
+def upload_file_and_create_processing_task(
         file_name: str,
         agent_id: int,
         customer_id: str,
@@ -163,7 +167,7 @@ def upload_and_create_task(
         # Create a task to process this recording
         process_url = settings.CALL_PROCESSING_ENDPOINT
         logger.info(f'Creating an HTTP Task Targeting: {process_url}')
-        create_task(
+        create_processing_task(
             process_url,
             file_name,
             organization_id,
