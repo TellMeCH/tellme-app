@@ -28,7 +28,12 @@ output "call_processing_bucket_name" {
   description = "Call processing bucket name"
 }
 
-output "tasks_queue_name" {
-  value       = module.tasks.queue_name
-  description = "Cloud Tasks queue name"
+output "call_processing_queue_name" {
+  value       = module.tasks.call_processing_queue_name
+  description = "Name of the call processing Cloud Tasks queue"
+}
+
+output "summarization_queue_name" {
+  value       = module.tasks.summarization_queue_name
+  description = "Name of the summarization Cloud Tasks queue"
 }
