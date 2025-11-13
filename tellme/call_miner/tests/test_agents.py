@@ -439,6 +439,62 @@ class TestAgentDelete:
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_agent_deletion_removes_associated_period_summaries(self, agent, conversation_today):
+        """
+        Test that when an agent is deleted via model.delete(), its associated PeriodSummary instances are also deleted.
+        Note: Agents cannot be deleted via API, but they can be deleted at the model level.
+        """
+        from tellme.call_miner.models import Agent, PeriodSummary
+        from django.contrib.contenttypes.models import ContentType
+
+        # Link conversation to agent
+        conversation_today.agent = agent
+        conversation_today.save()
+
+        # Create multiple PeriodSummary instances for the agent
+        content_type = ContentType.objects.get_for_model(Agent)
+        period_summaries = []
+
+        for period_type in ['week', 'month', 'quarter']:
+            start, end, label = period_bounds(period_type, True)
+            summary = PeriodSummary.objects.create(
+                content_type=content_type,
+                object_id=agent.id,
+                period_type=period_type,
+                period_label=label,
+                summary={
+                    "Agent Performance": f"Performance review for {period_type}",
+                    "Calls Handled": 45,
+                    "Customer Satisfaction": 4.1,
+                    "Resolution Rate": 88
+                },
+                last_call_at=conversation_today.date,
+                call_count=1
+            )
+            period_summaries.append(summary)
+
+        # Verify PeriodSummary instances exist
+        assert PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=agent.id
+        ).count() == 3
+
+        # Delete conversations first to avoid PROTECT foreign key constraint
+        conversation_today.delete()
+
+        # Delete the agent directly at model level
+        agent_id = agent.id
+        agent.delete()
+
+        # Verify all associated PeriodSummary instances are deleted
+        assert PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=agent_id
+        ).count() == 0
+
+        # Verify the agent itself is deleted
+        assert not Agent.objects.filter(id=agent_id).exists()
+
 
 @pytest.mark.django_db
 class TestAgentTrendActions:

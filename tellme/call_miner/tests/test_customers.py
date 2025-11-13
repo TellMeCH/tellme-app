@@ -305,6 +305,57 @@ class TestCustomerDelete:
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_customer_deletion_removes_associated_period_summaries(self, customer, conversation_today):
+        """
+        Test that when a customer is deleted, its associated PeriodSummary instances are also deleted.
+        """
+        # Link conversation to customer (it's already linked via the conversation fixture)
+        conversation_today.customer = customer
+        conversation_today.save()
+
+        # Create multiple PeriodSummary instances for the customer
+        content_type = ContentType.objects.get_for_model(Customer)
+        period_summaries = []
+
+        for period_type in ['week', 'month', 'quarter']:
+            start, end, label = period_bounds(period_type, True)
+            summary = PeriodSummary.objects.create(
+                content_type=content_type,
+                object_id=customer.id,
+                period_type=period_type,
+                period_label=label,
+                summary={
+                    "Customer Value": f"High value customer for {period_type}",
+                    "Engagement Level": "Active",
+                    "Satisfaction Score": 4.2
+                },
+                last_call_at=conversation_today.date,
+                call_count=1
+            )
+            period_summaries.append(summary)
+
+        # Verify PeriodSummary instances exist
+        assert PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=customer.id
+        ).count() == 3
+
+        # Delete conversations first to avoid PROTECT foreign key constraint
+        conversation_today.delete()
+
+        # Delete the customer
+        customer_id = customer.id
+        customer.delete()
+
+        # Verify all associated PeriodSummary instances are deleted
+        assert PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=customer_id
+        ).count() == 0
+
+        # Verify the customer itself is deleted
+        assert not Customer.objects.filter(id=customer_id).exists()
+
 
 @pytest.mark.django_db
 class TestCustomerActions:

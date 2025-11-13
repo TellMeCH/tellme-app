@@ -519,6 +519,56 @@ class TestTopicDelete:
         response = client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_topic_deletion_removes_associated_period_summaries(self, topic, conversation_today):
+        """
+        Test that when a topic is deleted, its associated PeriodSummary instances are also deleted.
+        """
+        # Link conversation to topic
+        conversation_today.topics.add(topic)
+
+        # Create multiple PeriodSummary instances for the topic
+        content_type = ContentType.objects.get_for_model(Topic)
+        period_summaries = []
+
+        for period_type in ['week', 'month', 'quarter']:
+            start, end, label = period_bounds(period_type, True)
+            summary = PeriodSummary.objects.create(
+                content_type=content_type,
+                object_id=topic.id,
+                period_type=period_type,
+                period_label=label,
+                summary={
+                    "Topic Analysis": f"Analysis for {period_type}",
+                    "Call Volume": 25,
+                    "Resolution Rate": 85
+                },
+                last_call_at=conversation_today.date,
+                call_count=1
+            )
+            period_summaries.append(summary)
+
+        # Verify PeriodSummary instances exist
+        assert PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=topic.id
+        ).count() == 3
+
+        # Remove the topic from conversations first to avoid foreign key issues
+        conversation_today.topics.remove(topic)
+
+        # Delete the topic
+        topic_id = topic.id
+        topic.delete()
+
+        # Verify all associated PeriodSummary instances are deleted
+        assert PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=topic_id
+        ).count() == 0
+
+        # Verify the topic itself is deleted
+        assert not Topic.objects.filter(id=topic_id).exists()
+
 
 @pytest.mark.django_db
 class TestTopicTrendActions:
