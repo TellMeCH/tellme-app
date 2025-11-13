@@ -21,10 +21,10 @@ COPY pyproject.toml uv.lock* /app/
 
 RUN uv sync --frozen --no-cache
 
-COPY . /app/
-
 EXPOSE 8080
 
 ENV DJANGO_SETTINGS_MODULE=tellme.settings
+
+COPY . /app/
 
 CMD ["uv", "run", "daphne", "-b", "0.0.0.0", "-p", "8080", "tellme.asgi:application"]

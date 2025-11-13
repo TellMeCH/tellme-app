@@ -20,6 +20,7 @@ from tellme.call_miner.permissions import (ConversationPermission, OrganizationP
                                     TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
 from tellme.call_miner.utils.paginators import CustomListViewPaginator
 from tellme.call_miner.utils.period_utils import period_bounds
+from tellme.call_miner.utils.summary_utils import DEFAULT_SUMMARY_SETTINGS
 from tellme.call_miner.authentication import FirebaseAuthentication
 from tellme.call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA,
@@ -41,10 +42,10 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         summary_order_desc (bool): Indicates whether order the summary dictionaries in descending order of the order key
         summary_rolling_window (bool): Indicates whether to use a rolling window when selecting conversations
     """
-    summary_period = "month"
+    summary_period = DEFAULT_SUMMARY_SETTINGS['agent']['period']
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
-    summary_rolling_window = False
+    summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['agent']['rolling']
 
     @staticmethod
     def get_summary_name(obj):
@@ -53,33 +54,6 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         Default: try obj.name, otherwise None.
         """
         return getattr(obj, "name", None)
-
-    def define_trace_data(self, request, obj, name: str):
-        """
-        This method defines trace data to be used by Langfuse when recording an LLM trace
-        """
-        period = request.query_params.get("period", self.summary_period)
-        rolling = request.query_params.get("rolling", self.summary_rolling_window)
-        if hasattr(request.user, 'employee'):
-            role = request.user.employee.role.lower()
-            organization = request.user.employee.organization
-        else:
-            organization = None
-            if request.user.is_superuser:
-                role = 'superuser'
-            else:
-                role = 'unknown'
-        return {
-            'name': name, 'user_id': request.user.id, 'tags': [settings.TELLME_ENV],
-            'metadata': {
-                'organization': organization,
-                'role': role,
-                'object': str(type(obj)),
-                'id': obj.id,
-                'period': period,
-                'rolling': rolling
-            }
-        }
 
     @extend_schema(
         description=MetaSummarySerializer.get_summary_data.__doc__,
@@ -97,10 +71,8 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         context = self.get_serializer_context()
 
         # Inject trace data and period to the default serializer context
-        trace_data = self.define_trace_data(request, obj, 'get_summary_data')
         period = self.request.query_params.get("period", self.summary_period)
         rolling = self.request.query_params.get("rolling", self.summary_rolling_window)
-        context['trace_data'] = trace_data
         context['period'] = period
         context['rolling'] = rolling
         serializer = self.get_serializer(obj, context=context)
@@ -132,10 +104,6 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
             context['period'] = self.summary_period
             context['rolling'] = self.summary_rolling_window
             for obj in queryset:
-                # Inject trace data to the default serializer context
-                trace_data = self.define_trace_data(request, obj, 'get_all_summaries')
-                context['trace_data'] = trace_data
-
                 serializer = self.get_serializer(obj, context=context)
                 summary_data = serializer.get_summary_data(obj)
                 summary_data['name'] = self.get_summary_name(obj)
@@ -496,10 +464,10 @@ class TopicViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsVi
     permission_classes = [TopicPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-is_active', '-conversation_count', 'name']
-    summary_period = 'quarter'
+    summary_period = DEFAULT_SUMMARY_SETTINGS['topic']['period']
     summary_order_keys = ['summary_call_count']
     summary_order_desc = True
-    summary_rolling_window = True
+    summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['topic']['rolling']
 
     def get_serializer_class(self):
         if self.action in ['list', 'list_active', 'retrieve', 'list_recent']:
@@ -697,10 +665,10 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-last_conversation_date', 'conversation_count']
-    summary_period = 'quarter'
+    summary_period = DEFAULT_SUMMARY_SETTINGS['customer']['period']
     summary_order_keys = ['summary', 'Customer Value']
     summary_order_desc = True
-    summary_rolling_window = True
+    summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['customer']['rolling']
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:

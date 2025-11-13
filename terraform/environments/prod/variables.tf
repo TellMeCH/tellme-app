@@ -42,10 +42,16 @@ variable "database_name" {
   default     = "db"
 }
 
-variable "cloud_tasks_queue_name" {
+variable "processing_queue_name" {
   type        = string
-  description = "Cloud Tasks queue name"
+  description = "Processing queue name"
   default     = "call-processing"
+}
+
+variable "summarization_queue_name" {
+  type        = string
+  description = "Summarization queue name"
+  default     = "summarization"
 }
 
 variable "frontend_path" {

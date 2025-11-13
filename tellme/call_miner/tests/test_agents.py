@@ -2,8 +2,10 @@ import pytest
 from datetime import datetime
 from unittest.mock import patch
 from django.urls import reverse
+from django.contrib.contenttypes.models import ContentType
 from rest_framework import status
-from tellme.call_miner.models import Agent, User
+from tellme.call_miner.models import Agent, User, PeriodSummary
+from tellme.call_miner.utils.period_utils import period_bounds
 
 TREND_ACTIONS = ['conversations', 'trend', 'overview']
 
@@ -766,28 +768,48 @@ class TestAgentSummary:
     def test_agent_summary_data_returns_expected_content(self, client, agent, conversation_today):
         """
         Test that the 'summary-data' action for an agent retrieves the expected summary data.
+        Uses actual PeriodSummary objects instead of mocking the old sync logic.
         """
-        with patch('tellme.call_miner.models.condense_summaries') as mock_condense_summaries:
-            mock_condense_summaries.return_value = 'Mocked summary text'
-            client.force_authenticate(user=agent.user)
-            url = reverse('agent-summary-data', args=[agent.id])
+        client.force_authenticate(user=agent.user)
+        url = reverse('agent-summary-data', args=[agent.id])
 
-            for period in ['week', 'month', 'quarter']:
-                response = client.get(url, {'period': period})
-                assert response.status_code == status.HTTP_200_OK
-                assert 'summary' in response.data
-                assert response.data['summary'] == 'Mocked summary text'
-                assert response.data['summary_call_count'] == 1
-                assert response.data['summary_date'].date() == conversation_today.date.date()
-                assert 'period_label' in response.data
+        for period in ['week', 'month', 'quarter']:
+            # Create PeriodSummary for this period
+            start, end, label = period_bounds(period, False)
+            content_type = ContentType.objects.get_for_model(agent.__class__)
 
-                if period == 'month':
-                    assert response.data['period_label'] == datetime.today().strftime('%Y-%m')
-                elif period == 'week':
-                    assert response.data['period_label'] == datetime.today().strftime("%G-W%V")
-                else:
-                    label = f"{datetime.today().year}-Q{(datetime.today().month - 1) // 3 + 1}"
-                    assert response.data['period_label'] == label
+            summary_data = {
+                'Recurring Issues': 'Billing and technical support',
+                'First Call Resolution Rate': '85%',
+                'Language Appropriateness': 'Professional and empathetic'
+            }
+
+            PeriodSummary.objects.create(
+                content_type=content_type,
+                object_id=agent.id,
+                period_type=period,
+                period_label=label,
+                summary=summary_data,
+                last_call_at=conversation_today.date,
+                call_count=1
+            )
+
+            response = client.get(url, {'period': period})
+            assert response.status_code == status.HTTP_200_OK
+            assert 'summary' in response.data
+            assert response.data['summary'] == summary_data
+            assert response.data['summary_call_count'] == 1
+            assert response.data['summary_date'].date() == conversation_today.date.date()
+            assert 'period_label' in response.data
+            assert response.data['status'] == 'ready'
+
+            if period == 'month':
+                assert response.data['period_label'] == datetime.today().strftime('%Y-%m')
+            elif period == 'week':
+                assert response.data['period_label'] == datetime.today().strftime("%G-W%V")
+            else:
+                label = f"{datetime.today().year}-Q{(datetime.today().month - 1) // 3 + 1}"
+                assert response.data['period_label'] == label
 
     def test_all_summaries_uses_month_period(
             self, client, organization_admin_user, agent, topic, conversation_today

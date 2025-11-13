@@ -1,9 +1,11 @@
 import zoneinfo
 import pytest
 from django.urls import reverse
+from django.contrib.contenttypes.models import ContentType
 from rest_framework import status
 from datetime import timedelta, datetime
 from tellme.call_miner.models import Topic, Conversation, PeriodSummary
+from tellme.call_miner.utils.period_utils import period_bounds
 
 TREND_ACTIONS = ['conversations', 'trend']
 
@@ -736,62 +738,93 @@ class TestTopicSummary:
 
     def test_topic_summary_data_returns_expected_content(self, client, analyst_user, topic, conversation_today):
         """
-        Test that the 'summary-data' action for a topic retrieves the expected summary data and mocks the summary
-        generation.
+        Test that the 'summary-data' action for a topic retrieves the expected summary data.
+        Uses actual PeriodSummary objects instead of mocking the old sync logic.
         """
-
         client.force_authenticate(user=analyst_user)
         url = reverse('topic-summary-data', args=[topic.id])
+        content_type = ContentType.objects.get_for_model(topic.__class__)
+
+        summary_data = {
+            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
+        }
+
+        # Create PeriodSummary for each combination we'll test
+        for period in ['week', 'month', 'quarter']:
+            for rolling in [True, False]:
+                start, end, label = period_bounds(period, rolling)
+
+                PeriodSummary.objects.create(
+                    content_type=content_type,
+                    object_id=topic.id,
+                    period_type=period,
+                    period_label=label,
+                    summary=summary_data,
+                    last_call_at=conversation_today.date,
+                    call_count=1
+                )
+
+        # Test default request (topics use quarter period with rolling=True by default)
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert 'summary' in response.data
-        assert response.data['summary'] == {
-            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
-        }
+        assert response.data['summary'] == summary_data
         assert response.data['summary_call_count'] == 1
         assert response.data['summary_date'].date() == conversation_today.date.date()
         assert 'period_label' in response.data
-        assert response.data['period_label'] == 'Rolling90D'
+        assert response.data['status'] == 'ready'
 
+        # Test all period/rolling combinations
         for period in ['week', 'month', 'quarter']:
             for rolling in [True, False]:
                 response = client.get(url, {'period': period, 'rolling': rolling})
                 assert response.status_code == status.HTTP_200_OK
                 assert 'summary' in response.data
-                assert response.data['summary'] == {
-                    'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
-                }
+                assert response.data['summary'] == summary_data
+                assert response.data['summary_call_count'] == 1
+                assert response.data['summary_date'].date() == conversation_today.date.date()
                 assert 'period_label' in response.data
-                if rolling:
-                    days = {'week': 7, 'month': 30, 'quarter': 90}
-                    label = f'Rolling{days[period]}D'
-                else:
-                    today = datetime.today()
-                    if period == 'week':
-                        label = today.strftime("%G-W%V")
-                    elif period == 'month':
-                        label = today.strftime("%Y-%m")
-                    else:
-                        label = f"{today.year}-Q{((today.month - 1) // 3) + 1}"
-                assert response.data['period_label'] == label
+                assert response.data['status'] == 'ready'
+
+                # Verify the correct period label is returned
+                start, end, expected_label = period_bounds(period, rolling)
+                assert response.data['period_label'] == expected_label
 
     def test_all_summaries_returns_expected_content(self, client, analyst_user, topic, conversation_today):
         """
-        Test that the 'all-summaries' action for all topic retrieves the expected summary data and mocks the summary
-        generation.
+        Test that the 'all-summaries' action for all topics retrieves the expected summary data.
+        Uses actual PeriodSummary objects instead of mocking the old sync logic.
         """
         client.force_authenticate(user=analyst_user)
         url = reverse('topic-all-summaries')
+        content_type = ContentType.objects.get_for_model(topic.__class__)
+
+        summary_data = {
+            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
+        }
+
+        # Create PeriodSummary for the default period/rolling combination used by all_summaries
+        # Topics use quarter period with rolling=True by default
+        start, end, label = period_bounds('quarter', True)
+        PeriodSummary.objects.create(
+            content_type=content_type,
+            object_id=topic.id,
+            period_type='quarter',
+            period_label=label,
+            summary=summary_data,
+            last_call_at=conversation_today.date,
+            call_count=1
+        )
+
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert topic.id in response.data
-        assert response.data[topic.id]['summary'] == {
-            'Reasons for Calling': 'Billing issues and account setup inquiries are common.'
-        }
+        assert response.data[topic.id]['summary'] == summary_data
         assert response.data[topic.id]['summary_call_count'] == 1
         assert response.data[topic.id]['summary_date'].date() == conversation_today.date.date()
         assert response.data[topic.id]['name'] == topic.name
-        assert response.data[topic.id]['period_label'] == 'Rolling90D'
+        assert response.data[topic.id]['period_label'] == label
+        assert response.data[topic.id]['status'] == 'ready'
 
     def test_existing_period_summary_is_reutilized(
         self,
@@ -799,22 +832,54 @@ class TestTopicSummary:
         analyst_user,
         topic,
         conversation_today,
-        mock_condense_summaries,
     ):
         """
         A second call for the same month must *reuse* the existing PeriodSummary instead of triggering another summary.
+        Uses actual PeriodSummary objects to test the caching behavior.
         """
         client.force_authenticate(user=analyst_user)
         url = reverse("topic-summary-data", args=[topic.id])
 
-        initial_calls = mock_condense_summaries.call_count
+        # Create a PeriodSummary for the topic
+        start, end, label = period_bounds('quarter', True)  # Topic uses quarter/rolling by default
+        content_type = ContentType.objects.get_for_model(topic.__class__)
+
+        summary_data = {
+            'Reasons for Calling': 'Billing issues, Technical support',
+            'Churn Potential': 'Medium risk due to unresolved billing',
+            'Suggested Actions': 'Improve billing process, faster resolution'
+        }
+
+        period_summary = PeriodSummary.objects.create(
+            content_type=content_type,
+            object_id=topic.id,
+            period_type='quarter',
+            period_label=label,
+            summary=summary_data,
+            last_call_at=conversation_today.date,
+            call_count=1
+        )
+
+        # First call - should return existing summary
         resp1 = client.get(url)
         assert resp1.status_code == status.HTTP_200_OK
-        assert mock_condense_summaries.call_count == initial_calls + 1
+        assert resp1.data['summary'] == summary_data
+        assert resp1.data['status'] == 'ready'
 
+        # Second call - should return the same summary (no new DB object created)
         resp2 = client.get(url)
         assert resp2.status_code == status.HTTP_200_OK
-        assert mock_condense_summaries.call_count == initial_calls + 1
+        assert resp2.data['summary'] == summary_data
+        assert resp2.data['status'] == 'ready'
+
+        # Verify only one PeriodSummary exists for this topic/period
+        period_summaries = PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=topic.id,
+            period_type='quarter',
+            period_label=label
+        )
+        assert period_summaries.count() == 1
         
 
 @pytest.mark.django_db

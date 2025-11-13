@@ -270,7 +270,7 @@ class AudioHookConsumer(WebsocketConsumer):
 
             # Upload to GCS and create Task
             blob_name = f"{self.org.id}/{self.customer_id}_{self.agent_id}_{self.connection_timestamp.isoformat()}.wav"
-            message, status_code = queue_utils.upload_and_create_task(
+            message, status_code = queue_utils.upload_file_and_create_processing_task(
                 blob_name, self.agent_id, self.customer_id, self.org.id, self.connection_timestamp, logger,
                 True, wav_data  # Note to self: Consider whether checking agent validity is reasonable
             )
