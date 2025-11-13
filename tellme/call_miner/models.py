@@ -211,6 +211,22 @@ class MetaSummaryAbstractModel(models.Model):
             logging.error(f'Failed to create summarization task for {self.__class__.__name__} of ID {self.id}: {e}')
             return None
 
+    def delete(self, *args, **kwargs):
+        """Delete the object and clean up related PeriodSummary instances."""
+        # Delete related PeriodSummary instances first
+        content_type = ContentType.objects.get_for_model(self.__class__)
+        deleted_count = PeriodSummary.objects.filter(
+            content_type=content_type,
+            object_id=self.pk
+        ).delete()
+
+        # Log for debugging if needed
+        if deleted_count[0] > 0:
+            logging.debug(f"Deleted {deleted_count[0]} PeriodSummary instances for {self.__class__.__name__} {self.pk}")
+
+        # Call parent delete
+        super().delete(*args, **kwargs)
+
 
 class ConversationStatsAbstractModel(models.Model):
     """
