@@ -191,6 +191,7 @@ jobs:
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
+          SUMMARIZATION_ENDPOINT: "None"
         run: |
           uv run python manage.py migrate
 
@@ -207,6 +208,7 @@ jobs:
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
+          SUMMARIZATION_ENDPOINT: "None"
         run: |
           uv run python manage.py collectstatic --noinput
 
@@ -224,6 +226,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
           CALL_PROCESSING_ENDPOINT: "None"
+          SUMMARIZATION_ENDPOINT: "None"
         run: |
           uv run python manage.py create_superusers
 
@@ -248,6 +251,12 @@ jobs:
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
             --update-env-vars CALL_PROCESSING_ENDPOINT="${{ steps.extract_urls.outputs.base_url }}${{ vars.CALL_PROCESSING_ADDRESS }}"
+
+      - name: Update the Application to use the correct Summarization Endpoint
+        run: |
+          gcloud run services update ${{ vars.SERVICE_NAME }} \
+            --region ${{ secrets.GCP_PROJECT_REGION }} \
+            --update-env-vars SUMMARIZATION_ENDPOINT="${{ steps.extract_urls.outputs.base_url }}${{ vars.SUMMARIZATION_ADDRESS }}"
 
   smoke_test:
     environment:
@@ -329,6 +338,7 @@ jobs:
           SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}${{ vars.CALL_PROCESSING_ADDRESS }}
+          SUMMARIZATION_ENDPOINT: ${{ steps.extract_urls.outputs.url }}${{ vars.SUMMARIZATION_ADDRESS }}
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
@@ -336,5 +346,3 @@ jobs:
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         run: |
           uv run pytest -v ./tellme/call_processing/tests/test_smoke_remote.py
-
-# TODO: Change processing and summarization queue names in GitHub variables

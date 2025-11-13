@@ -101,6 +101,7 @@ module "cloud_run_v2" {
         CALL_PROCESSING_BUCKET  = var.call_processing_bucket
         FRONTEND_PATH           = var.frontend_path
         CALL_PROCESSING_ENDPOINT = "None"
+        SUMMARIZATION_ENDPOINT   = "None"
       }
     }
   ]
