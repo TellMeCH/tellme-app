@@ -322,8 +322,8 @@ class AudioHookEmulator:
         print(f'Attempting the connection to {self.ws_url}')
         async with websockets.connect(self.ws_url, additional_headers={'X-API-KEY': API_KEY}) as ws:
             # Create tasks: read messages & ping
-            reader_task = asyncio.create_task(self.reader_loop(ws))
-            pinger_task = asyncio.create_task(self.ping_loop(ws))
+            reader_task = asyncio.create_processing_task(self.reader_loop(ws))
+            pinger_task = asyncio.create_processing_task(self.ping_loop(ws))
 
             # 1) Send open
             await self.send_open(ws)

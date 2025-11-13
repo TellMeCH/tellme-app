@@ -58,9 +58,14 @@ variable "media_bucket" {
   description = "Media bucket name"
 }
 
-variable "cloud_tasks_queue_name" {
+variable "processing_queue_name" {
   type        = string
-  description = "Cloud Tasks queue name"
+  description = "Processing queue name"
+}
+
+variable "summarization_queue_name" {
+  type        = string
+  description = "Summarization queue name"
 }
 
 variable "call_processing_bucket" {

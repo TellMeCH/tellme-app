@@ -61,8 +61,10 @@ jobs:
           echo "DEBUG=1" >> .env
           echo "SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" >> .env
           echo "PROCESSING_PIPELINE_KEY=''" >> .env
-          echo "CLOUD_TASKS_QUEUE_NAME=''" >> .env
+          echo "PROCESSING_QUEUE_NAME=''" >> .env
+          echo "SUMMARIZATION_QUEUE_NAME=''" >> .env
           echo "CALL_PROCESSING_ENDPOINT=''" >> .env
+          echo "SUMMARIZATION_ENDPOINT=''" >> .env
           echo "TASKS_EMULATOR_ADDRESS=''" >> .env
           echo "CALL_PROCESSING_BUCKET=''" >> .env
           echo "DEEPGRAM_API_KEY=fake_key" >> .env

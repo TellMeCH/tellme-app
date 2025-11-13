@@ -22,7 +22,8 @@ module "api_revision" {
   sql_instance_name     = var.sql_instance
   database_name         = var.database_name
   media_bucket          = var.media_bucket
-  cloud_tasks_queue_name = var.cloud_tasks_queue_name
+  processing_queue_name = var.processing_queue_name
+  summarization_queue_name = var.summarization_queue_name
   call_processing_bucket = var.call_processing_bucket
   frontend_path         = var.frontend_path
   admin_username        = var.admin_username
