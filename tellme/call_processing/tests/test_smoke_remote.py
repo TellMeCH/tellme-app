@@ -352,7 +352,7 @@ class TestSmokeTestCloudRunWithLogs:
             assert customer['external_id'] == self.customer_id
 
         # Check customer summary
-        resp = requests.get(f"{customer_url}/summary_data/", headers=self.superuser_headers)
+        resp = requests.get(f"{customer_url}summary_data/", headers=self.superuser_headers)
         resp.raise_for_status()
         summary = resp.json()
         assert summary.get('status') == 'ready'
