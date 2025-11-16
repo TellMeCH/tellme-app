@@ -250,33 +250,40 @@ class Command(BaseCommand):
                 ending_sentiment = random.uniform(0, 5)
                 duration = random.randint(30, 1800)  # Random duration in seconds
 
-                conversation = Conversation(
-                    path=f'/random/path/{i}',
-                    date=date,
-                    duration=duration,
-                    transcript=data['transcript'],
-                    sentiment=sentiment,
-                    starting_sentiment=starting_sentiment,
-                    ending_sentiment=ending_sentiment,
-                    title=f"Conversation {i + 1} - {agent.user.email} assists {customer.external_id}",
-                    summary=data['summary'],
-                    input_tokens=random.randint(50, 200),
-                    output_tokens=random.randint(20, 100),
-                    revenue_at_stake=random.random() * 800 + 100,
-                    resolved=random.random() > 0.5,
-                    customer=customer,
-                    agent=agent
-                )
-                conversation.save()
+                try:
+                    conversation = Conversation(
+                        path=f'/random/path/{i}',
+                        date=date,
+                        duration=duration,
+                        transcript=data['transcript'],
+                        sentiment=sentiment,
+                        starting_sentiment=starting_sentiment,
+                        ending_sentiment=ending_sentiment,
+                        title=f"Conversation {i + 1} - {agent.user.email} assists {customer.external_id}",
+                        summary=data['summary'],
+                        input_tokens=random.randint(50, 200),
+                        output_tokens=random.randint(20, 100),
+                        revenue_at_stake=random.random() * 800 + 100,
+                        resolved=random.random() > 0.5,
+                        customer=customer,
+                        agent=agent
+                    )
+                    conversation.save()
 
-                # Assign random topics
-                conversation.topics.add(*data['topics'])
-                
-                # Assign suggested topics if they exist in the data
-                if 'suggested_topics' in data and data['suggested_topics']:
-                    conversation.suggested_topics.add(*data['suggested_topics'])
-                
-                conversation.save()
+                    # Assign random topics
+                    conversation.topics.add(*data['topics'])
+
+                    # Assign suggested topics if they exist in the data
+                    if 'suggested_topics' in data and data['suggested_topics']:
+                        conversation.suggested_topics.add(*data['suggested_topics'])
+
+                    conversation.save()
+                except Exception as e:
+                    if 'unique id constraint violation' in str(e):
+                        continue
+                    else:
+                        raise CommandError(f'Failed creating Conversation: {e}')
+
         except Exception as e:
             raise CommandError(f'Failed creation of Conversations: {e}')
 

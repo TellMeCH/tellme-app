@@ -1,7 +1,7 @@
 import zoneinfo
-from rest_framework import viewsets, decorators, response, status, mixins
+from rest_framework import viewsets, decorators, response, status, mixins, filters
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
-from django.db.models import F, Max
+from django.db.models import F, Max, Avg, Sum
 from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
@@ -29,7 +29,8 @@ from tellme.call_miner.schemas import (
     ORGANIZATION_OVERVIEW_RESPONSE_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
     REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
-    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA
+    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA,
+    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA
 )
 
 
@@ -268,6 +269,9 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-date', 'sentiment', 'resolved']
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['date', 'sentiment', 'resolved']
+    ordering = ['-date', 'sentiment', 'resolved']  # Match cursor_ordering for consistency
     relationships_to_select = ['customer', 'agent', 'agent__user']
     relationships_to_prefetch = ['topics']
     search_vector = (
@@ -318,6 +322,18 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         return response.Response(serializer.get_processed_transcript(obj))
+
+    @extend_schema(
+        description="List conversations with optional ordering",
+        parameters=[CONVERSATION_ORDERING_PARAMETER_SCHEMA],
+        responses={
+            200: "Paginated list of conversations",
+            403: FORBIDDEN_RESPONSE_SCHEMA
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        """List conversations with optional ordering by date, sentiment, or resolved status."""
+        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         return {'request': self.request}
@@ -665,6 +681,9 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-last_conversation_date', 'conversation_count']
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['last_conversation_date', 'conversation_count', 'created', 'total_revenue', 'avg_sentiment']
+    ordering = ['-last_conversation_date', 'conversation_count']  # Match cursor_ordering for consistency
     summary_period = DEFAULT_SUMMARY_SETTINGS['customer']['period']
     summary_order_keys = ['summary', 'Customer Value']
     summary_order_desc = True
@@ -683,7 +702,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
 
     def get_queryset(self):
         """
-        Return agents that belong to the user's organization
+        Return customers that belong to the user's organization, with aggregated fields for ordering
         """
         if self.request.user.is_superuser:
             qs = Customer.objects.all()
@@ -691,6 +710,12 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
             qs = Customer.objects.filter(organization=self.request.user.employee.organization)
         else:
             qs = Customer.objects.none()
+
+        # Add aggregated fields for ordering
+        qs = qs.annotate(
+            total_revenue=Sum('conversations__revenue_at_stake'),
+            avg_sentiment=Avg('conversations__sentiment')
+        )
 
         # Optimize DB Querying for all_summaries and summary_data
         if self.action in ['all_summaries', 'summary_data']:
@@ -701,6 +726,18 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
             start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
             qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT).filter(last_conversation_date__gte=start)
         return qs
+
+    @extend_schema(
+        description="List customers with optional ordering",
+        parameters=[CUSTOMER_ORDERING_PARAMETER_SCHEMA],
+        responses={
+            200: "Paginated list of customers with aggregated fields (total_revenue, avg_sentiment)",
+            403: FORBIDDEN_RESPONSE_SCHEMA
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        """List customers with optional ordering by conversation metrics or aggregated fields."""
+        return super().list(request, *args, **kwargs)
 
     def get_summary_name(self, obj):
         return obj.external_id

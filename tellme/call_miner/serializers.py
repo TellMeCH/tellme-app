@@ -656,24 +656,52 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
     total_revenue = serializers.SerializerMethodField(
         help_text='Total revenue at stake across all conversations for this customer'
     )
+    avg_sentiment = serializers.SerializerMethodField(
+        help_text='Average sentiment across all conversations for this customer'
+    )
 
     class Meta:
         model = Customer
         fields = ['url', 'external_id', 'first_name', 'last_name', 'birth_date', 'conversation_count',
-                  'first_conversation_date', 'last_conversation_date', 'total_revenue', 'created']
+                  'first_conversation_date', 'last_conversation_date', 'total_revenue', 'avg_sentiment', 'created']
 
     @extend_schema_field({'type': 'number', 'format': 'float'})
     def get_total_revenue(self, obj):
         """
         Calculate the total revenue at stake across all conversations for this customer.
+        Uses the annotated value from the viewset if available, otherwise calculates it.
 
         Returns:
             float: Sum of revenue_at_stake for all conversations, or 0.0 if no revenue data exists
         """
+        # Use the annotation from viewset if available (for ordering/performance)
+        if hasattr(obj, 'total_revenue') and obj.total_revenue is not None:
+            return obj.total_revenue
+
+        # Fallback to manual calculation if annotation not available
         result = obj.conversations.aggregate(
             total=models.Sum('revenue_at_stake')
         )
         return result['total'] or 0.0
+
+    @extend_schema_field({'type': 'number', 'format': 'float'})
+    def get_avg_sentiment(self, obj):
+        """
+        Calculate the average sentiment across all conversations for this customer.
+        Uses the annotated value from the viewset if available, otherwise calculates it.
+
+        Returns:
+            float: Average sentiment for all conversations, or None if no conversations exist
+        """
+        # Use the annotation from viewset if available (for ordering/performance)
+        if hasattr(obj, 'avg_sentiment') and obj.avg_sentiment is not None:
+            return obj.avg_sentiment
+
+        # Fallback to manual calculation if annotation not available
+        result = obj.conversations.aggregate(
+            avg=models.Avg('sentiment')
+        )
+        return result['avg']
 
 
 class UserSerializer(serializers.ModelSerializer):
