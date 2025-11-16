@@ -238,7 +238,7 @@ class Command(BaseCommand):
             raise CommandError(f'Failed creation of Sample Customers: {e}')
 
         try:
-            self.stdout.write(f'Creating {CONVERSATION_DATA} Sample Conversations for ACME Org Customers')
+            self.stdout.write(f'Creating {len(CONVERSATION_DATA)} Sample Conversations for ACME Org Customers')
             base_date = datetime.now() - timedelta(days=90)
             for i, data in enumerate(CONVERSATION_DATA):
                 agent = random.choice(agents)
