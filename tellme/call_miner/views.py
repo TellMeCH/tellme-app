@@ -29,7 +29,8 @@ from tellme.call_miner.schemas import (
     ORGANIZATION_OVERVIEW_RESPONSE_SCHEMA, PER_TOPIC_PARAMETER_SCHEMA, SEARCH_QUERY_PARAMETER_SCHEMA,
     REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
-    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA
+    NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA,
+    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA
 )
 
 
@@ -321,6 +322,18 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
         return response.Response(serializer.get_processed_transcript(obj))
+
+    @extend_schema(
+        description="List conversations with optional ordering",
+        parameters=[CONVERSATION_ORDERING_PARAMETER_SCHEMA],
+        responses={
+            200: "Paginated list of conversations",
+            403: FORBIDDEN_RESPONSE_SCHEMA
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        """List conversations with optional ordering by date, sentiment, or resolved status."""
+        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         return {'request': self.request}
@@ -713,6 +726,18 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
             start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
             qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT).filter(last_conversation_date__gte=start)
         return qs
+
+    @extend_schema(
+        description="List customers with optional ordering",
+        parameters=[CUSTOMER_ORDERING_PARAMETER_SCHEMA],
+        responses={
+            200: "Paginated list of customers with aggregated fields (total_revenue, avg_sentiment)",
+            403: FORBIDDEN_RESPONSE_SCHEMA
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        """List customers with optional ordering by conversation metrics or aggregated fields."""
+        return super().list(request, *args, **kwargs)
 
     def get_summary_name(self, obj):
         return obj.external_id

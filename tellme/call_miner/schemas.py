@@ -53,6 +53,22 @@ SEARCH_QUERY_PARAMETER_SCHEMA = OpenApiParameter(
     required=True,
 )
 
+CONVERSATION_ORDERING_PARAMETER_SCHEMA = OpenApiParameter(
+    name='ordering',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='Field(s) to order by. Allowed fields: date, sentiment, resolved. Use "-" prefix for descending order (e.g., -date). Multiple fields can be comma-separated (e.g., "resolved,-sentiment").',
+    required=False,
+)
+
+CUSTOMER_ORDERING_PARAMETER_SCHEMA = OpenApiParameter(
+    name='ordering',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='Field(s) to order by. Allowed fields: last_conversation_date, conversation_count, created, total_revenue, avg_sentiment. Use "-" prefix for descending order (e.g., -total_revenue). Multiple fields can be comma-separated (e.g., "total_revenue,-avg_sentiment").',
+    required=False,
+)
+
 REGENERATE_API_KEY_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',
