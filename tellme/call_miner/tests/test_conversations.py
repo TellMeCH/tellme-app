@@ -59,6 +59,42 @@ class TestConversationList:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_conversation_list_ordering_allowed_fields(self, client, analyst_user, conversation):
+        """Test that all allowed ordering fields work correctly"""
+        client.force_authenticate(user=analyst_user)
+        allowed_fields = ['date', 'sentiment', 'resolved']
+
+        for field in allowed_fields:
+            # Test ascending
+            response = client.get(reverse('conversation-list'), {'ordering': field})
+            assert response.status_code == status.HTTP_200_OK, f"Failed for field: {field}"
+
+            # Test descending
+            response = client.get(reverse('conversation-list'), {'ordering': f'-{field}'})
+            assert response.status_code == status.HTTP_200_OK, f"Failed for field: -{field}"
+
+    def test_conversation_list_ordering_invalid_field(self, client, analyst_user, conversation):
+        """Test that ordering by invalid fields is ignored and default ordering is applied"""
+        client.force_authenticate(user=analyst_user)
+
+        # Get response with invalid ordering
+        invalid_response = client.get(reverse('conversation-list'), {'ordering': 'invalid_field'})
+        assert invalid_response.status_code == status.HTTP_200_OK
+
+        # Get response with default ordering
+        default_response = client.get(reverse('conversation-list'))
+        assert default_response.status_code == status.HTTP_200_OK
+
+        # Results should be the same (invalid ordering ignored, default applied)
+        assert invalid_response.data == default_response.data
+
+    def test_conversation_list_no_ordering_parameter(self, client, analyst_user, conversation):
+        """Test that default ordering is applied when no ordering parameter is provided"""
+        client.force_authenticate(user=analyst_user)
+        response = client.get(reverse('conversation-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) >= 1
+
 
 @pytest.mark.django_db
 class TestConversationRetrieve:

@@ -1,7 +1,7 @@
 import zoneinfo
-from rest_framework import viewsets, decorators, response, status, mixins
+from rest_framework import viewsets, decorators, response, status, mixins, filters
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
-from django.db.models import F, Max
+from django.db.models import F, Max, Avg, Sum
 from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
@@ -268,6 +268,9 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
     permission_classes = [ConversationPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-date', 'sentiment', 'resolved']
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['date', 'sentiment', 'resolved']
+    ordering = ['-date', 'sentiment', 'resolved']  # Match cursor_ordering for consistency
     relationships_to_select = ['customer', 'agent', 'agent__user']
     relationships_to_prefetch = ['topics']
     search_vector = (
@@ -665,6 +668,9 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
     cursor_ordering = ['-last_conversation_date', 'conversation_count']
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['last_conversation_date', 'conversation_count', 'created', 'total_revenue', 'avg_sentiment']
+    ordering = ['-last_conversation_date', 'conversation_count']  # Match cursor_ordering for consistency
     summary_period = DEFAULT_SUMMARY_SETTINGS['customer']['period']
     summary_order_keys = ['summary', 'Customer Value']
     summary_order_desc = True
@@ -683,7 +689,7 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
 
     def get_queryset(self):
         """
-        Return agents that belong to the user's organization
+        Return customers that belong to the user's organization, with aggregated fields for ordering
         """
         if self.request.user.is_superuser:
             qs = Customer.objects.all()
@@ -691,6 +697,12 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
             qs = Customer.objects.filter(organization=self.request.user.employee.organization)
         else:
             qs = Customer.objects.none()
+
+        # Add aggregated fields for ordering
+        qs = qs.annotate(
+            total_revenue=Sum('conversations__revenue_at_stake'),
+            avg_sentiment=Avg('conversations__sentiment')
+        )
 
         # Optimize DB Querying for all_summaries and summary_data
         if self.action in ['all_summaries', 'summary_data']:

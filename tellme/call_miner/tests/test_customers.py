@@ -74,6 +74,95 @@ class TestCustomerList:
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_customer_list_ordering_allowed_fields(self, client, analyst_user, customer, agent):
+        """Test that all allowed ordering fields work correctly and aggregated values are computed"""
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # Create conversations with different values for testing aggregated fields
+        base_date = timezone.now()
+
+        # Create conversations for the customer
+        Conversation.objects.create(
+            path="test1.mp3",
+            date=base_date - timedelta(days=1),
+            duration=300.0,
+            transcript="Test transcript 1",
+            sentiment=4.0,
+            summary="Summary 1",
+            title="Title 1",
+            input_tokens=100,
+            output_tokens=50,
+            revenue_at_stake=1000.0,
+            customer=customer,
+            agent=agent,
+            resolved=True
+        )
+
+        Conversation.objects.create(
+            path="test2.mp3",
+            date=base_date,
+            duration=450.0,
+            transcript="Test transcript 2",
+            sentiment=2.0,
+            summary="Summary 2",
+            title="Title 2",
+            input_tokens=120,
+            output_tokens=60,
+            revenue_at_stake=500.0,
+            customer=customer,
+            agent=agent,
+            resolved=False
+        )
+
+        client.force_authenticate(user=analyst_user)
+        allowed_fields = ['last_conversation_date', 'conversation_count', 'created', 'total_revenue', 'avg_sentiment']
+
+        for field in allowed_fields:
+            # Test ascending
+            response = client.get(reverse('customer-list'), {'ordering': field})
+            assert response.status_code == status.HTTP_200_OK, f"Failed for field: {field}"
+
+            # Test descending
+            response = client.get(reverse('customer-list'), {'ordering': f'-{field}'})
+            assert response.status_code == status.HTTP_200_OK, f"Failed for field: -{field}"
+
+        # Verify aggregated values are present and correct
+        response = client.get(reverse('customer-list'))
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+        assert len(results) >= 1
+
+        customer_data = results[0]
+        assert 'total_revenue' in customer_data
+        assert 'avg_sentiment' in customer_data
+
+        # Verify the aggregated values are correct
+        assert customer_data['total_revenue'] == 1500.0  # 1000 + 500
+        assert customer_data['avg_sentiment'] == 3.0      # (4.0 + 2.0) / 2
+
+    def test_customer_list_ordering_invalid_field(self, client, analyst_user, customer):
+        """Test that ordering by invalid fields is ignored and default ordering is applied"""
+        client.force_authenticate(user=analyst_user)
+
+        # Get response with invalid ordering
+        invalid_response = client.get(reverse('customer-list'), {'ordering': 'invalid_field'})
+        assert invalid_response.status_code == status.HTTP_200_OK
+
+        # Get response with default ordering
+        default_response = client.get(reverse('customer-list'))
+        assert default_response.status_code == status.HTTP_200_OK
+
+        # Results should be the same (invalid ordering ignored, default applied)
+        assert invalid_response.data == default_response.data
+
+    def test_customer_list_no_ordering_parameter(self, client, analyst_user, customer):
+        """Test that default ordering is applied when no ordering parameter is provided"""
+        client.force_authenticate(user=analyst_user)
+        response = client.get(reverse('customer-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) >= 1
+
 
 @pytest.mark.django_db
 class TestCustomerRetrieve:
