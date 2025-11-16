@@ -1,5 +1,7 @@
 import pytest
 import zoneinfo
+from urllib.parse import urlparse, parse_qs
+from django.utils import timezone
 from datetime import datetime, timedelta
 from unittest.mock import patch
 from django.urls import reverse
@@ -76,8 +78,6 @@ class TestCustomerList:
 
     def test_customer_list_ordering_allowed_fields(self, client, analyst_user, customer, agent):
         """Test that all allowed ordering fields work correctly and aggregated values are computed"""
-        from django.utils import timezone
-        from datetime import timedelta
 
         # Create conversations with different values for testing aggregated fields
         base_date = timezone.now()
@@ -162,6 +162,48 @@ class TestCustomerList:
         response = client.get(reverse('customer-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) >= 1
+
+    def test_customer_list_cursor_with_different_ordering_limitation(self, client, analyst_user, customer, agent):
+        """Test that cursor pagination with different ordering has limitations"""
+
+        # Create additional customers to enable pagination
+        base_date = timezone.now()
+        for i in range(3):
+            Customer.objects.create(
+                organization=customer.organization,
+                external_id=f"test_customer_{i}",
+                created=base_date - timedelta(days=i)
+            )
+
+        client.force_authenticate(user=analyst_user)
+
+        # Get first page ordered by created date
+        created_response = client.get(reverse('customer-list'), {
+            'ordering': 'created',
+            'page_size': 2  # Force pagination
+        })
+        assert created_response.status_code == status.HTTP_200_OK
+
+        # Extract cursor
+        next_url = created_response.data.get('next')
+        parsed_url = urlparse(next_url)
+        cursor_params = parse_qs(parsed_url.query)
+        cursor = cursor_params.get('cursor', [None])[0]
+
+        # Try to use cursor with same ordering
+        response = client.get(reverse('customer-list'), {
+            'ordering': 'created',
+            'cursor': cursor
+        })
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Try to use cursor with different ordering - should raise an error
+        with pytest.raises((ValueError, Exception)):
+            response = client.get(reverse('customer-list'), {
+                'ordering': 'total_revenue',
+                'cursor': cursor
+            })
 
 
 @pytest.mark.django_db

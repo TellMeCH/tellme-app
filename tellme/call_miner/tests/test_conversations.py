@@ -1,4 +1,7 @@
 import pytest
+from django.utils import timezone
+from datetime import timedelta
+from urllib.parse import urlparse, parse_qs
 from django.urls import reverse
 from rest_framework import status
 from tellme.call_miner.models import Conversation
@@ -94,6 +97,57 @@ class TestConversationList:
         response = client.get(reverse('conversation-list'))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['results']) >= 1
+
+    def test_conversation_list_cursor_with_different_ordering_fails(self, client, analyst_user, conversation, customer, agent):
+        """Test that using a cursor with different ordering than the cursor was created with fails gracefully"""
+
+        # Create additional conversations to enable pagination
+        base_date = timezone.now()
+        for i in range(3):
+            Conversation.objects.create(
+                path=f"test_{i}.mp3",
+                date=base_date - timedelta(days=i),
+                duration=300.0 + i * 100,
+                transcript=f"Test transcript {i}",
+                sentiment=2.0 + i * 0.5,
+                summary=f"Summary {i}",
+                title=f"Title {i}",
+                input_tokens=100 + i * 10,
+                output_tokens=50 + i * 5,
+                customer=customer,
+                agent=agent,
+                resolved=i % 2 == 0
+            )
+
+        client.force_authenticate(user=analyst_user)
+
+        # Get first page ordered by date to obtain a cursor
+        date_response = client.get(reverse('conversation-list'), {
+            'ordering': 'date',
+            'page_size': 2  # Force pagination
+        })
+        assert date_response.status_code == status.HTTP_200_OK
+
+        # Extract cursor
+        next_url = date_response.data.get('next')
+        parsed_url = urlparse(next_url)
+        cursor_params = parse_qs(parsed_url.query)
+        cursor = cursor_params.get('cursor', [None])[0]
+
+        # Try to use cursor with same ordering
+        response = client.get(reverse('conversation-list'), {
+            'ordering': 'date',
+            'cursor': cursor
+        })
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Try to use cursor with different ordering - should raise an error
+        with pytest.raises((ValueError, Exception)):
+            response = client.get(reverse('conversation-list'), {
+                'ordering': 'sentiment',
+                'cursor': cursor
+            })
 
 
 @pytest.mark.django_db

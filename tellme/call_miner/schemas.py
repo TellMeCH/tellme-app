@@ -57,7 +57,7 @@ CONVERSATION_ORDERING_PARAMETER_SCHEMA = OpenApiParameter(
     name='ordering',
     type=OpenApiTypes.STR,
     location=OpenApiParameter.QUERY,
-    description='Field(s) to order by. Allowed fields: date, sentiment, resolved. Use "-" prefix for descending order (e.g., -date). Multiple fields can be comma-separated (e.g., "resolved,-sentiment").',
+    description='Field(s) to order by. Allowed fields: date, sentiment, resolved. Use "-" prefix for descending order (e.g., -date). Multiple fields can be comma-separated (e.g., "resolved,-sentiment"). Note: When using cursor pagination, changing the ordering parameter while navigating pages may produce unexpected results.',
     required=False,
 )
 
@@ -65,7 +65,7 @@ CUSTOMER_ORDERING_PARAMETER_SCHEMA = OpenApiParameter(
     name='ordering',
     type=OpenApiTypes.STR,
     location=OpenApiParameter.QUERY,
-    description='Field(s) to order by. Allowed fields: last_conversation_date, conversation_count, created, total_revenue, avg_sentiment. Use "-" prefix for descending order (e.g., -total_revenue). Multiple fields can be comma-separated (e.g., "total_revenue,-avg_sentiment").',
+    description='Field(s) to order by. Allowed fields: last_conversation_date, conversation_count, created, total_revenue, avg_sentiment. Use "-" prefix for descending order (e.g., -total_revenue). Multiple fields can be comma-separated (e.g., "total_revenue,-avg_sentiment"). Note: When using cursor pagination, changing the ordering parameter while navigating pages may produce unexpected results.',
     required=False,
 )
 
