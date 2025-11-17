@@ -105,7 +105,7 @@ resource "postgresql_grant" "app_user_tables" {
   role        = postgresql_role.app_user.name
   schema      = "public"
   object_type = "table"
-  privileges  = ["SELECT", "INSERT", "UPDATE", "DELETE"]
+  privileges  = ["SELECT", "INSERT", "UPDATE", "DELETE", "REFERENCES", "TRIGGER"]
 
   depends_on = [postgresql_role.app_user]
 }
@@ -128,7 +128,7 @@ resource "postgresql_default_privileges" "app_user_future_tables" {
   schema      = "public"
   owner       = google_sql_user.admin_user.name
   object_type = "table"
-  privileges  = ["SELECT", "INSERT", "UPDATE", "DELETE"]
+  privileges  = ["SELECT", "INSERT", "UPDATE", "DELETE", "REFERENCES", "TRIGGER"]
 
   depends_on = [postgresql_role.app_user]
 }

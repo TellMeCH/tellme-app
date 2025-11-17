@@ -3,6 +3,7 @@ import base64
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound
+from rest_framework import filters
 
 
 class ListCursorPagination(CursorPagination):
@@ -114,6 +115,17 @@ class CustomListViewPaginator(CursorPagination):
         return self.page_size
 
     def get_ordering(self, request, queryset, view):
+        # Check if OrderingFilter has been applied
+        if hasattr(view, 'filter_backends') and any(
+            issubclass(backend, filters.OrderingFilter) for backend in view.filter_backends
+        ):
+            # Check if an ordering parameter was provided
+            ordering_param = getattr(view, 'ordering_param', 'ordering')
+            if request.query_params.get(ordering_param):
+                # Let the parent method handle OrderingFilter logic and validation
+                return super().get_ordering(request, queryset, view)
+
+        # Fallback to cursor_ordering if no OrderingFilter or no ordering specified
         if hasattr(view, 'cursor_ordering'):
             return view.cursor_ordering
         return super().get_ordering(request, queryset, view)

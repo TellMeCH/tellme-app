@@ -1,5 +1,7 @@
 import pytest
 import zoneinfo
+from urllib.parse import urlparse, parse_qs
+from django.utils import timezone
 from datetime import datetime, timedelta
 from unittest.mock import patch
 from django.urls import reverse
@@ -73,6 +75,340 @@ class TestCustomerList:
         url = reverse('customer-list')
         response = client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_customer_list_ordering_allowed_fields(self, client, analyst_user, customer, agent):
+        """Test that all allowed ordering fields work correctly and aggregated values are computed"""
+
+        # Create conversations with different values for testing aggregated fields
+        base_date = timezone.now()
+
+        # Create conversations for the customer
+        Conversation.objects.create(
+            path="test1.mp3",
+            date=base_date - timedelta(days=1),
+            duration=300.0,
+            transcript="Test transcript 1",
+            sentiment=4.0,
+            summary="Summary 1",
+            title="Title 1",
+            input_tokens=100,
+            output_tokens=50,
+            revenue_at_stake=1000.0,
+            customer=customer,
+            agent=agent,
+            resolved=True
+        )
+
+        Conversation.objects.create(
+            path="test2.mp3",
+            date=base_date,
+            duration=450.0,
+            transcript="Test transcript 2",
+            sentiment=2.0,
+            summary="Summary 2",
+            title="Title 2",
+            input_tokens=120,
+            output_tokens=60,
+            revenue_at_stake=500.0,
+            customer=customer,
+            agent=agent,
+            resolved=False
+        )
+
+        client.force_authenticate(user=analyst_user)
+        allowed_fields = ['last_conversation_date', 'conversation_count', 'created', 'total_revenue', 'avg_sentiment']
+
+        for field in allowed_fields:
+            # Test ascending
+            response = client.get(reverse('customer-list'), {'ordering': field})
+            assert response.status_code == status.HTTP_200_OK, f"Failed for field: {field}"
+
+            # Test descending
+            response = client.get(reverse('customer-list'), {'ordering': f'-{field}'})
+            assert response.status_code == status.HTTP_200_OK, f"Failed for field: -{field}"
+
+        # Verify aggregated values are present and correct
+        response = client.get(reverse('customer-list'))
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+        assert len(results) >= 1
+
+        customer_data = results[0]
+        assert 'total_revenue' in customer_data
+        assert 'avg_sentiment' in customer_data
+
+        # Verify the aggregated values are correct
+        assert customer_data['total_revenue'] == 1500.0  # 1000 + 500
+        assert customer_data['avg_sentiment'] == 3.0      # (4.0 + 2.0) / 2
+
+    def test_customer_list_ordering_invalid_field(self, client, analyst_user, customer):
+        """Test that ordering by invalid fields is ignored and default ordering is applied"""
+        client.force_authenticate(user=analyst_user)
+
+        # Get response with invalid ordering
+        invalid_response = client.get(reverse('customer-list'), {'ordering': 'invalid_field'})
+        assert invalid_response.status_code == status.HTTP_200_OK
+
+        # Get response with default ordering
+        default_response = client.get(reverse('customer-list'))
+        assert default_response.status_code == status.HTTP_200_OK
+
+        # Results should be the same (invalid ordering ignored, default applied)
+        assert invalid_response.data == default_response.data
+
+    def test_customer_list_no_ordering_parameter(self, client, analyst_user, customer):
+        """Test that default ordering is applied when no ordering parameter is provided"""
+        client.force_authenticate(user=analyst_user)
+        response = client.get(reverse('customer-list'))
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) >= 1
+
+    def test_customer_list_cursor_with_different_ordering_limitation(self, client, analyst_user, customer, agent):
+        """Test that cursor pagination with different ordering has limitations"""
+
+        # Create additional customers to enable pagination
+        base_date = timezone.now()
+        for i in range(3):
+            Customer.objects.create(
+                organization=customer.organization,
+                external_id=f"test_customer_{i}",
+                created=base_date - timedelta(days=i)
+            )
+
+        client.force_authenticate(user=analyst_user)
+
+        # Get first page ordered by created date
+        created_response = client.get(reverse('customer-list'), {
+            'ordering': 'created',
+            'page_size': 2  # Force pagination
+        })
+        assert created_response.status_code == status.HTTP_200_OK
+
+        # Extract cursor
+        next_url = created_response.data.get('next')
+        parsed_url = urlparse(next_url)
+        cursor_params = parse_qs(parsed_url.query)
+        cursor = cursor_params.get('cursor', [None])[0]
+
+        # Try to use cursor with same ordering
+        response = client.get(reverse('customer-list'), {
+            'ordering': 'created',
+            'cursor': cursor
+        })
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Try to use cursor with different ordering - should raise an error
+        with pytest.raises((ValueError, Exception)):
+            response = client.get(reverse('customer-list'), {
+                'ordering': 'total_revenue',
+                'cursor': cursor
+            })
+
+    def test_customer_latest_conversation_tracking(self, customer, agent):
+        """Test that latest_conversation and latest_conversation_title are properly tracked"""
+        # Initially, customer should have no conversations
+        assert customer.latest_conversation is None
+        assert customer.latest_conversation_title is None
+        assert customer.conversation_count == 0
+
+        # Create first conversation
+        base_date = timezone.now()
+        conv1 = Conversation.objects.create(
+            path="test1.mp3",
+            date=base_date - timedelta(days=2),
+            duration=300.0,
+            transcript="Test transcript 1",
+            sentiment=3.0,
+            summary="Summary 1",
+            title="First Conversation",
+            input_tokens=100,
+            output_tokens=50,
+            customer=customer,
+            agent=agent
+        )
+
+        # Refresh customer from DB to get updated stats
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv1
+        assert customer.latest_conversation_title == "First Conversation"
+        assert customer.conversation_count == 1
+
+        # Create second conversation with later date
+        conv2 = Conversation.objects.create(
+            path="test2.mp3",
+            date=base_date - timedelta(days=1),
+            duration=450.0,
+            transcript="Test transcript 2",
+            sentiment=4.0,
+            summary="Summary 2",
+            title="Second Conversation",
+            input_tokens=120,
+            output_tokens=60,
+            customer=customer,
+            agent=agent
+        )
+
+        # Refresh and check latest conversation is now conv2
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv2
+        assert customer.latest_conversation_title == "Second Conversation"
+        assert customer.conversation_count == 2
+
+        # Create third conversation with earliest date
+        conv3 = Conversation.objects.create(
+            path="test3.mp3",
+            date=base_date - timedelta(days=3),
+            duration=200.0,
+            transcript="Test transcript 3",
+            sentiment=2.5,
+            summary="Summary 3",
+            title="Third Conversation",
+            input_tokens=80,
+            output_tokens=40,
+            customer=customer,
+            agent=agent
+        )
+
+        # Latest conversation should still be conv2 (most recent date)
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv2
+        assert customer.latest_conversation_title == "Second Conversation"
+        assert customer.conversation_count == 3
+
+        # Delete the latest conversation
+        conv2.delete()
+
+        # Latest should now be conv1
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv1
+        assert customer.latest_conversation_title == "First Conversation"
+        assert customer.conversation_count == 2
+
+        # Delete all conversations
+        conv1.delete()
+        conv3.delete()
+
+        # Should be back to no conversations
+        customer.refresh_from_db()
+        assert customer.latest_conversation is None
+        assert customer.latest_conversation_title is None
+        assert customer.conversation_count == 0
+
+
+@pytest.mark.django_db
+class TestCustomerSearch:
+    """Tests for the customer search functionality"""
+
+    @staticmethod
+    def response_from_search_url(client, search_query: str):
+        """
+        Helper method to fetch all paginated results given a search query
+
+        :param client: The APIClient instance.
+        :param search_query: Search query to construct the first URL from.
+        :return: A list containing all results from all pages.
+        """
+        all_results = []
+        next_url = reverse('customer-search') + f'?query={search_query}'
+        while next_url:
+            response = client.get(next_url)
+            assert response.status_code == status.HTTP_200_OK
+            data = response.data
+            results = data.get('results', [])
+            all_results.extend(results)
+            next_url = data.get('next')
+        return all_results
+
+    def test_search_by_first_name(self, client, analyst_user, customer):
+        """
+        Test that customers can be searched and retrieved based on their first name.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = customer.first_name
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_by_last_name(self, client, analyst_user, customer):
+        """
+        Test that customers can be searched and retrieved based on their last name.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = customer.last_name
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_by_latest_conversation_title(self, client, analyst_user, customer, conversation):
+        """
+        Test that customers can be searched and retrieved based on their latest conversation title.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = conversation.title
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_by_conversation_transcript_content(self, client, analyst_user, customer, conversation):
+        """
+        Test that customers can be searched and retrieved based on content in their conversation transcripts.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "strange noise"  # This text exists in the conversation transcript
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_no_duplicates_in_results(self, client, analyst_user, customer, agent):
+        """
+        Test that customers resulting from a query do not contain duplicates,
+        even when multiple customers match the search query.
+        """
+        # Create additional customers with similar names to test deduplication
+        Customer.objects.create(
+            first_name='Edward',
+            last_name='Johnson',
+            external_id='different_id_1',
+            organization=customer.organization
+        )
+        Customer.objects.create(
+            first_name='Edward',
+            last_name='Brown',
+            external_id='different_id_2',
+            organization=customer.organization
+        )
+
+        client.force_authenticate(user=analyst_user)
+        # Search by first name which should match all three Edwards
+        search_query = customer.first_name  # "Edward"
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        # Verify no duplicate customer IDs in results
+        assert len(customer_ids) == len(set(customer_ids))
+        # Should return 3 unique customers named Edward
+        assert len(results) == 3
+        assert str(customer.id) in customer_ids
+
+    def test_search_no_results(self, client, analyst_user):
+        """
+        Test the expected response when a query produces no results
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "agrearhadfgsdfgfdsgdfg"
+        url = reverse('customer-search') + f'?query={search_query}'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data['detail'] == 'Your query produced no results.'
 
 
 @pytest.mark.django_db
