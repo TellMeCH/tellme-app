@@ -67,6 +67,7 @@ class Command(BaseCommand):
             org = Organization(
                 name='ACME Org',
                 max_user_count=20,
+                transcription_method='groq',
                 enrichment_method='vertexai',
                 language='de',
                 revenue_search_prefix='pkz.ch/de/'
@@ -279,10 +280,7 @@ class Command(BaseCommand):
 
                     conversation.save()
                 except Exception as e:
-                    if 'unique id constraint violation' in str(e):
-                        continue
-                    else:
-                        raise CommandError(f'Failed creating Conversation: {e}')
+                   continue
 
         except Exception as e:
             raise CommandError(f'Failed creation of Conversations: {e}')
