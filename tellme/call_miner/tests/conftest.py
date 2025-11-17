@@ -191,6 +191,8 @@ def another_organization_agent_user(another_organization):
 def customer(organization):
     """Create and return a customer associated with the given organization."""
     return Customer.objects.create(
+        first_name='Edward',
+        last_name='Smith',
         external_id='02ac34b094eed76ca56ffc826db3f9a4d7b3d8f337beefc33c342b0035fea0dd',
         organization=organization
     )

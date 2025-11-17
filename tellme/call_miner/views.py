@@ -666,9 +666,10 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
         return f"{obj.user.first_name} {obj.user.last_name}"
 
 
-class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
+class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet, SummaryActionsViewSet):
     """
     A ViewSet for the Customer model. This ViewSet inherits from:
+    - SearchViewSet: to allow users to search customers by name, latest conversation title, and conversation transcripts
     - TrendsActionsViewSet: to obtain conversation trends of a single Customer
     - SummaryActionsViewSet: to obtain meta-summaries of a customer's conversation summaries
 
@@ -684,13 +685,21 @@ class CustomerViewSet(viewsets.ModelViewSet, TrendsActionsViewSet, SummaryAction
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['last_conversation_date', 'conversation_count', 'created', 'total_revenue', 'avg_sentiment']
     ordering = ['-last_conversation_date', 'conversation_count']  # Match cursor_ordering for consistency
+    relationships_to_select = ['latest_conversation']
+    relationships_to_prefetch = []
+    search_vector = (
+        SearchVector('first_name', weight='A') +
+        SearchVector('last_name', weight='A') +
+        SearchVector('latest_conversation__title', weight='B') +
+        SearchVector(F('conversations__transcript'), weight='C')
+    )
     summary_period = DEFAULT_SUMMARY_SETTINGS['customer']['period']
     summary_order_keys = ['summary', 'Customer Value']
     summary_order_desc = True
     summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['customer']['rolling']
 
     def get_serializer_class(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'search']:
             return CustomerListSerializer
         elif self.action in ['summary_data', 'all_summaries']:
             return MetaSummarySerializer
