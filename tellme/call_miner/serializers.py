@@ -659,11 +659,16 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
     avg_sentiment = serializers.SerializerMethodField(
         help_text='Average sentiment across all conversations for this customer'
     )
+    latest_conversation_title = serializers.CharField(
+        read_only=True,
+        help_text='Title of the most recent conversation for this customer'
+    )
 
     class Meta:
         model = Customer
         fields = ['url', 'external_id', 'first_name', 'last_name', 'birth_date', 'conversation_count',
-                  'first_conversation_date', 'last_conversation_date', 'total_revenue', 'avg_sentiment', 'created']
+                  'first_conversation_date', 'last_conversation_date', 'total_revenue', 'avg_sentiment',
+                  'latest_conversation_title', 'created']
 
     @extend_schema_field({'type': 'number', 'format': 'float'})
     def get_total_revenue(self, obj):

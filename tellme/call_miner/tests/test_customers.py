@@ -205,6 +205,96 @@ class TestCustomerList:
                 'cursor': cursor
             })
 
+    def test_customer_latest_conversation_tracking(self, customer, agent):
+        """Test that latest_conversation and latest_conversation_title are properly tracked"""
+        # Initially, customer should have no conversations
+        assert customer.latest_conversation is None
+        assert customer.latest_conversation_title is None
+        assert customer.conversation_count == 0
+
+        # Create first conversation
+        base_date = timezone.now()
+        conv1 = Conversation.objects.create(
+            path="test1.mp3",
+            date=base_date - timedelta(days=2),
+            duration=300.0,
+            transcript="Test transcript 1",
+            sentiment=3.0,
+            summary="Summary 1",
+            title="First Conversation",
+            input_tokens=100,
+            output_tokens=50,
+            customer=customer,
+            agent=agent
+        )
+
+        # Refresh customer from DB to get updated stats
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv1
+        assert customer.latest_conversation_title == "First Conversation"
+        assert customer.conversation_count == 1
+
+        # Create second conversation with later date
+        conv2 = Conversation.objects.create(
+            path="test2.mp3",
+            date=base_date - timedelta(days=1),
+            duration=450.0,
+            transcript="Test transcript 2",
+            sentiment=4.0,
+            summary="Summary 2",
+            title="Second Conversation",
+            input_tokens=120,
+            output_tokens=60,
+            customer=customer,
+            agent=agent
+        )
+
+        # Refresh and check latest conversation is now conv2
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv2
+        assert customer.latest_conversation_title == "Second Conversation"
+        assert customer.conversation_count == 2
+
+        # Create third conversation with earliest date
+        conv3 = Conversation.objects.create(
+            path="test3.mp3",
+            date=base_date - timedelta(days=3),
+            duration=200.0,
+            transcript="Test transcript 3",
+            sentiment=2.5,
+            summary="Summary 3",
+            title="Third Conversation",
+            input_tokens=80,
+            output_tokens=40,
+            customer=customer,
+            agent=agent
+        )
+
+        # Latest conversation should still be conv2 (most recent date)
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv2
+        assert customer.latest_conversation_title == "Second Conversation"
+        assert customer.conversation_count == 3
+
+        # Delete the latest conversation
+        conv2.delete()
+
+        # Latest should now be conv1
+        customer.refresh_from_db()
+        assert customer.latest_conversation == conv1
+        assert customer.latest_conversation_title == "First Conversation"
+        assert customer.conversation_count == 2
+
+        # Delete all conversations
+        conv1.delete()
+        conv3.delete()
+
+        # Should be back to no conversations
+        customer.refresh_from_db()
+        assert customer.latest_conversation is None
+        assert customer.latest_conversation_title is None
+        assert customer.conversation_count == 0
+
 
 @pytest.mark.django_db
 class TestCustomerRetrieve:

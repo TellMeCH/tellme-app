@@ -372,6 +372,8 @@ class TestConversationStatsAbstractModel:
         assert topic.conversation_count == 0
         assert topic.first_conversation_date is None
         assert topic.last_conversation_date is None
+        assert topic.latest_conversation is None
+        assert topic.latest_conversation_title is None
 
     def test_conversation_stats_single_conversation(self, topic, conversation):
         """
@@ -382,6 +384,8 @@ class TestConversationStatsAbstractModel:
         assert topic.conversation_count == 1
         assert topic.first_conversation_date == conversation.date
         assert topic.last_conversation_date == conversation.date
+        assert topic.latest_conversation == conversation
+        assert topic.latest_conversation_title == conversation.title
 
     def test_conversation_stats_multiple_conversations(self, topic, conversation,
                                                        another_conversation_same_organization):
@@ -393,9 +397,16 @@ class TestConversationStatsAbstractModel:
         topic.refresh_from_db()
         expected_first_date = min(conversation.date, another_conversation_same_organization.date)
         expected_last_date = max(conversation.date, another_conversation_same_organization.date)
+
+        # Determine which conversation is latest (most recent date)
+        expected_latest_conversation = (conversation if conversation.date > another_conversation_same_organization.date
+                                       else another_conversation_same_organization)
+
         assert topic.conversation_count == 2
         assert topic.first_conversation_date == expected_first_date
         assert topic.last_conversation_date == expected_last_date
+        assert topic.latest_conversation == expected_latest_conversation
+        assert topic.latest_conversation_title == expected_latest_conversation.title
 
     def test_conversation_stats_updates_on_delete(self, topic, conversation):
         """
@@ -406,6 +417,8 @@ class TestConversationStatsAbstractModel:
         assert topic.conversation_count == 0
         assert topic.first_conversation_date is None
         assert topic.last_conversation_date is None
+        assert topic.latest_conversation is None
+        assert topic.latest_conversation_title is None
 
     def test_agent_conversation_stats(self, agent, conversation):
         """
@@ -416,6 +429,8 @@ class TestConversationStatsAbstractModel:
         assert agent.conversation_count == 1
         assert agent.first_conversation_date == conversation.date
         assert agent.last_conversation_date == conversation.date
+        assert agent.latest_conversation == conversation
+        assert agent.latest_conversation_title == conversation.title
 
     def test_agent_conversation_stats_multiple_conversations(self, agent, conversation,
                                                              another_conversation_same_organization):
@@ -428,9 +443,16 @@ class TestConversationStatsAbstractModel:
         agent.refresh_from_db()
         expected_first_date = min(conversation.date, another_conversation_same_organization.date)
         expected_last_date = max(conversation.date, another_conversation_same_organization.date)
+
+        # Determine which conversation is latest (most recent date)
+        expected_latest_conversation = (conversation if conversation.date > another_conversation_same_organization.date
+                                       else another_conversation_same_organization)
+
         assert agent.conversation_count == 2
         assert agent.first_conversation_date == expected_first_date
         assert agent.last_conversation_date == expected_last_date
+        assert agent.latest_conversation == expected_latest_conversation
+        assert agent.latest_conversation_title == expected_latest_conversation.title
 
     def test_agent_conversation_stats_after_delete(self, agent, conversation):
         """
@@ -441,6 +463,8 @@ class TestConversationStatsAbstractModel:
         assert agent.conversation_count == 0
         assert agent.first_conversation_date is None
         assert agent.last_conversation_date is None
+        assert agent.latest_conversation is None
+        assert agent.latest_conversation_title is None
 
     def test_customer_conversation_stats(self, customer, conversation):
         """
@@ -451,6 +475,8 @@ class TestConversationStatsAbstractModel:
         assert customer.conversation_count == 1
         assert customer.first_conversation_date == conversation.date
         assert customer.last_conversation_date == conversation.date
+        assert customer.latest_conversation == conversation
+        assert customer.latest_conversation_title == conversation.title
 
     def test_customer_conversation_stats_multiple_conversations(self, customer, conversation,
                                                                 another_conversation_same_organization):
@@ -463,9 +489,16 @@ class TestConversationStatsAbstractModel:
         customer.refresh_from_db()
         expected_first_date = min(conversation.date, another_conversation_same_organization.date)
         expected_last_date = max(conversation.date, another_conversation_same_organization.date)
+
+        # Determine which conversation is latest (most recent date)
+        expected_latest_conversation = (conversation if conversation.date > another_conversation_same_organization.date
+                                       else another_conversation_same_organization)
+
         assert customer.conversation_count == 2
         assert customer.first_conversation_date == expected_first_date
         assert customer.last_conversation_date == expected_last_date
+        assert customer.latest_conversation == expected_latest_conversation
+        assert customer.latest_conversation_title == expected_latest_conversation.title
 
     def test_customer_conversation_stats_after_delete(self, customer, conversation):
         """
@@ -476,6 +509,8 @@ class TestConversationStatsAbstractModel:
         assert customer.conversation_count == 0
         assert customer.first_conversation_date is None
         assert customer.last_conversation_date is None
+        assert customer.latest_conversation is None
+        assert customer.latest_conversation_title is None
 
 
 @pytest.mark.django_db
