@@ -236,14 +236,29 @@ class ConversationStatsAbstractModel(models.Model):
     conversation_count = models.IntegerField(default=0)
     first_conversation_date = models.DateTimeField(null=True, blank=True)
     last_conversation_date = models.DateTimeField(null=True, blank=True)
+    latest_conversation = models.ForeignKey(
+        'Conversation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',  # Avoid reverse relation conflicts
+        help_text='Reference to the most recent conversation'
+    )
 
     class Meta:
         abstract = True
 
+    @property
+    def latest_conversation_title(self):
+        """
+        Returns the title of the most recent conversation, or None if no conversations exist.
+        """
+        return self.latest_conversation.title if self.latest_conversation else None
+
     def update_conversation_stats(self):
         """
-        Updates the stored conversation_count, first_conversation_date, and last_conversation_date fields
-        based on the associated conversations.
+        Updates the stored conversation_count, first_conversation_date, last_conversation_date, and latest_conversation
+        fields based on the associated conversations.
         """
         stats = self.conversations.aggregate(
             count=models.Count('id'),
@@ -255,6 +270,13 @@ class ConversationStatsAbstractModel(models.Model):
         self.conversation_count = stats['count']
         self.first_conversation_date = stats['first_date']
         self.last_conversation_date = stats['last_date']
+
+        # Update latest conversation
+        if stats['count'] > 0:
+            self.latest_conversation = self.conversations.order_by('-date').first()
+        else:
+            self.latest_conversation = None
+
         self.save()
 
 
