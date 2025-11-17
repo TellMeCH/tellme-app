@@ -297,6 +297,121 @@ class TestCustomerList:
 
 
 @pytest.mark.django_db
+class TestCustomerSearch:
+    """Tests for the customer search functionality"""
+
+    @staticmethod
+    def response_from_search_url(client, search_query: str):
+        """
+        Helper method to fetch all paginated results given a search query
+
+        :param client: The APIClient instance.
+        :param search_query: Search query to construct the first URL from.
+        :return: A list containing all results from all pages.
+        """
+        all_results = []
+        next_url = reverse('customer-search') + f'?query={search_query}'
+        while next_url:
+            response = client.get(next_url)
+            assert response.status_code == status.HTTP_200_OK
+            data = response.data
+            results = data.get('results', [])
+            all_results.extend(results)
+            next_url = data.get('next')
+        return all_results
+
+    def test_search_by_first_name(self, client, analyst_user, customer):
+        """
+        Test that customers can be searched and retrieved based on their first name.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = customer.first_name
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_by_last_name(self, client, analyst_user, customer):
+        """
+        Test that customers can be searched and retrieved based on their last name.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = customer.last_name
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_by_latest_conversation_title(self, client, analyst_user, customer, conversation):
+        """
+        Test that customers can be searched and retrieved based on their latest conversation title.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = conversation.title
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_by_conversation_transcript_content(self, client, analyst_user, customer, conversation):
+        """
+        Test that customers can be searched and retrieved based on content in their conversation transcripts.
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "strange noise"  # This text exists in the conversation transcript
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        assert len(results) >= 1
+        assert str(customer.id) in customer_ids
+
+    def test_search_no_duplicates_in_results(self, client, analyst_user, customer, agent):
+        """
+        Test that customers resulting from a query do not contain duplicates,
+        even when multiple customers match the search query.
+        """
+        # Create additional customers with similar names to test deduplication
+        Customer.objects.create(
+            first_name='Edward',
+            last_name='Johnson',
+            external_id='different_id_1',
+            organization=customer.organization
+        )
+        Customer.objects.create(
+            first_name='Edward',
+            last_name='Brown',
+            external_id='different_id_2',
+            organization=customer.organization
+        )
+
+        client.force_authenticate(user=analyst_user)
+        # Search by first name which should match all three Edwards
+        search_query = customer.first_name  # "Edward"
+        results = self.response_from_search_url(client, search_query)
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+
+        # Verify no duplicate customer IDs in results
+        assert len(customer_ids) == len(set(customer_ids))
+        # Should return 3 unique customers named Edward
+        assert len(results) == 3
+        assert str(customer.id) in customer_ids
+
+    def test_search_no_results(self, client, analyst_user):
+        """
+        Test the expected response when a query produces no results
+        """
+        client.force_authenticate(user=analyst_user)
+        search_query = "agrearhadfgsdfgfdsgdfg"
+        url = reverse('customer-search') + f'?query={search_query}'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data['detail'] == 'Your query produced no results.'
+
+
+@pytest.mark.django_db
 class TestCustomerRetrieve:
     """Test the customer-detail API endpoint for viewing a Customer's details."""
 
