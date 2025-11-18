@@ -30,7 +30,7 @@ from tellme.call_miner.schemas import (
     REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
     NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA,
-    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA
+    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA, get_search_parameters_schema
 )
 
 
@@ -237,9 +237,18 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
             queryset
             .annotate(rank=SearchRank(self.search_vector, search_query))
             .filter(rank__gte=0.1)
-            .order_by('-rank')
             .distinct()
         )
+
+        # Apply ordering: use OrderingFilter if explicitly specified, otherwise fallback to search relevance
+        ordering_param = getattr(self, 'ordering_param', 'ordering')
+        if request.query_params.get(ordering_param):
+            # User explicitly provided ordering parameter
+            ordering = filters.OrderingFilter().get_ordering(request, queryset, self)
+            queryset = queryset.order_by(*ordering)
+        else:
+            # No ordering parameter provided, use search relevance
+            queryset = queryset.order_by('-rank')
 
         # Return the results. If empty, raise a 404. Otherwise paginate if necessary.
         if not queryset.exists():
@@ -248,13 +257,29 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         else:
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True, context={'request': request})
-                return self.get_paginated_response(serializer.data)
+            # For search without ordering, temporarily modify cursor_ordering to prioritize rank
+            original_cursor_ordering = getattr(self, 'cursor_ordering', None)
+            if not request.query_params.get(ordering_param):
+                # Prepend -rank to cursor_ordering for the paginator
+                if original_cursor_ordering:
+                    self.cursor_ordering = ['-rank'] + list(original_cursor_ordering)
+                else:
+                    self.cursor_ordering = ['-rank']
 
-            serializer = self.get_serializer(queryset, many=True, context={'request': request})
-            return response.Response(serializer.data)
+            try:
+                page = self.paginate_queryset(queryset)
+                if page is not None:
+                    serializer = self.get_serializer(page, many=True, context={'request': request})
+                    return self.get_paginated_response(serializer.data)
+
+                serializer = self.get_serializer(queryset, many=True, context={'request': request})
+                return response.Response(serializer.data)
+            finally:
+                # Restore original cursor_ordering
+                if original_cursor_ordering is not None:
+                    self.cursor_ordering = original_cursor_ordering
+                elif hasattr(self, 'cursor_ordering'):
+                    delattr(self, 'cursor_ordering')
 
 
 class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
@@ -279,6 +304,20 @@ class ConversationViewSet(viewsets.ModelViewSet, SearchViewSet):
         SearchVector('summary', weight='A') +
         SearchVector(F('topics__name'), weight='B')
     )
+
+    @extend_schema(
+        description='Search conversations by transcript content, summary text, and topic names.',
+        parameters=get_search_parameters_schema(CONVERSATION_ORDERING_PARAMETER_SCHEMA),
+        responses={
+            200: SEARCH_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=False, methods=['get'], url_path='search')
+    def search(self, request):
+        return super().search(request)
 
     def get_serializer_class(self):
         if self.action in ['list', 'search']:
@@ -697,6 +736,20 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     summary_order_keys = ['summary', 'Customer Value']
     summary_order_desc = True
     summary_rolling_window = DEFAULT_SUMMARY_SETTINGS['customer']['rolling']
+
+    @extend_schema(
+        description='Search customers by name, latest conversation title, and conversation transcript content.',
+        parameters=get_search_parameters_schema(CUSTOMER_ORDERING_PARAMETER_SCHEMA),
+        responses={
+            200: SEARCH_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=False, methods=['get'], url_path='search')
+    def search(self, request):
+        return super().search(request)
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'search']:

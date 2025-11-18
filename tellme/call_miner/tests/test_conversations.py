@@ -1,4 +1,5 @@
 import pytest
+import zoneinfo
 from django.utils import timezone
 from datetime import timedelta
 from urllib.parse import urlparse, parse_qs
@@ -772,3 +773,147 @@ class TestConversationSearch:
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data['detail'] == 'Your query produced no results.'
+
+    def test_search_with_ordering_by_date(self, client, analyst_user, agent, customer, topic):
+        """
+        Test that search results can be ordered by date when ordering parameter is provided.
+        """
+
+        # Create conversations with different dates but same searchable content
+        utc = zoneinfo.ZoneInfo("UTC")
+        older_date = datetime(2024, 1, 15, 10, 0, 0, tzinfo=utc)
+        newer_date = datetime(2024, 6, 15, 10, 0, 0, tzinfo=utc)
+
+        older_conv = Conversation.objects.create(
+            path='path/to/older',
+            date=older_date,
+            duration=120,
+            title='Older Test Conversation',
+            summary='Test summary with searchable keyword',
+            transcript='This conversation contains the searchable keyword',
+            sentiment=3.0,
+            starting_sentiment=3.0,
+            ending_sentiment=3.0,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50,
+            revenue_at_stake=200.0,
+            resolved=True
+        )
+        older_conv.topics.add(topic)
+
+        newer_conv = Conversation.objects.create(
+            path='path/to/newer',
+            date=newer_date,
+            duration=180,
+            title='Newer Test Conversation',
+            summary='Test summary with searchable keyword',
+            transcript='This conversation also contains the searchable keyword',
+            sentiment=4.0,
+            starting_sentiment=4.0,
+            ending_sentiment=4.0,
+            agent=agent,
+            customer=customer,
+            input_tokens=150,
+            output_tokens=75,
+            revenue_at_stake=300.0,
+            resolved=False
+        )
+        newer_conv.topics.add(topic)
+
+        client.force_authenticate(user=analyst_user)
+        search_query = "searchable keyword"
+
+        # Test ordering by date ascending
+        url = reverse('conversation-search') + f'?query={search_query}&ordering=date'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+        assert len(results) >= 2
+
+        # Find our test conversations in results
+        result_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+        older_index = next(i for i, id in enumerate(result_ids) if id == str(older_conv.id))
+        newer_index = next(i for i, id in enumerate(result_ids) if id == str(newer_conv.id))
+
+        # Older conversation should come first (ascending date order)
+        assert older_index < newer_index
+
+        # Test ordering by date descending
+        url = reverse('conversation-search') + f'?query={search_query}&ordering=-date'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+
+        result_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+        older_index = next(i for i, id in enumerate(result_ids) if id == str(older_conv.id))
+        newer_index = next(i for i, id in enumerate(result_ids) if id == str(newer_conv.id))
+
+        # Newer conversation should come first (descending date order)
+        assert newer_index < older_index
+
+    def test_search_without_ordering_uses_relevance(self, client, analyst_user, agent, customer, topic):
+        """
+        Test that search results without ordering parameter are ordered by relevance (-rank).
+        """
+
+        utc = zoneinfo.ZoneInfo("UTC")
+        same_date = datetime(2024, 3, 15, 10, 0, 0, tzinfo=utc)
+        another_date = datetime(2024, 6, 15, 10, 0, 0, tzinfo=utc)
+
+        # Create conversation with high relevance (keyword appears multiple times in searchable fields)
+        high_relevance_conv = Conversation.objects.create(
+            path='path/to/high_rel',
+            date=same_date,
+            duration=120,
+            title='High Relevance Conversation',
+            summary='relevance keyword relevance keyword relevance keyword relevance keyword',
+            transcript='relevance keyword relevance keyword relevance keyword relevance keyword relevance keyword relevance keyword',
+            sentiment=3.0,
+            starting_sentiment=3.0,
+            ending_sentiment=3.0,
+            agent=agent,
+            customer=customer,
+            input_tokens=100,
+            output_tokens=50,
+            revenue_at_stake=200.0,
+            resolved=True
+        )
+        high_relevance_conv.topics.add(topic)
+
+        # Create conversation with lower relevance (keyword appears once in searchable fields)
+        low_relevance_conv = Conversation.objects.create(
+            path='path/to/low_rel',
+            date=another_date,
+            duration=180,
+            title='Low Relevance Conversation',
+            summary='Different summary about other topics and issues',
+            transcript='This conversation talks about various topics and mentions the relevance keyword just once',
+            sentiment=4.0,
+            starting_sentiment=4.0,
+            ending_sentiment=4.0,
+            agent=agent,
+            customer=customer,
+            input_tokens=150,
+            output_tokens=75,
+            revenue_at_stake=300.0,
+            resolved=False
+        )
+        low_relevance_conv.topics.add(topic)
+
+        client.force_authenticate(user=analyst_user)
+        search_query = "relevance keyword"
+
+        # Test search without ordering (should use relevance)
+        url = reverse('conversation-search') + f'?query={search_query}'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+
+        result_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in results]
+        high_index = next(i for i, id in enumerate(result_ids) if id == str(high_relevance_conv.id))
+        low_index = next(i for i, id in enumerate(result_ids) if id == str(low_relevance_conv.id))
+
+        # High relevance conversation should come first (higher rank)
+        assert high_index < low_index

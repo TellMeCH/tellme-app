@@ -1,7 +1,7 @@
 import time
 import hashlib
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import random
 from django.conf import settings
 from django.utils import timezone
@@ -10,6 +10,32 @@ from firebase_admin import auth
 from tellme.call_miner.models import Organization, OrganizationAPIKey, Analyst, Agent, Topic, SuggestedTopic, Customer, Conversation, User
 
 COMMON_PASSWORD = 'tell_me_long'
+
+# Sample data for generating realistic customer information
+FIRST_NAMES = [
+    'Anna', 'Beat', 'Carla', 'Daniel', 'Eva', 'Felix', 'Greta', 'Hans', 'Ines', 'Jakob',
+    'Katja', 'Lars', 'Maria', 'Nils', 'Olivia', 'Peter', 'Quirin', 'Rita', 'Stefan', 'Tina',
+    'Ulrich', 'Vera', 'Werner', 'Xenia', 'Yves', 'Zora', 'Adrian', 'Brigitte', 'Christian', 'Doris',
+    'Ernst', 'Franziska', 'Georg', 'Heidi', 'Ivan', 'Julia', 'Klaus', 'Lena', 'Martin', 'Nicole'
+]
+
+LAST_NAMES = [
+    'Müller', 'Schmidt', 'Schneider', 'Fischer', 'Weber', 'Meyer', 'Wagner', 'Becker', 'Schulz', 'Hoffmann',
+    'Schäfer', 'Koch', 'Bauer', 'Richter', 'Klein', 'Wolf', 'Schröder', 'Neumann', 'Schwarz', 'Zimmermann',
+    'Braun', 'Krüger', 'Hofmann', 'Hartmann', 'Lange', 'Schmitt', 'Werner', 'Schmitz', 'Krause', 'Meier',
+    'Lehmann', 'Schmid', 'Schulze', 'Maier', 'Köhler', 'Herrmann', 'König', 'Walter', 'Mayer', 'Huber'
+]
+
+# Swiss postal codes (selection of real postcodes)
+SWISS_POSTCODES = [
+    '8001', '8002', '8003', '8004', '8005', '8006', '8008', '8032', '8037', '8044',  # Zurich
+    '3001', '3003', '3004', '3005', '3006', '3007', '3008', '3010', '3011', '3012',  # Bern
+    '4001', '4002', '4003', '4051', '4052', '4053', '4054', '4055', '4056', '4057',  # Basel
+    '1200', '1201', '1202', '1203', '1204', '1205', '1206', '1207', '1208', '1209',  # Geneva
+    '1000', '1001', '1003', '1004', '1005', '1006', '1007', '1008', '1010', '1011',  # Lausanne
+    '6900', '6901', '6902', '6903', '6904', '6905', '6906', '6907', '6908', '6909',  # Lugano
+    '9000', '9001', '9004', '9006', '9007', '9008', '9010', '9011', '9012', '9014'   # St. Gallen
+]
 
 
 class Command(BaseCommand):
@@ -39,6 +65,40 @@ class Command(BaseCommand):
             choices=available_industries,
             help=f'Industry type for sample data (default: {default_industry}, available: {", ".join(available_industries)})'
         )
+
+    def generate_customer_data(self):
+        """Generate realistic customer data"""
+        first_name = random.choice(FIRST_NAMES)
+        last_name = random.choice(LAST_NAMES)
+
+        # Generate birth date (age between 18 and 80)
+        today = date.today()
+        min_age = 18
+        max_age = 80
+        birth_year = today.year - random.randint(min_age, max_age)
+        birth_month = random.randint(1, 12)
+
+        # Ensure valid day for the month
+        if birth_month == 2:
+            birth_day = random.randint(1, 28)  # February (safe for all years)
+        elif birth_month in [4, 6, 9, 11]:
+            birth_day = random.randint(1, 30)  # Months with 30 days
+        else:
+            birth_day = random.randint(1, 31)  # Months with 31 days
+
+        birth_date = date(birth_year, birth_month, birth_day)
+        postcode = random.choice(SWISS_POSTCODES)
+
+        # Generate loyalty number (format: ABC-123456)
+        loyalty_number = f"{random.choice(['ABC', 'DEF', 'GHI', 'JKL', 'MNO', 'PQR', 'STU', 'VWX', 'YZA'])}-{random.randint(100000, 999999)}"
+
+        return {
+            'first_name': first_name,
+            'last_name': last_name,
+            'birth_date': birth_date,
+            'postcode': postcode,
+            'loyalty_number': loyalty_number
+        }
 
     def get_industry_data(self, industry):
         """Import and return industry-specific sample data"""
@@ -229,12 +289,19 @@ class Command(BaseCommand):
             self.stdout.write('Creating 50 Sample Customers for ACME Org')
             customers = []
             for i in range(50):
+                customer_data = self.generate_customer_data()
                 customer = Customer(
                     external_id=hashlib.sha256(f'{i + 1}{int(time.time())}'.encode()).hexdigest(),
-                    organization=org
+                    organization=org,
+                    first_name=customer_data['first_name'],
+                    last_name=customer_data['last_name'],
+                    birth_date=customer_data['birth_date'],
+                    postcode=customer_data['postcode'],
+                    loyalty_number=customer_data['loyalty_number']
                 )
                 customer.save()
                 customers.append(customer)
+            self.stdout.write('Successfully created 50 Sample Customers with realistic data')
         except Exception as e:
             raise CommandError(f'Failed creation of Sample Customers: {e}')
 
@@ -260,7 +327,7 @@ class Command(BaseCommand):
                         sentiment=sentiment,
                         starting_sentiment=starting_sentiment,
                         ending_sentiment=ending_sentiment,
-                        title=f"Conversation {i + 1} - {agent.user.email} assists {customer.external_id}",
+                        title=f"Conversation {i + 1} - {agent.user.email} assists {customer.first_name} {customer.last_name}",
                         summary=data['summary'],
                         input_tokens=random.randint(50, 200),
                         output_tokens=random.randint(20, 100),
@@ -279,7 +346,7 @@ class Command(BaseCommand):
                         conversation.suggested_topics.add(*data['suggested_topics'])
 
                     conversation.save()
-                except Exception as e:
+                except Exception:
                    continue
 
         except Exception as e:
