@@ -69,6 +69,31 @@ CUSTOMER_ORDERING_PARAMETER_SCHEMA = OpenApiParameter(
     required=False,
 )
 
+PAGE_SIZE_PARAMETER_SCHEMA = OpenApiParameter(
+    name='page_size',
+    type=OpenApiTypes.INT,
+    location=OpenApiParameter.QUERY,
+    description='Number of results per page',
+    required=False,
+)
+
+CURSOR_PARAMETER_SCHEMA = OpenApiParameter(
+    name='cursor',
+    type=OpenApiTypes.STR,
+    location=OpenApiParameter.QUERY,
+    description='Cursor for pagination (obtained from previous response)',
+    required=False,
+)
+
+def get_search_parameters_schema(ordering_schema):
+    """Generate search endpoint parameters including query, ordering, and pagination"""
+    return [
+        SEARCH_QUERY_PARAMETER_SCHEMA,
+        ordering_schema,
+        PAGE_SIZE_PARAMETER_SCHEMA,
+        CURSOR_PARAMETER_SCHEMA,
+    ]
+
 REGENERATE_API_KEY_RESPONSE_SCHEMA = OpenApiResponse(
     response={
         'type': 'object',

@@ -410,6 +410,174 @@ class TestCustomerSearch:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data['detail'] == 'Your query produced no results.'
 
+    def test_search_with_ordering_by_total_revenue(self, client, analyst_user, agent, organization):
+        """
+        Test that search results can be ordered by total_revenue when ordering parameter is provided.
+        """
+
+        # Create customers with different revenue values but same searchable content
+        low_revenue_customer = Customer.objects.create(
+            first_name='TestCustomer',
+            last_name='LowRevenue',
+            external_id='low_revenue_customer',
+            organization=organization
+        )
+
+        high_revenue_customer = Customer.objects.create(
+            first_name='TestCustomer',
+            last_name='HighRevenue',
+            external_id='high_revenue_customer',
+            organization=organization
+        )
+
+        utc = zoneinfo.ZoneInfo("UTC")
+        test_date = datetime(2024, 3, 15, 10, 0, 0, tzinfo=utc)
+
+        # Create conversations with different revenue amounts
+        Conversation.objects.create(
+            path='path/to/low_revenue_conv',
+            date=test_date,
+            duration=120,
+            title='Low Revenue Conversation',
+            summary='Revenue ordering test conversation',
+            transcript='This conversation has low revenue at stake',
+            sentiment=3.0,
+            starting_sentiment=3.0,
+            ending_sentiment=3.0,
+            agent=agent,
+            customer=low_revenue_customer,
+            input_tokens=100,
+            output_tokens=50,
+            revenue_at_stake=100.0,
+            resolved=True
+        )
+
+        Conversation.objects.create(
+            path='path/to/high_revenue_conv',
+            date=test_date,
+            duration=180,
+            title='High Revenue Conversation',
+            summary='Revenue ordering test conversation',
+            transcript='This conversation has high revenue at stake',
+            sentiment=4.0,
+            starting_sentiment=4.0,
+            ending_sentiment=4.0,
+            agent=agent,
+            customer=high_revenue_customer,
+            input_tokens=150,
+            output_tokens=75,
+            revenue_at_stake=1000.0,
+            resolved=False
+        )
+
+        client.force_authenticate(user=analyst_user)
+        search_query = "TestCustomer"
+
+        # Test ordering by total_revenue ascending
+        url = reverse('customer-search') + f'?query={search_query}&ordering=total_revenue'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+        assert len(results) >= 2
+
+        # Find our test customers in results
+        result_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+        low_index = next(i for i, id in enumerate(result_ids) if id == str(low_revenue_customer.id))
+        high_index = next(i for i, id in enumerate(result_ids) if id == str(high_revenue_customer.id))
+
+        # Low revenue customer should come first (ascending order)
+        assert low_index < high_index
+
+        # Test ordering by total_revenue descending
+        url = reverse('customer-search') + f'?query={search_query}&ordering=-total_revenue'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+
+        result_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+        low_index = next(i for i, id in enumerate(result_ids) if id == str(low_revenue_customer.id))
+        high_index = next(i for i, id in enumerate(result_ids) if id == str(high_revenue_customer.id))
+
+        # High revenue customer should come first (descending order)
+        assert high_index < low_index
+
+    def test_search_without_ordering_uses_relevance(self, client, analyst_user, agent, organization):
+        """
+        Test that search results without ordering parameter are ordered by relevance (-rank).
+        """
+
+        # Create customers where name relevance differs
+        high_relevance_customer = Customer.objects.create(
+            first_name='RelevanceTest',
+            last_name='RelevanceTest', # Name appears multiple times
+            external_id='high_relevance_customer',
+            organization=organization
+        )
+
+        low_relevance_customer = Customer.objects.create(
+            first_name='Different',
+            last_name='Name',
+            external_id='low_relevance_customer',
+            organization=organization
+        )
+
+        utc = zoneinfo.ZoneInfo("UTC")
+        test_date = datetime(2024, 5, 15, 10, 0, 0, tzinfo=utc)
+
+        # Create conversations - high relevance customer has conversation with keyword in title
+        Conversation.objects.create(
+            path='path/to/high_rel_conv',
+            date=test_date,
+            duration=120,
+            title='RelevanceTest conversation with RelevanceTest keyword multiple times',
+            summary='This summary contains RelevanceTest keyword',
+            transcript='This transcript has RelevanceTest keyword many times',
+            sentiment=3.0,
+            starting_sentiment=3.0,
+            ending_sentiment=3.0,
+            agent=agent,
+            customer=high_relevance_customer,
+            input_tokens=100,
+            output_tokens=50,
+            revenue_at_stake=200.0,
+            resolved=True
+        )
+
+        # Low relevance customer has conversation with keyword appearing less frequently
+        Conversation.objects.create(
+            path='path/to/low_rel_conv',
+            date=test_date,
+            duration=180,
+            title='Different conversation',
+            summary='Different summary',
+            transcript='This transcript mentions RelevanceTest once',
+            sentiment=4.0,
+            starting_sentiment=4.0,
+            ending_sentiment=4.0,
+            agent=agent,
+            customer=low_relevance_customer,
+            input_tokens=150,
+            output_tokens=75,
+            revenue_at_stake=300.0,
+            resolved=False
+        )
+
+        client.force_authenticate(user=analyst_user)
+        search_query = "RelevanceTest"
+
+        # Test search without ordering (should use relevance)
+        url = reverse('customer-search') + f'?query={search_query}'
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+
+        result_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in results]
+        high_index = next(i for i, id in enumerate(result_ids) if id == str(high_relevance_customer.id))
+        low_index = next(i for i, id in enumerate(result_ids) if id == str(low_relevance_customer.id))
+
+        # High relevance customer should come first (higher rank)
+        assert high_index < low_index
+
 
 @pytest.mark.django_db
 class TestCustomerRetrieve:
