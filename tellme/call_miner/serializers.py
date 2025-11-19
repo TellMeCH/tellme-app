@@ -663,12 +663,15 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
         read_only=True,
         help_text='Title of the most recent conversation for this customer'
     )
+    latest_conversation_url = serializers.SerializerMethodField(
+        help_text='URL link to the most recent conversation for this customer'
+    )
 
     class Meta:
         model = Customer
         fields = ['url', 'external_id', 'first_name', 'last_name', 'birth_date', 'conversation_count',
                   'first_conversation_date', 'last_conversation_date', 'total_revenue', 'avg_sentiment',
-                  'latest_conversation_title', 'created']
+                  'latest_conversation_title', 'latest_conversation_url', 'created']
 
     @extend_schema_field({'type': 'number', 'format': 'float'})
     def get_total_revenue(self, obj):
@@ -707,6 +710,19 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
             avg=models.Avg('sentiment')
         )
         return result['avg']
+
+    @extend_schema_field({'type': 'string', 'format': 'uri', 'nullable': True})
+    def get_latest_conversation_url(self, obj):
+        """
+        Generate the URL link to the most recent conversation for this customer.
+        Uses the latest_conversation ForeignKey from ConversationStatsAbstractModel.
+
+        Returns:
+            str: URL to the conversation detail endpoint, or None if no latest conversation exists
+        """
+        if obj.latest_conversation:
+            return reverse('conversation-detail', args=[obj.latest_conversation.pk])
+        return None
 
 
 class UserSerializer(serializers.ModelSerializer):
