@@ -56,30 +56,30 @@ def _convert_enrichment_config_to_litellm(step_config):
 
     # OpenAI model
     openai_config = step_config["config"].copy()
-    openai_config["model"] = openai_config["model"]["openai"]
+    openai_model = openai_config["model"]["openai"]
     openai_litellm_params = {k: v for k, v in openai_config.items() if k != "model"}
     # Add additionalProperties: false for OpenAI (required for strict mode)
     if "response_format" in openai_litellm_params:
         schema = openai_litellm_params["response_format"]["json_schema"]["schema"]
         _add_additional_properties_false(schema)
 
-    models.append({
-        "model_name": f"openai/{openai_config['model']}",
-        "litellm_params": openai_litellm_params
-    })
+    # LiteLLM fallback format: each model entry has model + params
+    openai_entry = {"model": f"openai/{openai_model}"}
+    openai_entry.update(openai_litellm_params)
+    models.append(openai_entry)
 
     # VertexAI model
     vertexai_config = step_config["config"].copy()
-    vertexai_config["model"] = vertexai_config["model"]["vertexai"]
+    vertexai_model = vertexai_config["model"]["vertexai"]
     vertexai_litellm_params = {k: v for k, v in vertexai_config.items() if k != "model"}
     # Convert response_format for Vertex AI (remove strict mode)
     if "response_format" in vertexai_litellm_params:
         vertexai_litellm_params["response_format"]["json_schema"].pop("strict", None)
 
-    models.append({
-        "model_name": f"vertex_ai/{vertexai_config['model']}",
-        "litellm_params": vertexai_litellm_params
-    })
+    # LiteLLM fallback format: each model entry has model + params
+    vertexai_entry = {"model": f"vertex_ai/{vertexai_model}"}
+    vertexai_entry.update(vertexai_litellm_params)
+    models.append(vertexai_entry)
 
     return models
 
@@ -133,13 +133,13 @@ def get_enrichment_config(enrichment_method: str, step_name: str):
     # Prioritize the preferred method
     if enrichment_method == "vertexai":
         # Put vertex_ai first
-        vertex_models = [m for m in models if m["model_name"].startswith("vertex_ai")]
-        openai_models = [m for m in models if m["model_name"].startswith("openai")]
+        vertex_models = [m for m in models if m["model"].startswith("vertex_ai")]
+        openai_models = [m for m in models if m["model"].startswith("openai")]
         models = vertex_models + openai_models
     elif enrichment_method == "openai":
         # Put openai first
-        openai_models = [m for m in models if m["model_name"].startswith("openai")]
-        vertex_models = [m for m in models if m["model_name"].startswith("vertex_ai")]
+        openai_models = [m for m in models if m["model"].startswith("openai")]
+        vertex_models = [m for m in models if m["model"].startswith("vertex_ai")]
         models = openai_models + vertex_models
 
     return {"model": models}
@@ -154,16 +154,12 @@ def get_diarization_config():
     """
     models = [
         {
-            "model_name": f"vertex_ai/{DIARIZATION_CONFIG['model']}",
-            "litellm_params": {
-                "temperature": DIARIZATION_CONFIG["temperature"]
-            }
+            "model": f"vertex_ai/{DIARIZATION_CONFIG['model']}",
+            "temperature": DIARIZATION_CONFIG["temperature"]
         },
         {
-            "model_name": "openai/gpt-4o-mini",
-            "litellm_params": {
-                "temperature": DIARIZATION_CONFIG["temperature"]
-            }
+            "model": "openai/gpt-4o-mini",
+            "temperature": DIARIZATION_CONFIG["temperature"]
         }
     ]
 
@@ -198,15 +194,13 @@ def get_meta_summarization_config(prompt_category: str):
     if "response_format" in vertexai_params:
         vertexai_params["response_format"]["json_schema"].pop("strict", None)
 
-    models = [
-        {
-            "model_name": f"openai/{config['model']}",
-            "litellm_params": openai_params
-        },
-        {
-            "model_name": "vertex_ai/gemini-2.0-flash-001",
-            "litellm_params": vertexai_params
-        }
-    ]
+    # LiteLLM fallback format: each model entry has model + params
+    openai_entry = {"model": f"openai/{config['model']}"}
+    openai_entry.update(openai_params)
+
+    vertexai_entry = {"model": "vertex_ai/gemini-2.0-flash-001"}
+    vertexai_entry.update(vertexai_params)
+
+    models = [openai_entry, vertexai_entry]
 
     return {"model": models}
