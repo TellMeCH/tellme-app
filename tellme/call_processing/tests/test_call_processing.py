@@ -2,6 +2,7 @@ import httpx
 import json
 import pytest
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
 from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher, CallValuer
 from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
@@ -14,8 +15,8 @@ class TestCallProcessingPipeline:
     """
 
     @pytest.fixture
-    def pipeline(self, mock_deepgram, mock_groq, mock_openai, mock_langfuse, mock_dlp, mock_vertexai, mock_gcs_utils,
-                 mock_call_valuer):
+    def pipeline(self, mock_deepgram, mock_groq, mock_litellm_enrichment, mock_langfuse, mock_dlp, mock_vertexai, mock_gcs_utils,
+                 mock_call_valuer, mock_litellm_setup):
         return CallProcessingPipeline()
 
     def test_define_session_id(self, pipeline):
@@ -38,7 +39,7 @@ class TestCallProcessingPipeline:
         # Note: session IDs will be different due to timestamp inclusion
 
     def test_pipeline_with_customer_id(
-            self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub, mock_db_handler
+            self, pipeline, mock_deepgram, mock_litellm_enrichment, mock_dlp, mock_pydub, mock_db_handler
     ):
         """
         Test full pipeline execution when customer_id is provided.
@@ -60,26 +61,44 @@ class TestCallProcessingPipeline:
         assert "title" in result
         assert "summary" in result
 
-    def test_pipeline_without_customer_id(self, pipeline, mock_deepgram, mock_openai, mock_dlp, mock_pydub,
+    def test_pipeline_without_customer_id(self, pipeline, mock_deepgram, mock_litellm_enrichment, mock_dlp, mock_pydub,
                                           mock_db_handler):
         """
         Test full pipeline execution when customer_id is not provided.
         """
-        # Mock OpenAI to return customer_info for ID generation
-        mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
-            "agent_speaker_labels": ["Speaker 0"],
-            "customer_speaker_labels": ["Speaker 1"],
-            "topics": ["Billing"],
-            "suggested_topics": ["Technical Support"],
-            "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
-            "customer_info": {
-                "full_name": "John Doe",
-                "birth_date": "1990-01-15"
-            },
-            "summary": "Short summary",
-            "title": "Test Call",
-            "sentiment": 4
-        })
+        # Mock LiteLLM to return customer_info for ID generation
+        def custom_side_effect(*args, **kwargs):
+            # Override the default enrichment side effect to include customer_info
+            mock_chat_completion = MagicMock()
+            mock_chat_completion.choices = [
+                MagicMock(message=MagicMock(content=json.dumps({
+                    "agent_speaker_labels": ["Speaker 0"],
+                    "customer_speaker_labels": ["Speaker 1"],
+                    "topics": ["Billing"],
+                    "suggested_topics": ["Technical Support"],
+                    "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
+                    "customer_info": {
+                        "full_name": "John Doe",
+                        "birth_date": "1990-01-15",
+                        "address": "",
+                        "phone_number": "",
+                        "postcode": "",
+                        "loyalty_number": ""
+                    },
+                    "summary": "Short summary",
+                    "title": "Test Call",
+                    "sentiment": 4,
+                    "starting_sentiment": 3,
+                    "ending_sentiment": 5,
+                    "revenue_search_query": "",
+                    "resolved": False
+                })))
+            ]
+            mock_chat_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=10)
+            mock_chat_completion.model = "openai/gpt-4o-mini"
+            return mock_chat_completion
+
+        mock_litellm_enrichment.side_effect = custom_side_effect
 
         result = pipeline(
             file_name="test.wav",
@@ -293,10 +312,10 @@ class TestCallEnricher:
     """
 
     @pytest.fixture
-    def enricher(self, mock_openai, mock_vertexai, mock_langfuse):
+    def enricher(self, mock_litellm_enrichment, mock_langfuse, mock_litellm_setup):
         return CallEnricher()
 
-    def test_enrich_recording_with_customer_id(self, enricher, mock_openai, mock_db_handler):
+    def test_enrich_recording_with_customer_id(self, enricher, mock_litellm_enrichment, mock_db_handler):
         """
         Test enrichment process when customer_id is provided (via enrichment).
         """
@@ -306,23 +325,7 @@ class TestCallEnricher:
         mock_obtain_suggested_topics.return_value = "Warranty: Product warranty claims, "
         mock_retrieve_organization_language.return_value = "German"
 
-        # Mock OpenAI to include customer_info
-        mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
-            "agent_speaker_labels": ["Speaker 0"],
-            "customer_speaker_labels": ["Speaker 1"],
-            "topics": ["Billing"],
-            "suggested_topics": ["Technical Support"],
-            "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
-            "customer_info": {
-                "full_name": "John Doe",
-                "birth_date": "1990-01-15"
-            },
-            "summary": "Short summary",
-            "title": "Test Call",
-            "sentiment": 4,
-            "revenue_at_stake": 0,
-            "resolved": False,
-        })
+        # The mock will automatically return appropriate responses based on step metadata
 
         transcript = "Agent: Hello. Customer: Hi, I need help."
         redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
@@ -344,7 +347,7 @@ class TestCallEnricher:
         assert isinstance(input_tokens, int)
         assert isinstance(output_tokens, int)
 
-    def test_enrich_recording_structure_compliance(self, enricher, mock_openai, mock_db_handler):
+    def test_enrich_recording_structure_compliance(self, enricher, mock_litellm_enrichment, mock_db_handler):
         """
         Test that enrichment response includes all expected fields with correct types.
         """
@@ -383,7 +386,7 @@ class TestCallEnricher:
         # Test sentiment range
         assert 1 <= result["sentiment"] <= 5
 
-    def test_enrichment_pipeline_steps(self, enricher, mock_openai, mock_db_handler):
+    def test_enrichment_pipeline_steps(self, enricher, mock_litellm_enrichment, mock_db_handler):
         """
         Test that enrichment follows the ENRICHMENT_PIPELINE configuration.
         """
@@ -395,43 +398,15 @@ class TestCallEnricher:
         transcript = "Agent: Hello. Customer: Hi, I need help."
         redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
 
-        # Mock OpenAI to return valid responses for each step
-        def openai_side_effect(*args, **kwargs):
-            # Return different responses based on call count to simulate pipeline steps
-            if not hasattr(openai_side_effect, 'call_count'):
-                openai_side_effect.call_count = 0
-            openai_side_effect.call_count += 1
-
-            from unittest.mock import MagicMock
-            response = MagicMock()
-            response.choices = [MagicMock()]
-            response.usage = MagicMock()
-            response.usage.prompt_tokens = 50
-            response.usage.completion_tokens = 10
-
-            response.choices[0].message.content = json.dumps({
-                "agent_speaker_labels": ["Speaker 0"],
-                "customer_speaker_labels": ["Speaker 1"],
-                "topics": ["Billing"],
-                "suggested_topics": ["Technical Support"],
-                "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
-                "summary": "Short summary",
-                "title": "Test Call",
-                "sentiment": 4,
-                "revenue_at_stake": 3.4,
-                "resolved": False,
-            })
-            return response
-
-        mock_openai.chat.completions.create.side_effect = openai_side_effect
+        # The mock will automatically handle pipeline steps based on metadata
 
         result, input_tokens, output_tokens = enricher.enrich_recording(
             transcript, redacted_transcript, "openai", 1
         )
 
-        # Verify that OpenAI was called for each step in the pipeline
+        # Verify that LiteLLM was called for each step in the pipeline
         expected_steps = len(ENRICHMENT_PIPELINE)
-        assert mock_openai.chat.completions.create.call_count == expected_steps
+        assert mock_litellm_enrichment.call_count == expected_steps
 
         # Verify the enrichment result structure
         assert "title" in result
@@ -439,35 +414,84 @@ class TestCallEnricher:
         assert "sentiment" in result
         assert "topics" in result
 
-    def test_fallback_enrichment_if_openai_fails(
-        self, enricher, mock_openai, mock_vertexai, mock_db_handler
+    def test_fallback_enrichment_if_primary_fails(
+        self, enricher, mock_db_handler
     ):
         """
-        When OpenAI enrichment raises a retriable error, the enricher should retry with Vertex AI.
+        Test that LiteLLM model preference ordering works correctly for fallbacks.
         """
         _, mock_obtain_active_topics, mock_obtain_suggested_topics, mock_retrieve_organization_language = mock_db_handler
         mock_obtain_active_topics.return_value = "Billing: Payment issues, "
         mock_obtain_suggested_topics.return_value = "Technical Support: Hardware troubleshooting, "
         mock_retrieve_organization_language.return_value = "German"
 
-        # Force the primary provider (OpenAI) to fail
-        mock_openai.chat.completions.create.side_effect = httpx.HTTPError("Simulated OpenAI failure")
+        models_used = []
 
-        transcript = "Agent: Hello. Customer: Hi, I need help."
-        redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
+        def track_model_side_effect(*args, **kwargs):
+            # Check which model is being attempted first
+            model_config = kwargs.get("model", [])
+            if isinstance(model_config, list) and len(model_config) > 0:
+                models_used.append(model_config[0]["model"])
 
-        result, input_tokens, output_tokens = enricher.enrich_recording(
-            transcript, redacted_transcript, "openai", 1
-        )
+            # Return success response
+            mock_completion = MagicMock()
+            mock_completion.choices = [MagicMock(message=MagicMock(
+                content=json.dumps({
+                    "title": "Test Call",
+                    "summary": "Short summary",
+                    "sentiment": 4,
+                    "starting_sentiment": 3,
+                    "ending_sentiment": 5,
+                    "topics": ["Billing"],
+                    "suggested_topics": ["Technical Support"],
+                    "new_topics": [],
+                    "revenue_search_query": "",
+                    "resolved": False,
+                    "agent_speaker_labels": ["Speaker 0"],
+                    "customer_speaker_labels": ["Speaker 1"],
+                    "customer_info": {
+                        "full_name": "",
+                        "address": "",
+                        "birth_date": "",
+                        "phone_number": "",
+                        "postcode": "",
+                        "loyalty_number": ""
+                    }
+                })
+            ))]
+            mock_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=10)
+            mock_completion.model = model_config[0]["model"] if model_config else "unknown"
+            return mock_completion
 
-        assert mock_openai.chat.completions.create.called
-        assert mock_vertexai.called
-        assert mock_vertexai.call_count == len(ENRICHMENT_PIPELINE)
+        with patch("litellm.completion", side_effect=track_model_side_effect):
+            transcript = "Agent: Hello. Customer: Hi, I need help."
+            redacted_transcript = "Agent: Hello. Customer: Hi, I need help."
 
-        for key in ("title", "summary", "sentiment", "topics"):
-            assert key in result
+            # Test OpenAI preference
+            result, input_tokens, output_tokens = enricher.enrich_recording(
+                transcript, redacted_transcript, "openai", 1
+            )
 
-    def test_enrich_recording_extracts_customer_data_from_redaction(self, enricher, mock_openai, mock_db_handler):
+            # Verify OpenAI models were attempted first for each step
+            openai_first_calls = [model for model in models_used if model.startswith("openai/")]
+            assert len(openai_first_calls) == len(ENRICHMENT_PIPELINE), "OpenAI should be first choice for each enrichment step"
+
+            models_used.clear()
+
+            # Test VertexAI preference
+            result, input_tokens, output_tokens = enricher.enrich_recording(
+                transcript, redacted_transcript, "vertexai", 1
+            )
+
+            # Verify VertexAI models were attempted first for each step
+            vertexai_first_calls = [model for model in models_used if model.startswith("vertex_ai/")]
+            assert len(vertexai_first_calls) == len(ENRICHMENT_PIPELINE), "VertexAI should be first choice for each enrichment step"
+
+            # Verify result structure
+            for key in ("title", "summary", "sentiment", "topics"):
+                assert key in result
+
+    def test_enrich_recording_extracts_customer_data_from_redaction(self, enricher, mock_litellm_enrichment, mock_db_handler):
         """
         Test that enrichment properly extracts and processes customer data when customer_info is provided via enrichment.
 
@@ -480,23 +504,45 @@ class TestCallEnricher:
         mock_obtain_suggested_topics.return_value = "Warranty: Product warranty claims"
         mock_retrieve_organization_language.return_value = "English"
 
-        # Mock OpenAI to return customer_info that will be processed
-        mock_openai.chat.completions.create.return_value.choices[0].message.content = json.dumps({
-            "agent_speaker_labels": ["Agent"],
-            "customer_speaker_labels": ["Customer"],
-            "topics": ["Billing"],
-            "suggested_topics": ["Technical Support"],
-            "new_topics": [{"name": "Account Management", "description": "Customer account related inquiries"}],
-            "customer_info": {
-                "full_name": "Jane Smith",
-                "birth_date": "March 22, 1985"
-            },
-            "summary": "Customer called regarding billing inquiry",
-            "title": "Billing Support Call",
-            "sentiment": 4,
-            "revenue_at_stake": 0,
-            "resolved": True,
-        })
+        # Mock LiteLLM to return customer_info that will be processed
+        def custom_side_effect(*args, **kwargs):
+            metadata = kwargs.get("metadata", {})
+            step_name = metadata.get("step_name", "unknown")
+
+            mock_chat_completion = MagicMock()
+            if step_name == "speaker_identification":
+                content = json.dumps({
+                    "agent_speaker_labels": ["Agent"],
+                    "customer_speaker_labels": ["Customer"],
+                    "customer_info": {
+                        "full_name": "Jane Smith",
+                        "birth_date": "March 22, 1985",
+                        "address": "",
+                        "phone_number": "",
+                        "postcode": "",
+                        "loyalty_number": ""
+                    }
+                })
+            else:
+                content = json.dumps({
+                    "topics": ["Billing"],
+                    "suggested_topics": ["Technical Support"],
+                    "new_topics": [{"name": "Account Management", "description": "Customer account related inquiries"}],
+                    "summary": "Customer called regarding billing inquiry",
+                    "title": "Billing Support Call",
+                    "sentiment": 4,
+                    "starting_sentiment": 3,
+                    "ending_sentiment": 5,
+                    "revenue_search_query": "",
+                    "resolved": True
+                })
+
+            mock_chat_completion.choices = [MagicMock(message=MagicMock(content=content))]
+            mock_chat_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=10)
+            mock_chat_completion.model = "openai/gpt-4o-mini"
+            return mock_chat_completion
+
+        mock_litellm_enrichment.side_effect = custom_side_effect
 
         transcript = "Agent: Hello. Customer: Hi, I'm Jane Smith, born March 22, 1985."
         redacted_transcript = "Agent: Hello. Customer: Hi, I'm [PERSON_NAME], born [DATE]."

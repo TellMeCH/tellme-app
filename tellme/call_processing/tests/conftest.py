@@ -218,9 +218,113 @@ def mock_vertexai():
 
 
 @pytest.fixture
+def mock_litellm_setup():
+    """
+    Mocks out the LiteLLM setup function to prevent actual LiteLLM initialization during tests.
+    """
+    with patch("tellme.call_processing.utils.litellm_config.setup_litellm") as mock_setup:
+        mock_setup.return_value = None
+        yield mock_setup
+
+
+@pytest.fixture
+def mock_litellm_enrichment():
+    """
+    Mocks out LiteLLM completion for enrichment (structured JSON responses).
+    """
+    with patch("litellm.completion") as mock_completion:
+        def completion_side_effect(*args, **kwargs):
+            # Determine response based on metadata or messages
+            metadata = kwargs.get("metadata", {})
+            messages = kwargs.get("messages", [])
+
+            # Check if this is a diarization call (simpler text response)
+            system_message = ""
+            if messages and len(messages) > 0:
+                system_message = messages[0].get("content", "").lower()
+
+            if "diarization" in system_message or "speaker" in system_message:
+                # Diarization response (plain text)
+                response_content = "Speaker 0: Hello, how can I help you?\nSpeaker 1: I need assistance with my order."
+            else:
+                # Enrichment response (structured JSON)
+                step_name = metadata.get("step_name", "unknown")
+                if step_name == "speaker_identification":
+                    response_content = """{
+                        "agent_speaker_labels": ["Speaker 0"],
+                        "customer_speaker_labels": ["Speaker 1"],
+                        "customer_info": {
+                            "full_name": "John Doe",
+                            "address": "",
+                            "birth_date": "1990-01-15",
+                            "phone_number": "",
+                            "postcode": "",
+                            "loyalty_number": ""
+                        }
+                    }"""
+                else:
+                    response_content = """{
+                        "title": "Test Call",
+                        "summary": "Short summary",
+                        "sentiment": 4,
+                        "starting_sentiment": 3,
+                        "ending_sentiment": 5,
+                        "topics": ["Billing"],
+                        "suggested_topics": ["Technical Support"],
+                        "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
+                        "revenue_search_query": "men leather jackets",
+                        "resolved": false
+                    }"""
+
+            mock_chat_completion = MagicMock()
+            mock_chat_completion.choices = [
+                MagicMock(message=MagicMock(content=response_content))
+            ]
+            mock_chat_completion.usage = MagicMock(
+                prompt_tokens=50,
+                completion_tokens=10
+            )
+            # Model used (varies based on fallback)
+            mock_chat_completion.model = "openai/gpt-4o-mini"
+            return mock_chat_completion
+
+        mock_completion.side_effect = completion_side_effect
+        yield mock_completion
+
+
+@pytest.fixture
+def mock_litellm_meta_summarization():
+    """
+    Mocks out LiteLLM completion for meta summarization (different JSON structure).
+    """
+    with patch("litellm.completion") as mock_completion:
+        mock_chat_completion = MagicMock()
+        mock_chat_completion.choices = [
+            MagicMock(message=MagicMock(
+                content="""{
+                    "Reasons for Calling": "• Billing inquiries\\n• Technical support requests",
+                    "Stages of the Customer Journey": "Most callers are existing customers seeking post-purchase support.",
+                    "Call Resolution Rates": "85% of issues are resolved in the first call.",
+                    "Churn Potential": "Low churn risk due to positive sentiment trends.",
+                    "Causes for Dissatisfaction": "• Long wait times\\n• Complex billing processes",
+                    "Causes for Engagement": "• Helpful agent responses\\n• Quick issue resolution",
+                    "Suggested Actions": "• Reduce wait times\\n• Simplify billing processes"
+                }"""
+            ))
+        ]
+        mock_chat_completion.usage = MagicMock(
+            prompt_tokens=100,
+            completion_tokens=50
+        )
+        mock_chat_completion.model = "openai/gpt-5-nano"
+        mock_completion.return_value = mock_chat_completion
+        yield mock_completion
+
+
+@pytest.fixture
 def mock_openai():
     """
-    Mocks out the OpenAI chat completion call.
+    Mocks out the OpenAI chat completion call for components not yet migrated to LiteLLM.
     """
     with patch("langfuse.openai.OpenAI") as mock_openai_class:
         mock_openai_instance = MagicMock()
