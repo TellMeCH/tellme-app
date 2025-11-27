@@ -822,7 +822,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'me']:
             return EmployeeListSerializer
-        elif self.action in ['create', 'update', 'partial_update', 'destroy']:
+        elif self.action in ['create', 'update', 'partial_update', 'destroy', 'invite']:
             return EmployeeModifySerializer
         raise MethodNotAllowed(self.action)
 
