@@ -21,9 +21,8 @@ jobs:
       GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
       REGION: ${{ secrets.GCP_PROJECT_REGION }}
       USE_CLOUD_SQL_AUTH_PROXY: 1
-      UPDATE_API_CONFIG: true
-      COLLECT_STATIC: false
       RUN_MIGRATIONS: true
+      COLLECT_STATIC: false
       CREATE_SUPERUSERS: false
     if: github.event.pull_request.merged == true
 
@@ -57,21 +56,7 @@ jobs:
             migrations:
               - 'tellme/call_miner/migrations/**'
 
-      - name: Detect OpenAPI Schema Changes
-        id: detect_api_changes
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            api:
-              - 'tellme/call_miner/views/**'
-              - 'tellme/call_miner/serializers/**'
-              - 'tellme/call_miner/urls.py'
-              - 'tellme/call_processing/views/**'
-              - 'tellme/urls.py'
-              - 'tellme/settings/**'
-
       - name: Start Cloud SQL Proxy
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml') || env.UPDATE_API_CONFIG == 'true'
         run: |
           curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
           chmod +x cloud-sql-proxy
@@ -82,24 +67,20 @@ jobs:
           sleep 10
 
       - name: Set up Python
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml') || env.UPDATE_API_CONFIG == 'true'
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
 
       - name: Install uv
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml') || env.UPDATE_API_CONFIG == 'true'
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install Dependencies
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml') || env.UPDATE_API_CONFIG == 'true'
         run: |
           uv sync --dev
 
       - name: Check Cloud SQL Proxy Is Running
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml') || env.UPDATE_API_CONFIG == 'true'
         run: |
           cat cloud_sql_proxy.log
           if ! pgrep -f cloud-sql-proxy; then
@@ -108,7 +89,6 @@ jobs:
           fi
 
       - name: Generate OpenAPI Specification
-        if: steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml') || env.UPDATE_API_CONFIG == 'true'
         env:
           DEBUG: 0
           SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
