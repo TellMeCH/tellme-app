@@ -8,9 +8,9 @@ class OrganizationAPIKeyAuthenticationScheme(OpenApiAuthenticationExtension):
     def get_security_definition(self, auto_schema):
         return {
             'type': 'apiKey',
-            'in': 'header',
-            'name': 'Authorization',
-            'description': 'Use format: "X-API-KEY <API_KEY>"',
+            'in': 'query',
+            'name': 'api_key',
+            'description': 'Organization API key as query parameter',
         }
 
 
@@ -21,7 +21,7 @@ class ProcessingKeyAuthenticationScheme(OpenApiAuthenticationExtension):
     def get_security_definition(self, auto_schema):
         return {
             'type': 'apiKey',
-            'in': 'header',
-            'name': 'Authorization',
-            'description': 'Processing pipeline token. Use format: "Token <PROCESSING_PIPELINE_KEY>"',
+            'in': 'query',
+            'name': 'key',
+            'description': 'Processing pipeline key as query parameter',
         }
