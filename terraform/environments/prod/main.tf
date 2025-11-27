@@ -14,7 +14,6 @@ module "api_revision" {
   image_url             = var.image_url
   project_id            = var.project_id
   region                = var.region
-  service_account_email = google_service_account.app.email
   min_instance_count    = 2
   max_instance_count    = 20
   tellme_env            = "prod"
