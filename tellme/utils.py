@@ -102,6 +102,9 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Fix API Gateway path requirements (no trailing slashes)
     fix_api_gateway_paths(result)
 
+    # Add required Google Cloud extensions
+    add_google_cloud_extensions(result)
+
     return result
 
 
@@ -119,3 +122,14 @@ def fix_api_gateway_paths(schema):
             new_paths[clean_path] = path_item
 
         schema['paths'] = new_paths
+
+
+def add_google_cloud_extensions(schema):
+    """
+    Add required Google Cloud API Gateway extensions to the OpenAPI spec.
+    """
+    # Add x-google-backend extension to the root level with terraform placeholder
+    schema['x-google-backend'] = {
+        'address': '${cloud_run_url}',
+        'deadline': 60
+    }
