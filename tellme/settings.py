@@ -271,15 +271,8 @@ SPECTACULAR_SETTINGS = {
         'tellme.utils.spectacular_postprocess_schema',
     ],
     'SECURITY': [
-        {'BearerAuth': []},
+        {'FirebaseAuth': []},
     ],
-    'SECURITY_SCHEMES': {
-        'BearerAuth': {
-            'type': 'http',
-            'scheme': 'bearer',
-            'bearerFormat': 'Firebase',
-        },
-    },
     'EXTENSIONS': [
         'tellme.call_miner.authentication_extensions',
     ],
