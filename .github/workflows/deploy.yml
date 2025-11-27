@@ -122,13 +122,29 @@ jobs:
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
         run: |
+          echo "Starting Django server..."
           uv run python manage.py runserver 127.0.0.1:8000 &
           SERVER_PID=$!
+          echo "Server started with PID: $SERVER_PID"
+
+          echo "Waiting for server to be ready..."
           sleep 10
 
-          curl -s http://127.0.0.1:8000/api/schema/ > terraform/configs/spec.yaml
+          echo "Checking if server is responding..."
+          curl -f http://127.0.0.1:8000/ || echo "Server health check failed"
 
-          kill $SERVER_PID
+          echo "Fetching OpenAPI schema..."
+          curl -f -s http://127.0.0.1:8000/api/schema/ > terraform/configs/spec.yaml
+          CURL_EXIT=$?
+          echo "Curl exit code: $CURL_EXIT"
+
+          echo "Generated spec.yaml size: $(wc -c < terraform/configs/spec.yaml) bytes"
+          echo "First few lines of spec.yaml:"
+          head -5 terraform/configs/spec.yaml || echo "Failed to read spec.yaml"
+
+          echo "Killing server..."
+          kill $SERVER_PID || echo "Failed to kill server"
+          wait $SERVER_PID 2>/dev/null || echo "Server process finished"
 
       - name: Login to Google Artifact Registry
         uses: docker/login-action@v3
