@@ -191,6 +191,7 @@ CORS_ALLOW_HEADERS = [  # Ensure Authorization and necessary headers are allowed
 
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]  # Ensure preflight requests are supported
 
+
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
@@ -262,6 +263,13 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Helping companies know their customers better through call center interactions.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': r'/api/v[0-9]',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX_TRIM': True,
+    'PREPROCESSING_HOOKS': [],
+    'POSTPROCESSING_HOOKS': [
+        'tellme.utils.spectacular_postprocess_schema',
+    ],
     'SECURITY': [
         {'BearerAuth': []},
     ],
