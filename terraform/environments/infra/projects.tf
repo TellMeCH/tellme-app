@@ -25,6 +25,8 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
     "servicecontrol.googleapis.com",
+    "servicemanagement.googleapis.com",
+    "apigateway.googleapis.com",
     "firebase.googleapis.com",
     "identitytoolkit.googleapis.com",
     "iap.googleapis.com",
