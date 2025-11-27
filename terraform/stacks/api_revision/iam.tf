@@ -9,6 +9,15 @@ resource "google_service_account" "app" {
   }
 }
 
+# Cloud Run invoker for allUsers (public access)
+resource "google_cloud_run_v2_service_iam_member" "cloudrun_invoker_public" {
+  project  = var.project_id
+  location = var.region
+  name     = var.service_name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 # Runtime service account IAM bindings
 
 # Cloud SQL client access
