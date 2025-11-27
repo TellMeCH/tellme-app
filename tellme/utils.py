@@ -99,4 +99,23 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Apply the fix to the entire schema
     fix_schema_issues(result)
 
+    # Fix API Gateway path requirements (no trailing slashes)
+    fix_api_gateway_paths(result)
+
     return result
+
+
+def fix_api_gateway_paths(schema):
+    """
+    Fix paths to be compatible with API Gateway requirements.
+    API Gateway doesn't accept paths ending with '/'.
+    """
+    if 'paths' in schema:
+        # Create new paths dict without trailing slashes
+        new_paths = {}
+        for path, path_item in schema['paths'].items():
+            # Remove trailing slash unless it's the root path
+            clean_path = path.rstrip('/') if path != '/' else path
+            new_paths[clean_path] = path_item
+
+        schema['paths'] = new_paths
