@@ -3,6 +3,10 @@ resource "google_service_account" "app" {
   project      = var.project_id
   account_id   = "${var.service_name}-account"
   display_name = "tellme App Service Account"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Runtime service account IAM bindings
