@@ -127,8 +127,11 @@ def fix_api_gateway_paths(schema):
 def add_google_cloud_extensions(schema):
     """
     Add required Google Cloud API Gateway extensions to the OpenAPI spec.
+
+    For OpenAPI 3.0, x-google-backend MUST be a string reference to a backend
+    defined in x-google-api-management, NOT an object.
     """
-    # Add backend configuration under x-google-api-management
+    # Define the backend in x-google-api-management
     schema['x-google-api-management'] = {
         'backends': {
             'cloud-run-backend': {
@@ -138,7 +141,5 @@ def add_google_cloud_extensions(schema):
         }
     }
 
-    # Reference the backend by ID, not direct address
-    schema['x-google-backend'] = {
-        'address': 'cloud-run-backend'
-    }
+    # Reference the backend by NAME ONLY (must be a string, not object)
+    schema['x-google-backend'] = 'cloud-run-backend'
