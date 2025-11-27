@@ -85,6 +85,9 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'storages',
     'corsheaders',
+    'health_check',
+    'health_check.db',
+    'health_check.cache',
     'tellme.call_miner',
     'tellme.call_processing'
 ]
