@@ -56,9 +56,81 @@ jobs:
             migrations:
               - 'tellme/call_miner/migrations/**'
 
-      - name: Print TELLME_ENV
+      - name: Detect OpenAPI Schema Changes
+        id: detect_api_changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'tellme/call_miner/views/**'
+              - 'tellme/call_miner/serializers/**'
+              - 'tellme/call_miner/urls.py'
+              - 'tellme/call_processing/views/**'
+              - 'tellme/urls.py'
+              - 'tellme/settings/**'
+
+      - name: Start Cloud SQL Proxy
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml')
         run: |
-          echo "TELLME_ENV=$TELLME_ENV"
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          nohup ./cloud-sql-proxy \
+            --port=5433 \
+            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }} \
+            > cloud_sql_proxy.log 2>&1 &
+          sleep 10
+
+      - name: Set up Python
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml')
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml')
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Dependencies
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml')
+        run: |
+          uv sync --dev
+
+      - name: Check Cloud SQL Proxy Is Running
+        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true' || steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml')
+        run: |
+          cat cloud_sql_proxy.log
+          if ! pgrep -f cloud-sql-proxy; then
+            echo "Cloud SQL Proxy is not running."
+            exit 1
+          fi
+
+      - name: Generate OpenAPI Specification
+        if: steps.detect_api_changes.outputs.api == 'true' || !hashFiles('terraform/configs/spec.yaml')
+        env:
+          DEBUG: 0
+          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
+          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
+          CALL_PROCESSING_ENDPOINT: "None"
+          SUMMARIZATION_ENDPOINT: "None"
+        run: |
+          # Start Django temporarily to generate schema
+          uv run python manage.py runserver 127.0.0.1:8000 &
+          SERVER_PID=$!
+          sleep 10
+
+          # Generate spec.yaml
+          curl -s http://127.0.0.1:8000/api/v1/schema/ > terraform/configs/spec.yaml
+
+          # Clean up
+          kill $SERVER_PID
 
       - name: Login to Google Artifact Registry
         uses: docker/login-action@v3
@@ -141,42 +213,6 @@ jobs:
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: terraform apply -auto-approve tfplan.bin
 
-      - name: Start Cloud SQL Proxy
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        run: |
-          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
-          chmod +x cloud-sql-proxy
-          nohup ./cloud-sql-proxy \
-            --port=5433 \
-            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }} \
-            > cloud_sql_proxy.log 2>&1 &
-          sleep 10
-
-      - name: Set up Python
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install Dependencies
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        run: |
-          uv sync --dev
-
-      - name: Check Cloud SQL Proxy Is Running
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        run: |
-          cat cloud_sql_proxy.log
-          if ! pgrep -f cloud-sql-proxy; then
-            echo "Cloud SQL Proxy is not running."
-            exit 1
-          fi
 
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true' || env.RUN_MIGRATIONS == 'true'
