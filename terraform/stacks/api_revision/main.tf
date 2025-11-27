@@ -164,7 +164,7 @@ resource "google_api_gateway_api_config" "cfg" {
 resource "google_api_gateway_gateway" "gateway" {
   provider   = google-beta
   project    = var.project_id
-  region     = var.region
+  region     = var.gateway_region
   gateway_id = "tellme-gateway"
 
   api_config = google_api_gateway_api_config.cfg.name
