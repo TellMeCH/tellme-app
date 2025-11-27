@@ -121,6 +121,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          ALLOWED_HOSTS: "127.0.0.1,localhost"
         run: |
           echo "Testing Django configuration first..."
           uv run python manage.py check --deploy || echo "Django check failed"
