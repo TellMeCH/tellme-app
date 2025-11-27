@@ -123,50 +123,7 @@ jobs:
           SUMMARIZATION_ENDPOINT: "None"
           ALLOWED_HOSTS: "127.0.0.1,localhost"
         run: |
-          echo "Testing Django configuration first..."
-          uv run python manage.py check --deploy || echo "Django check failed"
-
-          echo "Starting Django server with verbose output..."
-          uv run python manage.py runserver 127.0.0.1:8000 --verbosity=2 > django_server.log 2>&1 &
-          SERVER_PID=$!
-          echo "Server started with PID: $SERVER_PID"
-
-          echo "Waiting for server to be ready..."
-          sleep 15
-
-          echo "Checking if process is still running..."
-          if kill -0 $SERVER_PID 2>/dev/null; then
-            echo "Server process is still alive"
-          else
-            echo "Server process has died!"
-            echo "Django server logs:"
-            cat django_server.log || echo "No log file found"
-            exit 1
-          fi
-
-          echo "Checking if port 8000 is listening..."
-          netstat -tln | grep :8000 || echo "Port 8000 is not listening"
-
-          echo "Checking if server is responding..."
-          curl -f http://127.0.0.1:8000/ || echo "Server health check failed"
-
-          echo "Fetching OpenAPI schema..."
-          curl -f -s http://127.0.0.1:8000/api/schema/ > terraform/configs/spec.yaml
-          CURL_EXIT=$?
-          echo "Curl exit code: $CURL_EXIT"
-
-          if [ $CURL_EXIT -ne 0 ]; then
-            echo "Schema fetch failed. Server logs:"
-            cat django_server.log || echo "No log file found"
-          fi
-
-          echo "Generated spec.yaml size: $(wc -c < terraform/configs/spec.yaml) bytes"
-          echo "First few lines of spec.yaml:"
-          head -5 terraform/configs/spec.yaml || echo "Failed to read spec.yaml"
-
-          echo "Killing server..."
-          kill $SERVER_PID || echo "Failed to kill server"
-          wait $SERVER_PID 2>/dev/null || echo "Server process finished"
+          uv run python manage.py spectacular --color --file terraform/configs/spec.yaml
 
       - name: Login to Google Artifact Registry
         uses: docker/login-action@v3
