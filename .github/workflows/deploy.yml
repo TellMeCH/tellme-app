@@ -122,15 +122,12 @@ jobs:
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
         run: |
-          # Start Django temporarily to generate schema
           uv run python manage.py runserver 127.0.0.1:8000 &
           SERVER_PID=$!
           sleep 10
 
-          # Generate spec.yaml
           curl -s http://127.0.0.1:8000/api/v1/schema/ > terraform/configs/spec.yaml
 
-          # Clean up
           kill $SERVER_PID
 
       - name: Login to Google Artifact Registry
