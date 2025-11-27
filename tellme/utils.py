@@ -18,7 +18,7 @@ def spectacular_postprocess_schema(result, generator, request, public):
                     obj['additionalProperties'] = pattern_props[first_pattern_key]
                 del obj['patternProperties']
 
-            # Fix inline response schemas that are missing $ref
+            # Fix inline response schemas that are missing proper structure
             if ('content' in obj and
                 isinstance(obj['content'], dict) and
                 'application/json' in obj['content'] and
@@ -26,12 +26,36 @@ def spectacular_postprocess_schema(result, generator, request, public):
 
                 schema = obj['content']['application/json']['schema']
 
+                # Fix schemas with 'detail' as a direct property (should be in example/properties)
+                if isinstance(schema, dict) and 'detail' in schema:
+                    detail_value = schema.pop('detail')
+                    # If no type is set, make it an object
+                    if 'type' not in schema:
+                        schema['type'] = 'object'
+                    # Move detail to example or create properties
+                    if 'example' not in schema:
+                        if 'properties' not in schema:
+                            schema['properties'] = {}
+                        schema['properties']['detail'] = {
+                            'type': 'string',
+                            'example': detail_value
+                        }
+                    # Enable additional properties
+                    if 'additionalProperties' not in schema:
+                        schema['additionalProperties'] = True
+
                 # If schema has properties but no $ref and no type, make it a generic object
                 if (isinstance(schema, dict) and
-                    'properties' in schema and
+                    ('properties' in schema or any(key for key in schema.keys() if key not in ['description', 'example', 'examples', 'type', '$ref', 'anyOf', 'allOf', 'oneOf', 'nullable', 'additionalProperties'])) and
                     '$ref' not in schema and
-                    'type' not in schema):
+                    'type' not in schema and
+                    'anyOf' not in schema and
+                    'allOf' not in schema and
+                    'oneOf' not in schema):
                     schema['type'] = 'object'
+                    # Enable additional properties to allow flexible response structures
+                    if 'additionalProperties' not in schema:
+                        schema['additionalProperties'] = True
 
             # Handle the 'type' field with union types
             if 'type' in obj and isinstance(obj['type'], list):
