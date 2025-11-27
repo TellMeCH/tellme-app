@@ -74,11 +74,13 @@ module "cloud_run_v2" {
     max_instance_count = var.max_instance_count
   }
 
-  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"  # Only internal GCP services + API Gateway
-  members = [
-    "serviceAccount:${google_service_account.app.email}",  # API Gateway can invoke
-    "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"  # Cloud Tasks can invoke
-  ]
+  # ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"  # Only internal GCP services + API Gateway
+  # members = [
+  #  "serviceAccount:${google_service_account.app.email}",  # API Gateway can invoke
+  #  "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"  # Cloud Tasks can invoke
+  # ]
+  ingress = "INGRESS_TRAFFIC_ALL"  # Allows unauthenticated access
+  members = ["allUsers"]
 
   containers = [
     {
