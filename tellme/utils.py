@@ -128,8 +128,17 @@ def add_google_cloud_extensions(schema):
     """
     Add required Google Cloud API Gateway extensions to the OpenAPI spec.
     """
-    # Add x-google-backend extension to the root level with terraform placeholder
+    # Add backend configuration under x-google-api-management
+    schema['x-google-api-management'] = {
+        'backends': {
+            'cloud-run-backend': {
+                'address': '${cloud_run_url}',
+                'deadline': 60
+            }
+        }
+    }
+
+    # Add default backend reference
     schema['x-google-backend'] = {
-        'address': '${cloud_run_url}',
-        'deadline': 60
+        'address': '${cloud_run_url}'
     }
