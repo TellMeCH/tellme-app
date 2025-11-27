@@ -5,6 +5,7 @@ def spectacular_postprocess_schema(result, generator, request, public):
     API Gateway requires strict OpenAPI 3.0.3 compliance:
     - Union types like ['number', 'null'] need to be converted to {type: 'number', nullable: true}
     - patternProperties needs to be converted to additionalProperties
+    - Inline schemas should reference components when possible
     """
     def fix_schema_issues(obj):
         if isinstance(obj, dict):
@@ -16,6 +17,21 @@ def spectacular_postprocess_schema(result, generator, request, public):
                     first_pattern_key = list(pattern_props.keys())[0]
                     obj['additionalProperties'] = pattern_props[first_pattern_key]
                 del obj['patternProperties']
+
+            # Fix inline response schemas that are missing $ref
+            if ('content' in obj and
+                isinstance(obj['content'], dict) and
+                'application/json' in obj['content'] and
+                'schema' in obj['content']['application/json']):
+
+                schema = obj['content']['application/json']['schema']
+
+                # If schema has properties but no $ref and no type, make it a generic object
+                if (isinstance(schema, dict) and
+                    'properties' in schema and
+                    '$ref' not in schema and
+                    'type' not in schema):
+                    schema['type'] = 'object'
 
             # Handle the 'type' field with union types
             if 'type' in obj and isinstance(obj['type'], list):
