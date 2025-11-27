@@ -1,3 +1,8 @@
+# Get current project data
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 # Storage buckets
 resource "google_storage_bucket" "media_bucket" {
   project  = var.project_id
@@ -61,7 +66,7 @@ module "cloud_run_v2" {
   project_id             = var.project_id
   location               = var.region
   create_service_account = false
-  service_account        = var.service_account_email
+  service_account        = google_service_account.app.email
   execution_environment  = "EXECUTION_ENVIRONMENT_GEN2"
 
   template_scaling = {
@@ -69,8 +74,11 @@ module "cloud_run_v2" {
     max_instance_count = var.max_instance_count
   }
 
-  ingress = "INGRESS_TRAFFIC_ALL"  # Allows unauthenticated access
-  members = ["allUsers"]  # This makes it publicly accessible
+  ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"  # Only internal GCP services + API Gateway
+  members = [
+    "serviceAccount:${google_service_account.app.email}",  # API Gateway can invoke
+    "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"  # Cloud Tasks can invoke
+  ]
 
   containers = [
     {
@@ -115,3 +123,50 @@ module "cloud_run_v2" {
     }
   ]
 }
+
+locals {
+  spec_rendered = templatefile("${path.module}/../../configs/spec.yaml", {
+    cloud_run_url = module.cloud_run_v2.service_uri
+  })
+  api_config_id = "cfg-${substr(sha256(local.spec_rendered), 0, 8)}"
+}
+
+resource "google_api_gateway_api" "api" {
+  provider = google-beta
+  project  = var.project_id
+  api_id   = "tellme-api"
+}
+
+resource "google_api_gateway_api_config" "cfg" {
+  provider      = google-beta
+  project       = var.project_id
+  api           = google_api_gateway_api.api.api_id
+  api_config_id = local.api_config_id
+
+  openapi_documents {
+    document {
+      path     = "../../configs/spec.yaml"
+      contents = base64encode(local.spec_rendered)
+    }
+  }
+
+  gateway_config {
+    backend_config {
+      google_service_account = google_service_account.app.email
+    }
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "google_api_gateway_gateway" "gateway" {
+  provider   = google-beta
+  project    = var.project_id
+  region     = var.region
+  gateway_id = "tellme-gateway"
+
+  api_config = google_api_gateway_api_config.cfg.name
+}
+
