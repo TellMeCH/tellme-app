@@ -138,7 +138,7 @@ def add_google_cloud_extensions(schema):
         }
     }
 
-    # Add default backend reference
+    # Reference the backend by ID, not direct address
     schema['x-google-backend'] = {
-        'address': '${cloud_run_url}'
+        'address': 'cloud-run-backend'
     }
