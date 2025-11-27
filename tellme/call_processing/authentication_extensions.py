@@ -20,8 +20,8 @@ class ProcessingKeyAuthenticationScheme(OpenApiAuthenticationExtension):
 
     def get_security_definition(self, auto_schema):
         return {
-            'type': 'http',
-            'scheme': 'bearer',
-            'bearerFormat': 'Token',
-            'description': 'Use format: "Token <PROCESSING_PIPELINE_KEY>"',
+            'type': 'apiKey',
+            'in': 'header',
+            'name': 'Authorization',
+            'description': 'Processing pipeline token. Use format: "Token <PROCESSING_PIPELINE_KEY>"',
         }
