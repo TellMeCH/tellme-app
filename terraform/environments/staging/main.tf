@@ -8,6 +8,12 @@ terraform {
   }
 }
 
+# Tell Terraform that the service account moved from here to the api_revision module
+moved {
+  from = google_service_account.app
+  to   = module.api_revision.google_service_account.app
+}
+
 # Monitoring function (staging only)
 module "monitoring_function" {
   source                   = "../../modules/monitoring_function"
