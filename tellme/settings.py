@@ -276,6 +276,20 @@ SPECTACULAR_SETTINGS = {
     'EXTENSIONS': [
         'tellme.call_miner.authentication_extensions',
     ],
+    'SERVERS': [
+        {
+            'url': '/api/v1',
+            'description': 'API v1'
+        },
+        {
+            'url': '/processing/v1',
+            'description': 'Processing v1'
+        }
+    ],
+    'TAGS': [
+        {'name': 'health', 'description': 'Health check endpoints'},
+        {'name': 'schema', 'description': 'API schema endpoints'},
+    ],
 }
 
 # User model for authentication
