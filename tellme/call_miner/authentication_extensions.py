@@ -15,6 +15,6 @@ class FirebaseAuthenticationScheme(OpenApiAuthenticationExtension):
         return {
             'type': 'apiKey',
             'in': 'header',
-            'name': 'x-api-key',
-            'description': 'Firebase JWT token. Use format: "Bearer <firebase_jwt_token>" in x-api-key header',
+            'name': 'Authorization',
+            'description': 'Firebase JWT token. Use format: "Bearer <firebase_jwt_token>" in Authorization header',
         }
