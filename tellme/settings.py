@@ -265,7 +265,7 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
     'SCHEMA_PATH_PREFIX': r'/api/v[0-9]',
     'COMPONENT_SPLIT_REQUEST': True,
-    'SCHEMA_PATH_PREFIX_TRIM': True,
+    'SCHEMA_PATH_PREFIX_TRIM': False,
     'PREPROCESSING_HOOKS': [],
     'POSTPROCESSING_HOOKS': [
         'tellme.utils.spectacular_postprocess_schema',
@@ -278,12 +278,8 @@ SPECTACULAR_SETTINGS = {
     ],
     'SERVERS': [
         {
-            'url': '/api/v1',
-            'description': 'API v1'
-        },
-        {
-            'url': '/processing/v1',
-            'description': 'Processing v1'
+            'url': '/',
+            'description': 'API Gateway'
         }
     ],
     'TAGS': [

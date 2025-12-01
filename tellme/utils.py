@@ -201,3 +201,25 @@ def add_missing_endpoints(schema):
             }
         }
     }
+
+    # Add Swagger UI endpoint
+    schema['paths']['/api/schema/swagger-ui'] = {
+        'get': {
+            'operationId': 'swagger_ui',
+            'tags': ['schema'],
+            'summary': 'Swagger UI',
+            'description': 'Interactive API documentation with Swagger UI',
+            'responses': {
+                '200': {
+                    'description': 'Swagger UI HTML page',
+                    'content': {
+                        'text/html': {
+                            'schema': {
+                                'type': 'string'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
