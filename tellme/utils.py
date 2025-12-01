@@ -105,6 +105,9 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Add required Google Cloud extensions
     add_google_cloud_extensions(result)
 
+    # Add missing endpoints that aren't auto-discovered
+    add_missing_endpoints(result)
+
     return result
 
 
@@ -143,3 +146,58 @@ def add_google_cloud_extensions(schema):
 
     # Reference the backend by NAME ONLY (must be a string, not object)
     schema['x-google-backend'] = 'cloud-run-backend'
+
+
+def add_missing_endpoints(schema):
+    """
+    Add endpoints that aren't auto-discovered by drf-spectacular.
+    """
+    if 'paths' not in schema:
+        schema['paths'] = {}
+
+    # Add health check endpoint
+    schema['paths']['/health'] = {
+        'get': {
+            'operationId': 'health_check',
+            'tags': ['health'],
+            'summary': 'Health Check',
+            'description': 'Check the health status of the application',
+            'responses': {
+                '200': {
+                    'description': 'Health check successful',
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                'type': 'object',
+                                'properties': {
+                                    'status': {'type': 'string', 'example': 'ok'}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    # Add schema endpoint
+    schema['paths']['/api/schema'] = {
+        'get': {
+            'operationId': 'api_schema',
+            'tags': ['schema'],
+            'summary': 'OpenAPI Schema',
+            'description': 'Get the OpenAPI schema for this API',
+            'responses': {
+                '200': {
+                    'description': 'OpenAPI schema',
+                    'content': {
+                        'application/vnd.oai.openapi': {
+                            'schema': {
+                                'type': 'object'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
