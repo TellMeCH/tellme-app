@@ -252,9 +252,11 @@ jobs:
 
       - name: Update the Application to use Service URLs
         run: |
+          PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
+          CONSTRUCTED_URL="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.terraform_apply.outputs.cloud_run_url }},${{ steps.terraform_apply.outputs.api_gateway_url }}"
+            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.terraform_apply.outputs.cloud_run_url }},${CONSTRUCTED_URL},${{ steps.terraform_apply.outputs.api_gateway_url }}"
 
       - name: Update the Application to use the correct Call Processing Endpoint
         run: |
