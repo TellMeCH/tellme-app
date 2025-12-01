@@ -189,12 +189,13 @@ jobs:
         id: terraform_apply
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: |
-          terraform apply -auto-approve tfplan.bin
+          terraform apply -auto-approve tfplan.bin > apply_output.log 2>&1
           API_GATEWAY_URL=$(terraform output -raw api_gateway_url)
           CLOUD_RUN_URL=$(terraform output -raw cloud_run_service_uri)
           echo "api_gateway_url=$API_GATEWAY_URL" >> $GITHUB_OUTPUT
           echo "cloud_run_url=$CLOUD_RUN_URL" >> $GITHUB_OUTPUT
           echo "API Gateway URL: $API_GATEWAY_URL"
+          echo "Deployment completed successfully"
 
 
       - name: Run Migrations
