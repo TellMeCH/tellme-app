@@ -1,4 +1,5 @@
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
+from django.conf import settings
 
 
 class FirebaseAuthenticationScheme(OpenApiAuthenticationExtension):
@@ -13,8 +14,14 @@ class FirebaseAuthenticationScheme(OpenApiAuthenticationExtension):
 
     def get_security_definition(self, auto_schema):
         return {
-            'type': 'apiKey',
-            'in': 'header',
-            'name': 'Authorization',
-            'description': 'Firebase JWT token. Use format: "Bearer <firebase_jwt_token>" in Authorization header',
+            'type': 'oauth2',
+            'flows': {
+                'implicit': {
+                    'authorizationUrl': '',
+                    'scopes': {}
+                }
+            },
+            'x-google-issuer': f'https://securetoken.google.com/{settings.GOOGLE_CLOUD_PROJECT}',
+            'x-google-jwks_uri': 'https://www.googleapis.com/service_accounts/v1/metadata/x509/securetoken@system.gserviceaccount.com',
+            'x-google-audiences': settings.GOOGLE_CLOUD_PROJECT
         }

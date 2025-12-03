@@ -270,12 +270,6 @@ SPECTACULAR_SETTINGS = {
     'POSTPROCESSING_HOOKS': [
         'tellme.utils.spectacular_postprocess_schema',
     ],
-    'SECURITY': [
-        {'FirebaseAuth': []},
-    ],
-    'EXTENSIONS': [
-        'tellme.call_miner.authentication_extensions',
-    ],
     'SERVERS': [
         {
             'url': '/',
