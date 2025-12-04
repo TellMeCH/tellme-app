@@ -300,7 +300,7 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Retrieve logs for /queue and /process
         log_filter = self.generate_logs_filter(trigger_timestamp)
-        waiting_filter = log_filter + '\ntextPayload =~ ".*Summary created/updated for <class \'tellme\\.call_miner\\.models\\.Customer\'>.*"'
+        waiting_filter = log_filter + '\ntextPayload =~ ".*Summary created/updated for <class \'tellme\.call_miner\.models\.Customer\'>.*"'
         logs = self.retrieve_logs_with_timeout(
             retrieval_query=log_filter,
             waiting_query=waiting_filter,
