@@ -28,6 +28,29 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
         if auth_header.startswith(self.HEADER_SCHEMA):
             id_token = auth_header[len(self.HEADER_SCHEMA):]
             logger.debug("Got ID Token")
+
+            # DEBUG: Print comprehensive debugging info
+            import firebase_admin
+            logger.warning(f"DEBUG AUTH: Request host = {request.get_host()}")
+            logger.warning(f"DEBUG AUTH: Request URL = {request.build_absolute_uri()}")
+            logger.warning(f"DEBUG AUTH: Token (first 50 chars) = {id_token[:50]}...")
+            logger.warning(f"DEBUG AUTH: Firebase app project = {firebase_admin.get_app().project_id}")
+            logger.warning(f"DEBUG AUTH: Django GOOGLE_CLOUD_PROJECT = {settings.GOOGLE_CLOUD_PROJECT}")
+
+            # Decode token to see what's inside
+            try:
+                import base64
+                import json
+                parts = id_token.split('.')
+                if len(parts) >= 2:
+                    payload = parts[1] + '=' * (4 - len(parts[1]) % 4)
+                    decoded = base64.urlsafe_b64decode(payload)
+                    claims = json.loads(decoded)
+                    logger.warning(f"DEBUG AUTH: Token audience (aud) = {claims.get('aud', 'NOT_FOUND')}")
+                    logger.warning(f"DEBUG AUTH: Token issuer (iss) = {claims.get('iss', 'NOT_FOUND')}")
+            except Exception as decode_err:
+                logger.warning(f"DEBUG AUTH: Token decode error = {decode_err}")
+
             try:
                 decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
                 logger.debug("Successfully decoded token")
