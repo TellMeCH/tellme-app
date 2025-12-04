@@ -21,7 +21,28 @@ class FirebaseAuthenticationScheme(OpenApiAuthenticationExtension):
                     'scopes': {}
                 }
             },
-            'x-google-issuer': f'https://securetoken.google.com/{settings.GOOGLE_CLOUD_PROJECT}',
-            'x-google-jwks_uri': 'https://www.googleapis.com/service_accounts/v1/metadata/x509/securetoken@system.gserviceaccount.com',
-            'x-google-audiences': settings.GOOGLE_CLOUD_PROJECT
+            'x-google-auth': {
+                'issuer': f'https://securetoken.google.com/{settings.GOOGLE_CLOUD_PROJECT}',
+                'jwksUri': 'https://www.googleapis.com/service_accounts/v1/metadata/x509/securetoken@system.gserviceaccount.com',
+                'audiences': [settings.GOOGLE_CLOUD_PROJECT]
+            }
+        }
+
+
+class DummyApiKeyScheme(OpenApiAuthenticationExtension):
+    """
+    Dummy API key scheme to satisfy API Gateway requirements.
+    API Gateway requires all operations to have at least one apiKey security scheme.
+    This is just for API Gateway validation - actual auth is handled by Firebase.
+    """
+    target_class = 'tellme.call_miner.authentication.FirebaseAuthentication'
+    name = 'api_key'
+    priority = -1  # Lower priority than Firebase
+
+    def get_security_definition(self, auto_schema):
+        return {
+            'type': 'apiKey',
+            'in': 'query',
+            'name': 'key',
+            'description': 'Dummy API key for API Gateway project tracking (actual auth via Firebase)'
         }
