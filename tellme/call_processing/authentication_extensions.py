@@ -8,9 +8,9 @@ class OrganizationAPIKeyAuthenticationScheme(OpenApiAuthenticationExtension):
     def get_security_definition(self, auto_schema):
         return {
             'type': 'apiKey',
-            'in': 'query',
-            'name': 'api_key',
-            'description': 'Organization API key as query parameter',
+            'in': 'header',
+            'name': 'Authorization',
+            'description': 'Organization API key in Authorization header',
         }
 
 

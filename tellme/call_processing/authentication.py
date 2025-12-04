@@ -17,6 +17,8 @@ class OrganizationAPIKeyAuthentication(authentication.BaseAuthentication):
     KEYWORD = 'X-API-KEY'
 
     def authenticate(self, request):
+        logger.warning(f"DEBUG AUTH: Request Headers = {request.headers}")
+
         auth_header = request.headers.get('Authorization')
         if not auth_header:
             logger.debug("No Authorization header found")
