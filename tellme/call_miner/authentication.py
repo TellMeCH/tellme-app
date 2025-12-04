@@ -1,3 +1,4 @@
+import base64
 import logging
 from rest_framework import authentication, exceptions
 from django.contrib.auth import get_user_model
@@ -29,56 +30,58 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
             id_token = auth_header[len(self.HEADER_SCHEMA):]
             logger.debug("Got ID Token")
 
-            # DEBUG: Print comprehensive debugging info
-            import firebase_admin
-            logger.warning(f"DEBUG AUTH: Request host = {request.get_host()}")
-            logger.warning(f"DEBUG AUTH: Request URL = {request.build_absolute_uri()}")
-            logger.warning(f"DEBUG AUTH: Token (first 50 chars) = {id_token[:50]}...")
-            logger.warning(f"DEBUG AUTH: Firebase app project = {firebase_admin.get_app().project_id}")
-            logger.warning(f"DEBUG AUTH: Django GOOGLE_CLOUD_PROJECT = {settings.GOOGLE_CLOUD_PROJECT}")
+            if settings.TELLME_ENV == 'dev':
+                try:
+                    decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
+                    uid = decoded_token['uid']
+                    user_email = decoded_token['email']
+                    email_verified = decoded_token.get('email_verified', False)
+                    logger.debug("Successfully decoded token")
 
-            # Decode token to see what's inside
-            try:
-                import base64
-                import json
-                parts = id_token.split('.')
-                if len(parts) >= 2:
-                    payload = parts[1] + '=' * (4 - len(parts[1]) % 4)
-                    decoded = base64.urlsafe_b64decode(payload)
-                    claims = json.loads(decoded)
-                    logger.warning(f"DEBUG AUTH: Token audience (aud) = {claims.get('aud', 'NOT_FOUND')}")
-                    logger.warning(f"DEBUG AUTH: Token issuer (iss) = {claims.get('iss', 'NOT_FOUND')}")
-            except Exception as decode_err:
-                logger.warning(f"DEBUG AUTH: Token decode error = {decode_err}")
+                except firebase_exceptions.FirebaseError as e:
+                    logger.warning("Invalid Firebase token", exc_info=True)
+                    raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
+                except firebase_auth.RevokedIdTokenError as e:
+                    logger.warning("JWT token has been revoked", exc_info=True)
+                    raise exceptions.AuthenticationFailed(f'Revoked Firebase token - {e}')
+                except Exception as e:
+                    logger.warning("Unknown exception while verifying token", exc_info=True)
+                    raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
 
-            try:
-                decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
-                logger.debug("Successfully decoded token")
+            else:  # Staging and Prod
+                user_info_encoded = request.headers.get('x-apigateway-api-userinfo')
+                if not user_info_encoded:
+                    logger.warning("User info header missing", exc_info=True)
+                    raise exceptions.AuthenticationFailed("User info header missing")
 
-            except firebase_exceptions.FirebaseError as e:
-                logger.warning("Invalid Firebase token", exc_info=True)
-                raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
-            except firebase_auth.RevokedIdTokenError as e:
-                logger.warning("JWT token has been revoked", exc_info=True)
-                raise exceptions.AuthenticationFailed(f'Revoked Firebase token - {e}')
-            except Exception as e:
-                logger.warning("Unknown exception while verifying token", exc_info=True)
-                raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
+                try:
+                    decoded_bytes = base64.urlsafe_b64decode(userinfo_encoded + "==")
+                    user_info = json.loads(decoded_bytes.decode("utf-8"))
+                    uid = user_info.get("user_id")
+                    user_email = user_info.get("email")
+                    email_verified = user_info.get("email_verified", False)
+                    logger.debug("Successfully decoded header")
+                    if not uid:
+                        logger.warning("No UID found in token", exc_info=True)
+                        raise exceptions.AuthenticationFailed("No UID found in token")
+                except Exception as e:
+                    logger.warning("Unknown exception while decoding user info header", exc_info=True)
+                    raise exceptions.AuthenticationFailed(f'Invalid User Info Header - {e}')
 
             User = get_user_model()
             try:
-                user = User.objects.get(email=decoded_token['email'])
+                user = User.objects.get(email=user_email)
             except User.DoesNotExist:
-                firebase_auth.delete_user(decoded_token['uid'])
-                logger.warning(f"No user account exists for {decoded_token['email']}.")
-                raise exceptions.AuthenticationFailed(f"No user account exists for {decoded_token['email']}.")
+                firebase_auth.delete_user(uid)
+                logger.warning(f"No user account exists for {user_email}.")
+                raise exceptions.AuthenticationFailed(f"No user account exists for {user_email}.")
 
             # Handle unverified Emails
-            if not decoded_token.get('email_verified', False):
+            if not email_verified:
                 user.send_verification_email()
-                logger.info(f"Email verification required for {decoded_token['email']}.")
+                logger.info(f"Email verification required for {user_email}.")
                 raise exceptions.AuthenticationFailed(
-                    f"Please verify your email and try again. Instructions have been sent to {decoded_token['email']}."
+                    f"Please verify your email and try again. Instructions have been sent to {user_email}."
                 )
 
             if user.email == settings.PROCESSING_PIPELINE_USER:
