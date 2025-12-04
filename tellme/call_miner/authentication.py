@@ -55,7 +55,7 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
                     raise exceptions.AuthenticationFailed("User info header missing")
 
                 try:
-                    decoded_bytes = base64.urlsafe_b64decode(userinfo_encoded + "==")
+                    decoded_bytes = base64.urlsafe_b64decode(user_info_encoded + "==")
                     user_info = json.loads(decoded_bytes.decode("utf-8"))
                     uid = user_info.get("user_id")
                     user_email = user_info.get("email")
