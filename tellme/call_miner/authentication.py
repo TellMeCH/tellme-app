@@ -31,20 +31,6 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
             id_token = auth_header[len(self.HEADER_SCHEMA):]
             logger.debug("Got ID Token")
 
-            # Decode token to see what's inside
-            try:
-                parts = id_token.split('.')
-                if len(parts) >= 2:
-                    payload = parts[1] + '=' * (4 - len(parts[1]) % 4)
-                    decoded = base64.urlsafe_b64decode(payload)
-                    claims = json.loads(decoded)
-                    logger.warning(f"Request Host: {request.headers.get('host')}")
-                    logger.warning(f"Request User Info: {request.headers.get('x-apigateway-api-userinfo')}")
-                    logger.warning(f"DEBUG AUTH: Token audience (aud) = {claims.get('aud', 'NOT_FOUND')}")
-                    logger.warning(f"DEBUG AUTH: Token issuer (iss) = {claims.get('iss', 'NOT_FOUND')}")
-            except Exception as decode_err:
-                logger.warning(f"DEBUG AUTH: Token decode error = {decode_err}")
-
             if (settings.TELLME_ENV == 'dev') or ('x-apigateway-api-userinfo' not in request.headers):  # TODO: Remove this last part when restricting to internal calls
                 try:
                     decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
