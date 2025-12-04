@@ -108,6 +108,9 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Add missing endpoints that aren't auto-discovered
     add_missing_endpoints(result)
 
+    # Remove internal processing endpoints from API Gateway spec
+    remove_internal_endpoints(result)
+
     return result
 
 
@@ -223,3 +226,25 @@ def add_missing_endpoints(schema):
             }
         }
     }
+
+
+def remove_internal_endpoints(schema):
+    """
+    Remove internal processing endpoints that should not be exposed via API Gateway.
+    These endpoints are for internal use by Cloud Tasks and should only be accessible directly.
+    """
+    if 'paths' not in schema:
+        return
+
+    # List of internal endpoints to remove
+    internal_endpoints = [
+        '/processing/v1/process',
+        '/processing/v1/process/',
+        '/processing/v1/summarize',
+        '/processing/v1/summarize/'
+    ]
+
+    # Remove internal endpoints from the schema
+    for endpoint in internal_endpoints:
+        if endpoint in schema['paths']:
+            del schema['paths'][endpoint]
