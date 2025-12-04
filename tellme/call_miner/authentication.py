@@ -31,7 +31,20 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
             id_token = auth_header[len(self.HEADER_SCHEMA):]
             logger.debug("Got ID Token")
 
-            if settings.TELLME_ENV == 'dev':
+            # Decode token to see what's inside
+            try:
+                parts = id_token.split('.')
+                if len(parts) >= 2:
+                    payload = parts[1] + '=' * (4 - len(parts[1]) % 4)
+                    decoded = base64.urlsafe_b64decode(payload)
+                    claims = json.loads(decoded)
+                    logger.warning(f"Request Headers: {request.headers.__dict__}")
+                    logger.warning(f"DEBUG AUTH: Token audience (aud) = {claims.get('aud', 'NOT_FOUND')}")
+                    logger.warning(f"DEBUG AUTH: Token issuer (iss) = {claims.get('iss', 'NOT_FOUND')}")
+            except Exception as decode_err:
+                logger.warning(f"DEBUG AUTH: Token decode error = {decode_err}")
+
+            if settings.TELLME_ENV: # == 'dev':
                 try:
                     decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
                     uid = decoded_token['uid']
