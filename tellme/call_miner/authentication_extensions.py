@@ -24,7 +24,8 @@ class FirebaseAuthenticationScheme(OpenApiAuthenticationExtension):
             'x-google-auth': {
                 'issuer': f'https://securetoken.google.com/{settings.GOOGLE_CLOUD_PROJECT}',
                 'jwksUri': 'https://www.googleapis.com/service_accounts/v1/metadata/x509/securetoken@system.gserviceaccount.com',
-                'audiences': [settings.GOOGLE_CLOUD_PROJECT]
+                'audiences': [settings.GOOGLE_CLOUD_PROJECT],
+                'passThrough': True
             }
         }
 
