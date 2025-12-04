@@ -17,12 +17,14 @@ class OrganizationAPIKeyAuthentication(authentication.BaseAuthentication):
     KEYWORD = 'X-API-KEY'
 
     def authenticate(self, request):
-        logger.warning(f"DEBUG AUTH: Request Headers = {request.headers}")
 
-        auth_header = request.headers.get('Authorization')
+        # Check for API key in X-Forwarded-Authorization
+        auth_header = request.headers.get('X-Forwarded-Authorization')
         if not auth_header:
-            logger.debug("No Authorization header found")
-            return None
+            auth_header = request.headers.get('Authorization')  # TODO: Remove once API Gateway Access is enforced
+            if not auth_header:
+                logger.debug("No Authorization or X-Forwarded-Authorization header found")
+                return None
 
         # Check if the header starts with the expected keyword (f.e X-API-KEY <key>)
         parts = auth_header.split()
