@@ -298,45 +298,40 @@ resource "google_compute_url_map" "api_url_map" {
     }
   }
 
-  # Default route action with security headers
+  # Default route action (Fallback)
   default_route_action {
     weighted_backend_services {
       backend_service = google_compute_backend_service.api_backend.id
       weight          = 100
     }
+  }
 
-    header_action {
-
-      response_headers_to_add {
-        header_name  = "Strict-Transport-Security"
-        header_value = "max-age=31536000; includeSubDomains; preload"
-        replace      = true
-      }
-
-      response_headers_to_add {
-        header_name  = "X-Content-Type-Options"
-        header_value = "nosniff"
-        replace      = true
-      }
-
-      response_headers_to_add {
-        header_name  = "X-Frame-Options"
-        header_value = "DENY"
-        replace      = true
-      }
-
-      response_headers_to_add {
-        header_name  = "X-XSS-Protection"
-        header_value = "1; mode=block"
-        replace      = true
-      }
-
-      response_headers_to_add {
-        header_name  = "Referrer-Policy"
-        header_value = "strict-origin-when-cross-origin"
-        replace      = true
-      }
-
+  # These headers will now apply to ALL responses (both path_matcher and default)
+  header_action {
+    response_headers_to_add {
+      header_name  = "Strict-Transport-Security"
+      header_value = "max-age=31536000; includeSubDomains; preload"
+      replace      = true
+    }
+    response_headers_to_add {
+      header_name  = "X-Content-Type-Options"
+      header_value = "nosniff"
+      replace      = true
+    }
+    response_headers_to_add {
+      header_name  = "X-Frame-Options"
+      header_value = "DENY"
+      replace      = true
+    }
+    response_headers_to_add {
+      header_name  = "X-XSS-Protection"
+      header_value = "1; mode=block"
+      replace      = true
+    }
+    response_headers_to_add {
+      header_name  = "Referrer-Policy"
+      header_value = "strict-origin-when-cross-origin"
+      replace      = true
     }
   }
 }
