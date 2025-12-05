@@ -1,4 +1,9 @@
-                              # Cloud Armour Security Policy with EU geo-restriction
+provider "google-beta" {
+  project = var.project_id
+  region  = var.gateway_region
+}
+
+# Cloud Armour Security Policy with EU geo-restriction
 resource "google_compute_security_policy" "api_security_policy" {
   name        = "tellme-api-security-policy"
   project     = var.project_id
@@ -46,7 +51,7 @@ resource "google_compute_security_policy" "api_security_policy" {
 
     rate_limit_options {
       conform_action = "allow"
-      exceed_action  = "deny_429"
+      exceed_action  = "deny(429)"
       enforce_on_key = "IP"
 
       rate_limit_threshold {
@@ -69,7 +74,7 @@ resource "google_compute_security_policy" "api_security_policy" {
 
     rate_limit_options {
       conform_action = "allow"
-      exceed_action  = "deny_429"
+      exceed_action  = "deny(429)"
       enforce_on_key = "IP"
 
       rate_limit_threshold {
