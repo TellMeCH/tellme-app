@@ -107,3 +107,9 @@ variable "app_password" {
   description = "CloudSQL app password"
   sensitive   = true
 }
+
+# Load Balancer & Security variables
+variable "api_domain" {
+  type        = string
+  description = "Custom domain for the API Load Balancer (e.g., api.yourdomain.com)"
+}

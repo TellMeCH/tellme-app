@@ -47,3 +47,14 @@ output "api_gateway_url" {
   description = "The URL of the API Gateway"
   value       = "https://${google_api_gateway_gateway.gateway.default_hostname}"
 }
+
+# Load Balancer outputs
+output "load_balancer_ip" {
+  description = "IP address of the Load Balancer"
+  value       = google_compute_global_forwarding_rule.api_forwarding_rule.ip_address
+}
+
+output "load_balancer_url" {
+  description = "URL of the Load Balancer"
+  value       = "https://${var.api_domain}"
+}
