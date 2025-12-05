@@ -105,6 +105,9 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Add required Google Cloud extensions
     add_google_cloud_extensions(result)
 
+    # Add CORS configuration to match Django settings
+    add_cors_configuration(result)
+
     # Add missing endpoints that aren't auto-discovered
     add_missing_endpoints(result)
 
@@ -226,6 +229,50 @@ def add_missing_endpoints(schema):
             }
         }
     }
+
+
+def add_cors_configuration(schema):
+    """
+    Add CORS configuration to the API Gateway that inherits from Django's CORS settings.
+    This ensures consistency between direct Django access and API Gateway access.
+    """
+    from django.conf import settings
+
+    # Determine allowed origins from Django CORS settings
+    if hasattr(settings, 'CORS_ALLOW_ALL_ORIGINS') and settings.CORS_ALLOW_ALL_ORIGINS:
+        allowed_origins = ['*']
+    elif hasattr(settings, 'CORS_ALLOWED_ORIGINS'):
+        allowed_origins = list(settings.CORS_ALLOWED_ORIGINS)
+    else:
+        # Fallback to FRONTEND_PATH if CORS settings not found
+        frontend_path = getattr(settings, 'FRONTEND_PATH', '')
+        if frontend_path == '*':
+            allowed_origins = ['*']
+        else:
+            allowed_origins = frontend_path.split(',') if frontend_path else ['*']
+
+    # Get other CORS settings from Django
+    cors_headers = getattr(settings, 'CORS_ALLOW_HEADERS', [
+        'authorization', 'content-type', 'accept', 'origin', 'user-agent', 'x-csrftoken'
+    ])
+    cors_methods = getattr(settings, 'CORS_ALLOW_METHODS', [
+        'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'
+    ])
+    cors_credentials = getattr(settings, 'CORS_ALLOW_CREDENTIALS', True)
+
+    # Add x-google-cors configuration
+    cors_configs = []
+    for origin in allowed_origins:
+        cors_configs.append({
+            'origin': origin,
+            'methods': cors_methods,
+            'headers': cors_headers,
+            'expose_headers': ['*'],
+            'max_age': 3600,
+            'allow_credentials': cors_credentials
+        })
+
+    schema['x-google-cors'] = cors_configs
 
 
 def remove_internal_endpoints(schema):
