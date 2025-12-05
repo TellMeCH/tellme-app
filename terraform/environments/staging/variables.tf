@@ -84,3 +84,10 @@ variable "app_password" {
   description = "CloudSQL app password"
   sensitive   = true
 }
+
+# Load Balancer domain
+variable "api_domain" {
+  type        = string
+  description = "Custom domain for the API Load Balancer"
+  default     = "test-api.tell-me.ch"
+}
