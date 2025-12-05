@@ -26,6 +26,9 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Add missing endpoints that aren't auto-discovered
     add_missing_endpoints(result)
 
+    # Add OPTIONS methods for CORS preflight handling
+    add_cors_preflight_options(result)
+
     # Remove internal processing endpoints from API Gateway spec
     remove_internal_endpoints(result)
 
@@ -277,6 +280,53 @@ def add_cors_configuration(schema):
         })
 
     schema['x-google-cors'] = cors_configs
+
+
+def add_cors_preflight_options(schema):
+    """
+    Add OPTIONS methods to all paths for CORS preflight handling.
+
+    This allows browsers to send preflight requests that pass through to Django,
+    which can then respond with proper CORS headers. Each OPTIONS method:
+    - Has empty security array to allow unauthenticated preflight requests
+    - Uses x-google-backend to pass through to Cloud Run
+    """
+    if 'paths' not in schema:
+        return
+
+    # Add OPTIONS method to all existing paths
+    paths_to_update = list(schema['paths'].keys())
+    for path in paths_to_update:
+        path_item = schema['paths'][path]
+        if 'options' not in path_item:
+            # Create a clean path name for operationId
+            clean_path = path.replace('/', '_').replace('{', '').replace('}', '').replace('-', '_')
+            if clean_path.startswith('_'):
+                clean_path = clean_path[1:]
+            if not clean_path:
+                clean_path = 'root'
+
+            path_item['options'] = {
+                'operationId': f'cors_preflight_{clean_path}',
+                'summary': 'CORS Preflight',
+                'description': 'Handle CORS preflight requests for this endpoint',
+                'responses': {
+                    '200': {
+                        'description': 'CORS preflight response',
+                        'content': {
+                            'application/json': {
+                                'schema': {
+                                    'type': 'object'
+                                }
+                            }
+                        }
+                    }
+                },
+                # Critical: Empty security array allows unauthenticated preflight requests
+                'security': [],
+                # Pass through to backend so Django can handle CORS
+                'x-google-backend': 'cloud-run-backend'
+            }
 
 
 def remove_internal_endpoints(schema):
