@@ -186,3 +186,27 @@ resource "google_secret_manager_secret_iam_member" "backend_dev_django_settings"
   member = "group:${var.backend_dev_group}"
   depends_on = [module.secrets]
 }
+
+# Load Balancer and Cloud Armour permissions
+resource "google_project_iam_member" "compute_security_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/compute.securityAdmin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Load Balancer admin (for SSL certs, URL maps, forwarding rules, etc.)
+resource "google_project_iam_member" "compute_load_balancer_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/compute.loadBalancerAdmin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Network endpoint groups admin
+resource "google_project_iam_member" "compute_network_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/compute.networkAdmin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
