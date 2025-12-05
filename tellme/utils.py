@@ -290,6 +290,7 @@ def add_cors_preflight_options(schema):
     which can then respond with proper CORS headers. Each OPTIONS method:
     - Has empty security array to allow unauthenticated preflight requests
     - Uses x-google-backend to pass through to Cloud Run
+    - Copies path parameters from existing methods (required for parameterized paths)
     """
     if 'paths' not in schema:
         return
@@ -299,6 +300,16 @@ def add_cors_preflight_options(schema):
     for path in paths_to_update:
         path_item = schema['paths'][path]
         if 'options' not in path_item:
+            # Find path parameters from any existing method
+            path_parameters = []
+            for method_name in ['get', 'post', 'put', 'patch', 'delete']:
+                if method_name in path_item and 'parameters' in path_item[method_name]:
+                    # Copy only path parameters
+                    for param in path_item[method_name]['parameters']:
+                        if param.get('in') == 'path':
+                            path_parameters.append(param)
+                    break  # Found parameters, no need to check other methods
+
             # Create a clean path name for operationId
             clean_path = path.replace('/', '_').replace('{', '').replace('}', '').replace('-', '_')
             if clean_path.startswith('_'):
@@ -306,7 +317,8 @@ def add_cors_preflight_options(schema):
             if not clean_path:
                 clean_path = 'root'
 
-            path_item['options'] = {
+            # Create OPTIONS method
+            options_method = {
                 'operationId': f'cors_preflight_{clean_path}',
                 'summary': 'CORS Preflight',
                 'description': 'Handle CORS preflight requests for this endpoint',
@@ -327,6 +339,12 @@ def add_cors_preflight_options(schema):
                 # Pass through to backend so Django can handle CORS
                 'x-google-backend': 'cloud-run-backend'
             }
+
+            # Add path parameters if found
+            if path_parameters:
+                options_method['parameters'] = path_parameters
+
+            path_item['options'] = options_method
 
 
 def remove_internal_endpoints(schema):
