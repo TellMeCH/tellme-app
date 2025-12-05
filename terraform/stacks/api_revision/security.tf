@@ -258,6 +258,7 @@ resource "google_compute_backend_service" "api_backend" {
 
 # Serverless Network Endpoint Group for API Gateway
 resource "google_compute_region_network_endpoint_group" "api_gateway_neg" {
+  provider              = google-beta
   name                  = "tellme-api-gateway-neg"
   project               = var.project_id
   region                = var.gateway_region
