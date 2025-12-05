@@ -287,7 +287,6 @@ resource "google_compute_url_map" "api_url_map" {
 
   path_matcher {
     name = "allpaths"
-
     path_rule {
       paths = ["/*"]
       route_action {
@@ -306,31 +305,38 @@ resource "google_compute_url_map" "api_url_map" {
       weight          = 100
     }
 
-    # Add security headers
-    response_headers_to_add {
-      header_name  = "Strict-Transport-Security"
-      header_value = "max-age=31536000; includeSubDomains; preload"
-      replace      = true
-    }
-    response_headers_to_add {
-      header_name  = "X-Content-Type-Options"
-      header_value = "nosniff"
-      replace      = true
-    }
-    response_headers_to_add {
-      header_name  = "X-Frame-Options"
-      header_value = "DENY"
-      replace      = true
-    }
-    response_headers_to_add {
-      header_name  = "X-XSS-Protection"
-      header_value = "1; mode=block"
-      replace      = true
-    }
-    response_headers_to_add {
-      header_name  = "Referrer-Policy"
-      header_value = "strict-origin-when-cross-origin"
-      replace      = true
+    header_action {
+
+      response_headers_to_add {
+        header_name  = "Strict-Transport-Security"
+        header_value = "max-age=31536000; includeSubDomains; preload"
+        replace      = true
+      }
+
+      response_headers_to_add {
+        header_name  = "X-Content-Type-Options"
+        header_value = "nosniff"
+        replace      = true
+      }
+
+      response_headers_to_add {
+        header_name  = "X-Frame-Options"
+        header_value = "DENY"
+        replace      = true
+      }
+
+      response_headers_to_add {
+        header_name  = "X-XSS-Protection"
+        header_value = "1; mode=block"
+        replace      = true
+      }
+
+      response_headers_to_add {
+        header_name  = "Referrer-Policy"
+        header_value = "strict-origin-when-cross-origin"
+        replace      = true
+      }
+
     }
   }
 }
