@@ -1,6 +1,6 @@
 provider "google-beta" {
   project = var.project_id
-  region  = var.gateway_region
+  region  = var.region
 }
 
 # Cloud Armour Security Policy with EU geo-restriction
@@ -262,7 +262,7 @@ resource "google_compute_region_network_endpoint_group" "api_gateway_neg" {
   provider              = google-beta
   name                  = "tellme-api-gateway-neg"
   project               = var.project_id
-  region                = var.gateway_region
+  region                = var.region
   network_endpoint_type = "SERVERLESS"
 
   serverless_deployment {
