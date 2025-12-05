@@ -9,9 +9,9 @@ resource "google_compute_security_policy" "api_security_policy" {
   project     = var.project_id
   description = "Security policy for TellMe API with EU geo-restriction, DDoS protection and WAF rules"
 
-  # BLOCK NON-EUROPEAN TRAFFIC FIRST (so EU traffic continues to other rules)
+  # BLOCK NON-EUROPEAN TRAFFIC
   rule {
-    action   = "deny_403"
+    action   = "deny(403)"
     priority = "100"
     match {
       expr {
@@ -21,24 +21,24 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block traffic from outside Europe"
   }
 
-  # Block known malicious IPs and bot networks (within EU)
+  # Block known malicious IPs
   rule {
-    action   = "deny_403"
+    action   = "deny(403)"
     priority = "200"
     match {
       versioned_expr = "SRC_IPS_V1"
       config {
         src_ip_ranges = [
-          "185.220.100.0/22",  # Known Tor exit nodes range
-          "198.98.48.0/20",    # Known malicious ranges
-          "23.129.64.0/18"     # Common bot networks
+          "185.220.100.0/22",
+          "198.98.48.0/20",
+          "23.129.64.0/18"
         ]
       }
     }
     description = "Block known malicious IP ranges"
   }
 
-  # Enhanced rate limiting for processing endpoints (handles large files)
+  # Processing endpoints rate limit
   rule {
     action   = "throttle"
     priority = "1100"
@@ -84,9 +84,9 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-  # SQL Injection Protection
+  # SQL Injection
   rule {
-    action   = "deny_403"
+    action   = "deny(403)"
     priority = "1200"
     match {
       expr {
@@ -98,7 +98,7 @@ resource "google_compute_security_policy" "api_security_policy" {
 
   # XSS Protection
   rule {
-    action   = "deny_403"
+    action   = "deny(403)"
     priority = "1300"
     match {
       expr {
@@ -108,9 +108,9 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block cross-site scripting attempts"
   }
 
-  # Local File Inclusion (LFI) Protection
+  # LFI Protection
   rule {
-    action   = "deny_403"
+    action   = "deny(403)"
     priority = "1350"
     match {
       expr {
@@ -120,9 +120,9 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block local file inclusion attempts"
   }
 
-  # Remote Code Execution (RCE) Protection
+  # RCE Protection
   rule {
-    action   = "deny_403"
+    action   = "deny(403)"
     priority = "1360"
     match {
       expr {
@@ -132,21 +132,22 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block remote code execution attempts"
   }
 
-  # Block large request bodies (potential DoS) - except for processing endpoints
+  # Block large request bodies (FIXED: Uses Content-Length and 403)
   rule {
-    action   = "deny_413"
+    action   = "deny(403)"
     priority = "1400"
     match {
       expr {
-        expression = "request.body_size > 10485760 && !request.path.matches('/processing/v1/queue.*')"  # 10MB limit, except processing
+        # logic: has content-length AND length > 10MB AND NOT processing endpoint
+        expression = "has(request.headers['content-length']) && int(request.headers['content-length']) > 10485760 && !request.path.matches('/processing/v1/queue.*')"
       }
     }
     description = "Block requests with large bodies (except processing endpoints)"
   }
 
-  # Block requests with suspicious user agents (CASE INSENSITIVE)
+  # Block suspicious user agents
   rule {
-    action   = "deny_403"
+    action   = "deny(403)"
     priority = "1500"
     match {
       expr {
@@ -159,9 +160,9 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block requests from known scanning tools"
   }
 
-  # Allow only specific HTTP methods
+  # Allow only specific HTTP methods (FIXED: Returns 403 instead of 405)
   rule {
-    action   = "deny_405"
+    action   = "deny(403)"
     priority = "1600"
     match {
       expr {
@@ -171,9 +172,9 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block unsupported HTTP methods"
   }
 
-  # Block requests without proper headers for API calls (excluding OPTIONS for CORS)
+  # Block requests without proper headers (FIXED: Returns 403 instead of 400)
   rule {
-    action   = "deny_400"
+    action   = "deny(403)"
     priority = "1700"
     match {
       expr {
@@ -186,10 +187,10 @@ resource "google_compute_security_policy" "api_security_policy" {
         EOF
       }
     }
-    description = "Require proper Content-Type for API requests (excluding CORS preflight)"
+    description = "Require proper Content-Type for API requests"
   }
 
-  # DEFAULT RULE - ALLOW (traffic has passed all security checks)
+  # DEFAULT ALLOW
   rule {
     action   = "allow"
     priority = "2147483647"
@@ -199,7 +200,7 @@ resource "google_compute_security_policy" "api_security_policy" {
         src_ip_ranges = ["*"]
       }
     }
-    description = "Default allow rule - traffic has passed all security checks"
+    description = "Default allow rule"
   }
 
   # Enable adaptive protection for DDoS
