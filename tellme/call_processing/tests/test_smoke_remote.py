@@ -433,6 +433,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs()
 
+    @pytest.mark.skip(reason="WebSocket connections not supported by Google Cloud API Gateway")
     def test_smoke_audiohook_with_logs(self):
         """
         Trigger the /process endpoint, this time using the Audiohook emulator
