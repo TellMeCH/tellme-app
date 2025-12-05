@@ -35,4 +35,5 @@ module "api_revision" {
   admin_password        = var.admin_password
   app_username          = var.app_username
   app_password          = var.app_password
+  api_domain            = var.api_domain
 }
