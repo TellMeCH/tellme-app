@@ -316,7 +316,8 @@ def mock_litellm_meta_summarization():
                     "Causes for Dissatisfaction": "• Long wait times\\n• Complex billing processes",
                     "Causes for Engagement": "• Helpful agent responses\\n• Quick issue resolution",
                     "Suggested Actions": "• Reduce wait times\\n• Simplify billing processes"
-                }"""
+                }""",
+                refusal=None
             ))
         ]
         mock_chat_completion.usage = MagicMock(
