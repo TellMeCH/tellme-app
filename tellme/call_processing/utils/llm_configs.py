@@ -1,6 +1,19 @@
+# API Retry Configuration
+API_MAX_RETRIES: int = 5
+API_BASE_DELAY: float = 5.0
+API_BACKOFF_FACTOR: int = 2
+
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
-ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
-CUSTOMER_IDENTIFICATION_METHOD_CHOICES = [('enrichment', 'Enrichment'), ('redaction', 'Redaction')]
+
+# Transcription Model Names
+TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
+TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
+
+DIARIZATION_CONFIG = {
+    "model": "vertex_ai/gemini-2.0-flash-001",
+    "fallback_model": "openai/gpt-4o-mini",
+    "temperature": 0.2
+}
 
 DIARIZATION_PROMPT = """
     You are a helpful diarization assistant, working with transcribed calls between TWO speakers.
@@ -20,10 +33,8 @@ DIARIZATION_PROMPT = """
     'Speaker 0' or 'Speaker 1' as you see fit.
 """
 
-DIARIZATION_CONFIG = {
-    "model": "gemini-2.0-flash-001",
-    "temperature": 0.2
-}
+ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
+CUSTOMER_IDENTIFICATION_METHOD_CHOICES = [('enrichment', 'Enrichment'), ('redaction', 'Redaction')]
 
 ENRICHMENT_PIPELINE = [
     {
@@ -255,6 +266,9 @@ ENRICHMENT_PIPELINE = [
         }
     }
 ]
+
+# Meta-summarization fallback model (Gemini backup for OpenAI)
+META_SUMMARIZATION_MODEL_GEMINI: str = 'gemini-2.0-flash-001'
 
 SUMMARIZER_PROMPTS = {
     'summary_mining': """

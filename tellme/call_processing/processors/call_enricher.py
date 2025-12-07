@@ -98,7 +98,7 @@ class CallEnricher:
             system_message = self.enrichment_prompts[i].compile(**relevant_data)
 
             # Get LiteLLM fallback configuration
-            litellm_config = get_enrichment_config(enrichment_method, step['name'])
+            litellm_config = get_enrichment_config(enrichment_method, step['name'], self.enrichment_prompts[i])
 
             # Execute with LiteLLM fallbacks (retries are handled by LiteLLM)
             response, input_tokens, output_tokens = self._enrich_with_litellm(

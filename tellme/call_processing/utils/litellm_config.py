@@ -9,7 +9,12 @@ fallback behavior and observability.
 import os
 import litellm
 from django.conf import settings
-from .llm_configs import ENRICHMENT_PIPELINE, DIARIZATION_CONFIG, SUMMARIZER_CONFIGS
+from .llm_configs import (
+    ENRICHMENT_PIPELINE,
+    DIARIZATION_CONFIG,
+    SUMMARIZER_CONFIGS,
+    META_SUMMARIZATION_MODEL_GEMINI
+)
 
 
 def setup_litellm():
@@ -107,13 +112,15 @@ def _add_additional_properties_false(schema):
     return schema
 
 
-def get_enrichment_config(enrichment_method: str, step_name: str):
+def get_enrichment_config(enrichment_method: str, step_name: str, enrichment_prompt=None):
     """
     Get the appropriate fallback configuration for enrichment steps.
+    Uses Langfuse prompt config if available, otherwise falls back to ENRICHMENT_PIPELINE.
 
     Args:
         enrichment_method (str): Preferred method ('openai' or 'vertexai')
         step_name (str): Name of the enrichment step
+        enrichment_prompt: Optional Langfuse prompt object
 
     Returns:
         dict: LiteLLM fallback configuration
@@ -127,6 +134,14 @@ def get_enrichment_config(enrichment_method: str, step_name: str):
 
     if not step_config:
         raise ValueError(f"No configuration found for enrichment step: {step_name}")
+
+    # If Langfuse prompt provided and not fallback, use its config
+    if enrichment_prompt and not enrichment_prompt.is_fallback:
+        # Create modified step_config with Langfuse config
+        step_config = {
+            "name": step_config["name"],
+            "config": enrichment_prompt.config
+        }
 
     models = _convert_enrichment_config_to_litellm(step_config)
 
@@ -145,32 +160,51 @@ def get_enrichment_config(enrichment_method: str, step_name: str):
     return {"model": models}
 
 
-def get_diarization_config():
+def get_diarization_config(diarization_prompt):
     """
     Get the fallback configuration for diarization.
+    Uses Langfuse prompt config if available, otherwise falls back to DIARIZATION_CONFIG.
+
+    Args:
+        diarization_prompt: Langfuse prompt object
 
     Returns:
         dict: LiteLLM fallback configuration
     """
+    # Determine base config (Langfuse or fallback)
+    if diarization_prompt.is_fallback:
+        base_config = DIARIZATION_CONFIG
+    else:
+        base_config = diarization_prompt.config
+
+    # Extract values with fallback defaults
+    primary_model = base_config.get('model', DIARIZATION_CONFIG['model'])
+    fallback_model = base_config.get('fallback_model', DIARIZATION_CONFIG['fallback_model'])
+    temperature = base_config.get('temperature', DIARIZATION_CONFIG['temperature'])
+
     models = [
         {
-            "model": f"vertex_ai/{DIARIZATION_CONFIG['model']}",
-            "temperature": DIARIZATION_CONFIG["temperature"]
+            "model": primary_model,
+            "temperature": temperature
         },
         {
-            "model": "openai/gpt-4o-mini",
-            "temperature": DIARIZATION_CONFIG["temperature"]
+            "model": fallback_model,
+            "temperature": temperature
         }
     ]
 
     return {"model": models}
 
 
-def get_meta_summarization_config(prompt_category: str):
+def get_meta_summarization_config(meta_prompt, prompt_category: str):
     """
     Get the fallback configuration for meta summarization.
+    Uses Langfuse prompt config if available, otherwise falls back to SUMMARIZER_CONFIGS.
+    Primary: OpenAI
+    Fallback: Gemini (from META_SUMMARIZATION_MODEL_GEMINI)
 
     Args:
+        meta_prompt: Langfuse prompt object
         prompt_category (str): Category of summarization prompt
 
     Returns:
@@ -179,28 +213,33 @@ def get_meta_summarization_config(prompt_category: str):
     if prompt_category not in SUMMARIZER_CONFIGS:
         raise ValueError(f"No configuration found for meta summarization category: {prompt_category}")
 
-    config = SUMMARIZER_CONFIGS[prompt_category]
+    # Determine base config (Langfuse or fallback)
+    if meta_prompt.is_fallback:
+        base_config = SUMMARIZER_CONFIGS[prompt_category]
+    else:
+        base_config = meta_prompt.config
 
-    # OpenAI model
-    openai_params = {k: v for k, v in config.items() if k != "model"}
+    # Extract model with fallback default
+    primary_model = base_config.get('model', SUMMARIZER_CONFIGS[prompt_category]['model'])
+
+    # OpenAI model (primary) - with strict mode support
+    openai_params = {k: v for k, v in base_config.items() if k != "model"}
     # Add additionalProperties: false for OpenAI (required for strict mode)
     if "response_format" in openai_params:
         schema = openai_params["response_format"]["json_schema"]["schema"]
         _add_additional_properties_false(schema)
 
-    # VertexAI model
-    vertexai_params = {k: v for k, v in config.items() if k != "model"}
-    # Remove strict mode for Vertex AI
-    if "response_format" in vertexai_params:
-        vertexai_params["response_format"]["json_schema"].pop("strict", None)
-
-    # LiteLLM fallback format: each model entry has model + params
-    openai_entry = {"model": f"openai/{config['model']}"}
+    openai_entry = {"model": f"openai/{primary_model}"}
     openai_entry.update(openai_params)
 
-    vertexai_entry = {"model": "vertex_ai/gemini-2.0-flash-001"}
-    vertexai_entry.update(vertexai_params)
+    # Gemini model (fallback) - without strict mode
+    gemini_params = {k: v for k, v in base_config.items() if k != "model"}
+    if "response_format" in gemini_params:
+        gemini_params["response_format"]["json_schema"].pop("strict", None)
 
-    models = [openai_entry, vertexai_entry]
+    gemini_entry = {"model": f"vertex_ai/{META_SUMMARIZATION_MODEL_GEMINI}"}
+    gemini_entry.update(gemini_params)
+
+    models = [openai_entry, gemini_entry]
 
     return {"model": models}
