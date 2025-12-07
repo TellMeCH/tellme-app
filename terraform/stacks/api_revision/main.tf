@@ -98,18 +98,19 @@ module "cloud_run_v2" {
       env_vars = {
         GOOGLE_CLOUD_PROJECT     = var.project_id
         REGION                   = var.region
-        TELLME_ENV              = var.tellme_env
-        DEBUG                   = "0"
-        SETTINGS_NAME           = var.settings_name
-        SQL_INSTANCE_NAME       = var.sql_instance_name
-        DATABASE_NAME           = var.database_name
-        GS_BUCKET_NAME          = google_storage_bucket.media_bucket.name
-        PROCESSING_QUEUE_NAME  = module.tasks.call_processing_queue_name
+        TELLME_ENV               = var.tellme_env
+        DEBUG                    = "0"
+        SETTINGS_NAME            = var.settings_name
+        SQL_INSTANCE_NAME        = var.sql_instance_name
+        DATABASE_NAME            = var.database_name
+        GS_BUCKET_NAME           = google_storage_bucket.media_bucket.name
+        PROCESSING_QUEUE_NAME    = module.tasks.call_processing_queue_name
         SUMMARIZATION_QUEUE_NAME = module.tasks.summarization_queue_name
-        CALL_PROCESSING_BUCKET  = var.call_processing_bucket
-        FRONTEND_PATH           = var.frontend_path
+        CALL_PROCESSING_BUCKET   = var.call_processing_bucket
+        FRONTEND_PATH            = var.frontend_path
         CALL_PROCESSING_ENDPOINT = "None"
         SUMMARIZATION_ENDPOINT   = "None"
+        SERVICE_ACCOUNT_EMAIL    = google_service_account.app.email
       }
     }
   ]

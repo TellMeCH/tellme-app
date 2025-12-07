@@ -61,6 +61,13 @@ resource "google_project_iam_member" "runtime_cloudtasks_viewer" {
   member  = "serviceAccount:${google_service_account.app.email}"
 }
 
+# Allow the App Service Account to impersonate itself (to generate OIDC tokens)
+resource "google_service_account_iam_member" "app_impersonates_self" {
+  service_account_id = google_service_account.app.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.app.email}"
+}
+
 # DLP user
 resource "google_project_iam_member" "runtime_dlp_user" {
   project = var.project_id
