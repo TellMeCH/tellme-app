@@ -153,7 +153,8 @@ def add_google_cloud_extensions(schema):
         'backends': {
             'cloud-run-backend': {
                 'address': '${cloud_run_url}',
-                'deadline': 60
+                'deadline': 60,
+                'jwt_audience': '${cloud_run_url}'
             }
         }
     }
