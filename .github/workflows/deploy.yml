@@ -20,6 +20,7 @@ jobs:
     outputs:
       api_gateway_url: ${{ steps.terraform_apply.outputs.api_gateway_url }}
       cloud_run_url: ${{ steps.terraform_apply.outputs.cloud_run_url }}
+      load_balancer_url: ${{ steps.terraform_apply.outputs.load_balancer_url }}
     env:
       GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
       REGION: ${{ secrets.GCP_PROJECT_REGION }}
@@ -194,11 +195,11 @@ jobs:
         id: terraform_apply
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: |
-          API_GATEWAY_URL=$(terraform output -raw api_gateway_url)
           CLOUD_RUN_URL=$(terraform output -raw cloud_run_service_uri)
-          echo "api_gateway_url=$API_GATEWAY_URL" >> $GITHUB_OUTPUT
+          LOAD_BALANCER_URL=$(terraform output -raw load_balancer_url)
           echo "cloud_run_url=$CLOUD_RUN_URL" >> $GITHUB_OUTPUT
-          echo "API Gateway URL: $API_GATEWAY_URL"
+          echo "load_balancer_url=$LOAD_BALANCER_URL" >> $GITHUB_OUTPUT
+          echo "Load Balancer URL: $LOAD_BALANCER_URL"
 
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true' || env.RUN_MIGRATIONS == 'true'
@@ -349,7 +350,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
-          CLOUD_RUN_HOST: ${{ needs.deploy.outputs.api_gateway_url }}
+          CLOUD_RUN_HOST: ${{ needs.deploy.outputs.load_balancer_url }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         run: |
           uv run pytest -v ./tellme/call_processing/tests/test_smoke_remote.py
