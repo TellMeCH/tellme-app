@@ -253,8 +253,7 @@ resource "google_compute_backend_service" "api_backend" {
   }
 
   custom_request_headers = [
-    "X-Forwarded-Proto: https",
-    "X-Forwarded-For: {client_ip}"
+    "X-Forwarded-Proto: https"
   ]
 }
 
