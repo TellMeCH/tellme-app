@@ -89,7 +89,7 @@ def _convert_enrichment_config_to_litellm(step_config):
         _add_additional_properties_false(schema)
 
     # LiteLLM fallback format: each model entry has model + params
-    openai_entry = {"model": f"openai/{openai_model}"}
+    openai_entry = {"model": openai_model}
     openai_entry.update(openai_litellm_params)
     models.append(openai_entry)
 
@@ -102,7 +102,7 @@ def _convert_enrichment_config_to_litellm(step_config):
         vertexai_litellm_params["response_format"]["json_schema"].pop("strict", None)
 
     # LiteLLM fallback format: each model entry has model + params
-    vertexai_entry = {"model": f"vertex_ai/{vertexai_model}"}
+    vertexai_entry = {"model": vertexai_model}
     vertexai_entry.update(vertexai_litellm_params)
     models.append(vertexai_entry)
 
@@ -177,7 +177,19 @@ def get_enrichment_config(enrichment_method: str, step_name: str, enrichment_pro
         vertex_models = [m for m in models if m["model"].startswith("vertex_ai")]
         models = openai_models + vertex_models
 
-    return {"model": models}
+    # LiteLLM expects: model as string, fallbacks as list
+    # Extract model name and params from first entry
+    primary = models[0].copy()
+    primary_model = primary.pop("model")
+    fallback_models = models[1:]
+
+    config = {
+        "model": primary_model,
+        "fallbacks": fallback_models
+    }
+    config.update(primary)  # Add other params like temperature, response_format, etc.
+
+    return config
 
 
 def get_diarization_config(diarization_prompt):
@@ -218,18 +230,17 @@ def get_diarization_config(diarization_prompt):
             f"Expected format: 'provider/model' (e.g., 'vertex_ai/gemini-2.0-flash-001' or 'openai/gpt-4o-mini')"
         )
 
-    models = [
-        {
-            "model": primary_model,
-            "temperature": temperature
-        },
-        {
-            "model": fallback_model,
-            "temperature": temperature
-        }
-    ]
-
-    return {"model": models}
+    # LiteLLM expects: model as string, fallbacks as list
+    return {
+        "model": primary_model,
+        "temperature": temperature,
+        "fallbacks": [
+            {
+                "model": fallback_model,
+                "temperature": temperature
+            }
+        ]
+    }
 
 
 def get_meta_summarization_config(meta_prompt, prompt_category: str):
@@ -269,24 +280,27 @@ def get_meta_summarization_config(meta_prompt, prompt_category: str):
             f"Expected format: 'provider/model' (e.g., 'openai/gpt-4o-mini' or 'vertex_ai/gemini-2.0-flash-001')"
         )
 
-    # OpenAI model (primary) - with strict mode support
-    openai_params = {k: v for k, v in base_config.items() if k != "model"}
+    # Extract primary model params (with strict mode for OpenAI)
+    primary_params = {k: v for k, v in base_config.items() if k != "model"}
     # Add additionalProperties: false for OpenAI (required for strict mode)
-    if "response_format" in openai_params:
-        schema = openai_params["response_format"]["json_schema"]["schema"]
+    if "response_format" in primary_params:
+        schema = primary_params["response_format"]["json_schema"]["schema"]
         _add_additional_properties_false(schema)
 
-    openai_entry = {"model": f"openai/{primary_model}"}
-    openai_entry.update(openai_params)
-
-    # Gemini model (fallback) - without strict mode
+    # Gemini fallback params (without strict mode)
     gemini_params = {k: v for k, v in base_config.items() if k != "model"}
     if "response_format" in gemini_params:
         gemini_params["response_format"]["json_schema"].pop("strict", None)
 
-    gemini_entry = {"model": f"vertex_ai/{META_SUMMARIZATION_MODEL_GEMINI}"}
-    gemini_entry.update(gemini_params)
+    gemini_fallback = {"model": f"{META_SUMMARIZATION_MODEL_GEMINI}"}
+    gemini_fallback.update(gemini_params)
 
-    models = [openai_entry, gemini_entry]
+    # LiteLLM expects: model as string, fallbacks as list
+    # primary_model already has provider prefix (validated above)
+    config = {
+        "model": primary_model,
+        "fallbacks": [gemini_fallback]
+    }
+    config.update(primary_params)
 
-    return {"model": models}
+    return config
