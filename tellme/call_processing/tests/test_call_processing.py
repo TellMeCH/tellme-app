@@ -424,8 +424,7 @@ class TestCallEnricher:
         def track_model_side_effect(*args, **kwargs):
             # Check which model is being attempted first
             model_config = kwargs.get("model", [])
-            if isinstance(model_config, list) and len(model_config) > 0:
-                models_used.append(model_config[0]["model"])
+            models_used.append(model_config)
 
             # Return success response
             mock_completion = MagicMock()
@@ -454,7 +453,7 @@ class TestCallEnricher:
                 })
             ))]
             mock_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=10)
-            mock_completion.model = model_config[0]["model"] if model_config else "unknown"
+            mock_completion.model = model_config if model_config else "unknown"
             return mock_completion
 
         with patch("litellm.completion", side_effect=track_model_side_effect):

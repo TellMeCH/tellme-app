@@ -229,19 +229,14 @@ def mock_litellm_setup():
 def mock_litellm():
     """
     Mocks LiteLLM completion for BOTH enrichment and diarization.
-    Distinguishes between them based on presence of response_format in model config.
+    Distinguishes between them based on presence of response_format parameter.
     """
     with patch("litellm.completion") as mock_completion:
         def completion_side_effect(*args, **kwargs):
             # Check if this is a structured output call (enrichment) or plain text (diarization)
-            # LiteLLM passes model as a list of fallback configs
-            model = kwargs.get("model")
-            is_structured = False
-
-            if isinstance(model, list) and len(model) > 0:
-                # Check if first model in fallback list has response_format
-                first_model = model[0]
-                is_structured = "response_format" in first_model
+            # With new fallback format: model is string, fallbacks is list
+            # Enrichment has response_format in kwargs, diarization doesn't
+            is_structured = "response_format" in kwargs
 
             metadata = kwargs.get("metadata", {})
             step_name = metadata.get("step_name", "unknown")
@@ -280,7 +275,7 @@ def mock_litellm():
 
             mock_chat_completion = MagicMock()
             mock_chat_completion.choices = [
-                MagicMock(message=MagicMock(content=response_content))
+                MagicMock(message=MagicMock(content=response_content, refusal=None))
             ]
             mock_chat_completion.usage = MagicMock(
                 prompt_tokens=50,
