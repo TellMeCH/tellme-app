@@ -56,11 +56,31 @@ def setup_litellm():
 
 
 def _convert_enrichment_config_to_litellm(step_config):
-    """Convert enrichment pipeline config to LiteLLM format."""
+    """
+    Convert enrichment pipeline config to LiteLLM format.
+
+    Raises:
+        ValueError: If config is missing required model fields
+    """
     models = []
 
+    # Validate config structure
+    if "config" not in step_config:
+        raise ValueError(f"Enrichment config error: missing 'config' field in step '{step_config.get('name', 'unknown')}'")
+
+    config = step_config["config"]
+    if "model" not in config:
+        raise ValueError(f"Enrichment config error: missing 'model' field in step '{step_config.get('name', 'unknown')}'")
+
+    if not isinstance(config["model"], dict) or "openai" not in config["model"] or "vertexai" not in config["model"]:
+        raise ValueError(
+            f"Enrichment config error in step '{step_config.get('name', 'unknown')}': "
+            f"'model' must be a dict with 'openai' and 'vertexai' keys. "
+            f"Got: {config.get('model')}"
+        )
+
     # OpenAI model
-    openai_config = step_config["config"].copy()
+    openai_config = config.copy()
     openai_model = openai_config["model"]["openai"]
     openai_litellm_params = {k: v for k, v in openai_config.items() if k != "model"}
     # Add additionalProperties: false for OpenAI (required for strict mode)
@@ -74,7 +94,7 @@ def _convert_enrichment_config_to_litellm(step_config):
     models.append(openai_entry)
 
     # VertexAI model
-    vertexai_config = step_config["config"].copy()
+    vertexai_config = config.copy()
     vertexai_model = vertexai_config["model"]["vertexai"]
     vertexai_litellm_params = {k: v for k, v in vertexai_config.items() if k != "model"}
     # Convert response_format for Vertex AI (remove strict mode)
@@ -170,6 +190,9 @@ def get_diarization_config(diarization_prompt):
 
     Returns:
         dict: LiteLLM fallback configuration
+
+    Raises:
+        ValueError: If model names don't include provider prefix (e.g., 'openai/', 'vertex_ai/')
     """
     # Determine base config (Langfuse or fallback)
     if diarization_prompt.is_fallback:
@@ -181,6 +204,19 @@ def get_diarization_config(diarization_prompt):
     primary_model = base_config.get('model', DIARIZATION_CONFIG['model'])
     fallback_model = base_config.get('fallback_model', DIARIZATION_CONFIG['fallback_model'])
     temperature = base_config.get('temperature', DIARIZATION_CONFIG['temperature'])
+
+    # Validate provider prefixes are present
+    if '/' not in primary_model:
+        raise ValueError(
+            f"Diarization config error: primary model '{primary_model}' missing provider prefix. "
+            f"Expected format: 'provider/model' (e.g., 'vertex_ai/gemini-2.0-flash-001' or 'openai/gpt-4o-mini')"
+        )
+
+    if '/' not in fallback_model:
+        raise ValueError(
+            f"Diarization config error: fallback model '{fallback_model}' missing provider prefix. "
+            f"Expected format: 'provider/model' (e.g., 'vertex_ai/gemini-2.0-flash-001' or 'openai/gpt-4o-mini')"
+        )
 
     models = [
         {
@@ -209,6 +245,9 @@ def get_meta_summarization_config(meta_prompt, prompt_category: str):
 
     Returns:
         dict: LiteLLM fallback configuration
+
+    Raises:
+        ValueError: If model name doesn't include provider prefix (e.g., 'openai/', 'vertex_ai/')
     """
     if prompt_category not in SUMMARIZER_CONFIGS:
         raise ValueError(f"No configuration found for meta summarization category: {prompt_category}")
@@ -221,6 +260,14 @@ def get_meta_summarization_config(meta_prompt, prompt_category: str):
 
     # Extract model with fallback default
     primary_model = base_config.get('model', SUMMARIZER_CONFIGS[prompt_category]['model'])
+
+    # Validate provider prefix is present
+    if '/' not in primary_model:
+        raise ValueError(
+            f"Meta-summarization config error for category '{prompt_category}': "
+            f"primary model '{primary_model}' missing provider prefix. "
+            f"Expected format: 'provider/model' (e.g., 'openai/gpt-4o-mini' or 'vertex_ai/gemini-2.0-flash-001')"
+        )
 
     # OpenAI model (primary) - with strict mode support
     openai_params = {k: v for k, v in base_config.items() if k != "model"}
