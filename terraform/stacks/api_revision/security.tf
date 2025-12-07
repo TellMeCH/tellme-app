@@ -236,8 +236,7 @@ resource "google_compute_backend_service" "api_backend" {
   enable_cdn                      = false
   load_balancing_scheme           = "EXTERNAL_MANAGED"
   protocol                        = "HTTPS"
-  port_name                       = "https"
-  timeout_sec                     = 30
+  timeout_sec                     = 60
 
   # TODO: Remove comment once quota is increased
   # security_policy = google_compute_security_policy.api_security_policy.id
@@ -262,7 +261,7 @@ resource "google_compute_region_network_endpoint_group" "api_gateway_neg" {
   provider              = google-beta
   name                  = "tellme-api-gateway-neg"
   project               = var.project_id
-  region                = var.region
+  region                = var.gateway_region
   network_endpoint_type = "SERVERLESS"
 
   serverless_deployment {
@@ -354,6 +353,12 @@ resource "google_compute_ssl_policy" "api_ssl_policy" {
   min_tls_version = "TLS_1_2"
 }
 
+# Static Global IP for Forwarding Rule
+resource "google_compute_global_address" "api_ip" {
+  name    = "tellme-api-ip"
+  project = var.project_id
+}
+
 # Global Forwarding Rule (Entry point)
 resource "google_compute_global_forwarding_rule" "api_forwarding_rule" {
   name                  = "tellme-api-forwarding-rule"
@@ -361,8 +366,9 @@ resource "google_compute_global_forwarding_rule" "api_forwarding_rule" {
   target                = google_compute_target_https_proxy.api_https_proxy.id
   port_range            = "443"
   load_balancing_scheme = "EXTERNAL_MANAGED"
+  ip_address = google_compute_global_address.api_ip.id
 
-  depends_on = [google_compute_target_https_proxy.api_https_proxy]
+  depends_on = [google_compute_target_https_proxy.api_https_proxy, google_compute_global_address.api_ip]
 }
 
 # Redirect HTTP to HTTPS
