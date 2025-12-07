@@ -51,7 +51,7 @@ output "api_gateway_url" {
 # Load Balancer outputs
 output "load_balancer_ip" {
   description = "IP address of the Load Balancer"
-  value       = google_compute_global_forwarding_rule.api_forwarding_rule.ip_address
+  value       = google_compute_global_address.api_ip.address
 }
 
 output "load_balancer_url" {

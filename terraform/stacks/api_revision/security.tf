@@ -403,3 +403,12 @@ resource "google_compute_global_forwarding_rule" "api_http_forwarding_rule" {
   port_range            = "80"
   load_balancing_scheme = "EXTERNAL_MANAGED"
 }
+
+# The Complete Flow:
+# 1. Customer arrives at api.tell-me.ch (thanks to Cloudflare DNS)
+# 2. Neon sign (Forwarding Rule) directs them to IP address
+# 3. Fancy doorman (HTTPS Proxy) checks their SSL credentials
+# 4. Seating chart (URL Map) decides which kitchen (Backend Service)
+# 5. Kitchen manager (Backend Service) picks a chef from the list (NEG)
+# 6. Chef (API Gateway) actually makes the food
+# 7. Bouncer (Cloud Armour) kicks out troublemakers throughout
