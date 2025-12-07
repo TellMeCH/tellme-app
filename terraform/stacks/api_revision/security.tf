@@ -236,7 +236,6 @@ resource "google_compute_backend_service" "api_backend" {
   enable_cdn                      = false
   load_balancing_scheme           = "EXTERNAL_MANAGED"
   protocol                        = "HTTPS"
-  timeout_sec                     = 60
 
   # TODO: Remove comment once quota is increased
   # security_policy = google_compute_security_policy.api_security_policy.id
