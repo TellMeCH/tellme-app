@@ -15,8 +15,8 @@ class TestCallProcessingPipeline:
     """
 
     @pytest.fixture
-    def pipeline(self, mock_deepgram, mock_groq, mock_litellm_enrichment, mock_langfuse, mock_dlp, mock_vertexai, mock_gcs_utils,
-                 mock_call_valuer, mock_litellm_setup):
+    def pipeline(self, mock_pydub, mock_db_handler, mock_deepgram, mock_groq, mock_litellm, mock_langfuse,
+                 mock_dlp, mock_gcs_utils, mock_call_valuer, mock_litellm_setup):
         return CallProcessingPipeline()
 
     def test_define_session_id(self, pipeline):
@@ -38,9 +38,7 @@ class TestCallProcessingPipeline:
         session_id2 = pipeline.define_session_id(file_metadata)
         # Note: session IDs will be different due to timestamp inclusion
 
-    def test_pipeline_with_customer_id(
-            self, pipeline, mock_deepgram, mock_litellm_enrichment, mock_dlp, mock_pydub, mock_db_handler
-    ):
+    def test_pipeline_with_customer_id(self, pipeline):
         """
         Test full pipeline execution when customer_id is provided.
         """
@@ -61,8 +59,7 @@ class TestCallProcessingPipeline:
         assert "title" in result
         assert "summary" in result
 
-    def test_pipeline_without_customer_id(self, pipeline, mock_deepgram, mock_litellm_enrichment, mock_dlp, mock_pydub,
-                                          mock_db_handler):
+    def test_pipeline_without_customer_id(self, pipeline, mock_litellm):
         """
         Test full pipeline execution when customer_id is not provided.
         """
@@ -98,7 +95,7 @@ class TestCallProcessingPipeline:
             mock_chat_completion.model = "openai/gpt-4o-mini"
             return mock_chat_completion
 
-        mock_litellm_enrichment.side_effect = custom_side_effect
+        mock_litellm.side_effect = custom_side_effect
 
         result = pipeline(
             file_name="test.wav",
@@ -124,7 +121,8 @@ class TestCallTranscriber:
     """
 
     @pytest.fixture
-    def transcriber(self, mock_deepgram, mock_groq, mock_vertexai, mock_langfuse):
+    def transcriber(self, mock_gcs_utils, mock_pydub, mock_db_handler, mock_deepgram, mock_groq, mock_langfuse,
+                    mock_litellm, mock_litellm_setup):
         return CallTranscriber()
 
     def test_cut_into_chunks_single_chunk(self, transcriber, mock_pydub):
@@ -138,7 +136,7 @@ class TestCallTranscriber:
         assert len(chunks) == 1
         assert total_duration == 300000
 
-    def test_cut_into_chunks_multiple_chunks(self, transcriber, mock_pydub):
+    def test_cut_into_chunks_multiple_chunks(self, transcriber):
         """
         If the audio length is 600000 ms (10min), we should get 2 chunks (chunk_size=5min).
         """
@@ -148,9 +146,7 @@ class TestCallTranscriber:
         assert total_duration == 600000
 
 
-    def test_fallback_transcription_if_deepgram_fails(
-        self, transcriber, mock_deepgram, mock_groq, mock_pydub, mock_gcs_utils
-    ):
+    def test_fallback_transcription_if_deepgram_fails(self, transcriber, mock_deepgram, mock_groq):
         """
         Ensure that if Deepgram fails on any chunk, the transcriber falls back to Groq.
         """
@@ -175,9 +171,7 @@ class TestCallTranscriber:
         assert language
         assert duration > 0
 
-    def test_transcription_method_deepgram_used(
-        self, transcriber, mock_deepgram, mock_groq, mock_gcs_utils, mock_pydub
-    ):
+    def test_transcription_method_deepgram_used(self, transcriber, mock_deepgram, mock_groq, mock_litellm):
         """
         Ensure Deepgram is used as the primary transcription method when explicitly specified.
         """
@@ -185,12 +179,13 @@ class TestCallTranscriber:
 
         assert mock_deepgram.listen.rest.v("1").transcribe_file.called
         assert not mock_groq.audio.transcriptions.create.called
+        assert not mock_litellm.called
         assert transcript
         assert language
         assert duration > 0
 
     def test_transcription_method_groq_used(
-        self, transcriber, mock_deepgram, mock_groq, mock_gcs_utils, mock_pydub
+        self, transcriber, mock_groq, mock_deepgram, mock_litellm, mock_litellm_setup
     ):
         """
         Ensure Groq is used as the primary transcription method when explicitly specified.
@@ -199,6 +194,7 @@ class TestCallTranscriber:
 
         assert mock_groq.audio.transcriptions.create.called
         assert not mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert mock_litellm.called  # Diarization uses litellm.completion
         assert transcript
         assert language
         assert duration > 0
@@ -312,10 +308,10 @@ class TestCallEnricher:
     """
 
     @pytest.fixture
-    def enricher(self, mock_litellm_enrichment, mock_langfuse, mock_litellm_setup):
+    def enricher(self, mock_db_handler, mock_litellm, mock_langfuse, mock_litellm_setup):
         return CallEnricher()
 
-    def test_enrich_recording_with_customer_id(self, enricher, mock_litellm_enrichment, mock_db_handler):
+    def test_enrich_recording_with_customer_id(self, enricher, mock_db_handler):
         """
         Test enrichment process when customer_id is provided (via enrichment).
         """
@@ -347,7 +343,7 @@ class TestCallEnricher:
         assert isinstance(input_tokens, int)
         assert isinstance(output_tokens, int)
 
-    def test_enrich_recording_structure_compliance(self, enricher, mock_litellm_enrichment, mock_db_handler):
+    def test_enrich_recording_structure_compliance(self, enricher, mock_db_handler):
         """
         Test that enrichment response includes all expected fields with correct types.
         """
@@ -386,7 +382,7 @@ class TestCallEnricher:
         # Test sentiment range
         assert 1 <= result["sentiment"] <= 5
 
-    def test_enrichment_pipeline_steps(self, enricher, mock_litellm_enrichment, mock_db_handler):
+    def test_enrichment_pipeline_steps(self, enricher, mock_litellm, mock_db_handler):
         """
         Test that enrichment follows the ENRICHMENT_PIPELINE configuration.
         """
@@ -406,7 +402,7 @@ class TestCallEnricher:
 
         # Verify that LiteLLM was called for each step in the pipeline
         expected_steps = len(ENRICHMENT_PIPELINE)
-        assert mock_litellm_enrichment.call_count == expected_steps
+        assert mock_litellm.call_count == expected_steps
 
         # Verify the enrichment result structure
         assert "title" in result
@@ -414,9 +410,7 @@ class TestCallEnricher:
         assert "sentiment" in result
         assert "topics" in result
 
-    def test_fallback_enrichment_if_primary_fails(
-        self, enricher, mock_db_handler
-    ):
+    def test_fallback_enrichment_if_primary_fails(self, enricher, mock_db_handler):
         """
         Test that LiteLLM model preference ordering works correctly for fallbacks.
         """
@@ -491,7 +485,7 @@ class TestCallEnricher:
             for key in ("title", "summary", "sentiment", "topics"):
                 assert key in result
 
-    def test_enrich_recording_extracts_customer_data_from_redaction(self, enricher, mock_litellm_enrichment, mock_db_handler):
+    def test_enrich_recording_extracts_customer_data_from_redaction(self, enricher, mock_litellm, mock_db_handler):
         """
         Test that enrichment properly extracts and processes customer data when customer_info is provided via enrichment.
 
@@ -542,7 +536,7 @@ class TestCallEnricher:
             mock_chat_completion.model = "openai/gpt-4o-mini"
             return mock_chat_completion
 
-        mock_litellm_enrichment.side_effect = custom_side_effect
+        mock_litellm.side_effect = custom_side_effect
 
         transcript = "Agent: Hello. Customer: Hi, I'm Jane Smith, born March 22, 1985."
         redacted_transcript = "Agent: Hello. Customer: Hi, I'm [PERSON_NAME], born [DATE]."
@@ -580,7 +574,7 @@ class TestRevenueCalculation:
     """
 
     @pytest.fixture
-    def call_valuer(self, mock_call_valuer, mock_db_handler):
+    def call_valuer(self, setup_db, mock_call_valuer, mock_db_handler):
         """Create a CallValuer instance with mocked dependencies."""
         return CallValuer()
 

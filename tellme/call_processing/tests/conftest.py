@@ -168,8 +168,6 @@ def mock_vertexai():
         client = MagicMock()
         mock_client_cls.return_value = client
 
-        diarization_text = "Speaker 0: Diarized from Gemini\nSpeaker 1: Yes, indeed."
-
         enrichment_json = """{
             "title": "Test Call",
             "summary": "Short summary",
@@ -228,27 +226,28 @@ def mock_litellm_setup():
 
 
 @pytest.fixture
-def mock_litellm_enrichment():
+def mock_litellm():
     """
-    Mocks out LiteLLM completion for enrichment (structured JSON responses).
+    Mocks LiteLLM completion for BOTH enrichment and diarization.
+    Distinguishes between them based on presence of response_format in model config.
     """
     with patch("litellm.completion") as mock_completion:
         def completion_side_effect(*args, **kwargs):
-            # Determine response based on metadata or messages
+            # Check if this is a structured output call (enrichment) or plain text (diarization)
+            # LiteLLM passes model as a list of fallback configs
+            model = kwargs.get("model")
+            is_structured = False
+
+            if isinstance(model, list) and len(model) > 0:
+                # Check if first model in fallback list has response_format
+                first_model = model[0]
+                is_structured = "response_format" in first_model
+
             metadata = kwargs.get("metadata", {})
-            messages = kwargs.get("messages", [])
+            step_name = metadata.get("step_name", "unknown")
 
-            # Check if this is a diarization call (simpler text response)
-            system_message = ""
-            if messages and len(messages) > 0:
-                system_message = messages[0].get("content", "").lower()
-
-            if "diarization" in system_message or "speaker" in system_message:
-                # Diarization response (plain text)
-                response_content = "Speaker 0: Hello, how can I help you?\nSpeaker 1: I need assistance with my order."
-            else:
+            if is_structured:
                 # Enrichment response (structured JSON)
-                step_name = metadata.get("step_name", "unknown")
                 if step_name == "speaker_identification":
                     response_content = """{
                         "agent_speaker_labels": ["Speaker 0"],
@@ -275,6 +274,9 @@ def mock_litellm_enrichment():
                         "revenue_search_query": "men leather jackets",
                         "resolved": false
                     }"""
+            else:
+                # Diarization response (plain text)
+                response_content = "Speaker 0: Hello, how can I help you?\nSpeaker 1: I need assistance with my order."
 
             mock_chat_completion = MagicMock()
             mock_chat_completion.choices = [
@@ -282,10 +284,15 @@ def mock_litellm_enrichment():
             ]
             mock_chat_completion.usage = MagicMock(
                 prompt_tokens=50,
-                completion_tokens=10
+                completion_tokens=10,
+                total_tokens=60
             )
-            # Model used (varies based on fallback)
-            mock_chat_completion.model = "openai/gpt-4o-mini"
+            # Return appropriate model based on type
+            if is_structured:
+                mock_chat_completion.model = "openai/gpt-4o-mini"
+            else:
+                mock_chat_completion.model = "vertex_ai/gemini-2.0-flash-001"
+
             return mock_chat_completion
 
         mock_completion.side_effect = completion_side_effect
@@ -441,10 +448,10 @@ def mock_langfuse():
         mock_lf_instance = MagicMock()
         mock_lf_class.return_value = mock_lf_instance
 
-        # Mock prompts
+        # Mock prompts - always use fallback to ensure hardcoded configs are used
         mock_prompt = MagicMock()
-        mock_prompt.is_fallback = False
-        mock_prompt.config = ENRICHMENT_PIPELINE[0]['config'] if ENRICHMENT_PIPELINE else {}
+        mock_prompt.is_fallback = True  # Force use of hardcoded configs from llm_configs.py
+        mock_prompt.config = {}  # Not used when is_fallback=True
         mock_prompt.prompt = "Mock prompt text"
         mock_prompt.compile = MagicMock(return_value="Compiled mock prompt")
 
