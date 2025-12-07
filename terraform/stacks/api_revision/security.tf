@@ -4,213 +4,214 @@ provider "google-beta" {
 }
 
 # Cloud Armour Security Policy with EU geo-restriction
-resource "google_compute_security_policy" "api_security_policy" {
-  name        = "tellme-api-security-policy"
-  project     = var.project_id
-  description = "Security policy for TellMe API with EU geo-restriction, DDoS protection and WAF rules"
-
-  # BLOCK NON-EUROPEAN TRAFFIC
-  rule {
-    action   = "deny(403)"
-    priority = "100"
-    match {
-      expr {
-        expression = "!origin.region_code.matches('AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE|CH|NO|IS|LI|GB')"
-      }
-    }
-    description = "Block traffic from outside Europe"
-  }
-
-  # Block known malicious IPs
-  rule {
-    action   = "deny(403)"
-    priority = "200"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = [
-          "185.220.100.0/22",
-          "198.98.48.0/20",
-          "23.129.64.0/18"
-        ]
-      }
-    }
-    description = "Block known malicious IP ranges"
-  }
-
-  # Processing endpoints rate limit
-  rule {
-    action   = "throttle"
-    priority = "1100"
-    match {
-      expr {
-        expression = "request.path.matches('/processing/v1/.*')"
-      }
-    }
-    description = "Rate limiting for processing endpoints"
-
-    rate_limit_options {
-      conform_action = "allow"
-      exceed_action  = "deny(429)"
-      enforce_on_key = "IP"
-
-      rate_limit_threshold {
-        count        = 50
-        interval_sec = 60
-      }
-    }
-  }
-
-  # General API rate limiting
-  rule {
-    action   = "throttle"
-    priority = "1150"
-    match {
-      expr {
-        expression = "request.path.matches('/api/.*')"
-      }
-    }
-    description = "General API rate limiting"
-
-    rate_limit_options {
-      conform_action = "allow"
-      exceed_action  = "deny(429)"
-      enforce_on_key = "IP"
-
-      rate_limit_threshold {
-        count        = 300
-        interval_sec = 60
-      }
-    }
-  }
-
-  # SQL Injection
-  rule {
-    action   = "deny(403)"
-    priority = "1200"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('sqli-stable')"
-      }
-    }
-    description = "Block SQL injection attempts"
-  }
-
-  # XSS Protection
-  rule {
-    action   = "deny(403)"
-    priority = "1300"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('xss-stable')"
-      }
-    }
-    description = "Block cross-site scripting attempts"
-  }
-
-  # LFI Protection
-  rule {
-    action   = "deny(403)"
-    priority = "1350"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('lfi-stable')"
-      }
-    }
-    description = "Block local file inclusion attempts"
-  }
-
-  # RCE Protection
-  rule {
-    action   = "deny(403)"
-    priority = "1360"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('rce-stable')"
-      }
-    }
-    description = "Block remote code execution attempts"
-  }
-
-  # Block large request bodies (Uses Content-Length header)
-  rule {
-    action   = "deny(403)"
-    priority = "1400"
-    match {
-      expr {
-        # logic: has content-length AND length > 10MB AND NOT processing endpoint
-        expression = "has(request.headers['content-length']) && int(request.headers['content-length']) > 10485760 && !request.path.matches('/processing/v1/queue.*')"
-      }
-    }
-    description = "Block requests with large bodies (except processing endpoints)"
-  }
-
-  # Block suspicious user agents
-  rule {
-    action   = "deny(403)"
-    priority = "1500"
-    match {
-      expr {
-        expression = <<-EOF
-          has(request.headers['user-agent']) &&
-          request.headers['user-agent'].lower().matches('.*sqlmap.*|.*nikto.*|.*nessus.*|.*masscan.*|.*gobuster.*|.*dirb.*|.*burp.*')
-        EOF
-      }
-    }
-    description = "Block requests from known scanning tools"
-  }
-
-  # Allow only specific HTTP methods
-  rule {
-    action   = "deny(403)"
-    priority = "1600"
-    match {
-      expr {
-        expression = "!(request.method.matches('GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD'))"
-      }
-    }
-    description = "Block unsupported HTTP methods"
-  }
-
-  # Block requests without proper headers (FIXED: Returns 403 instead of 400)
-  rule {
-    action   = "deny(403)"
-    priority = "1700"
-    match {
-      expr {
-        expression = <<-EOF
-          request.path.matches('/api/.*') &&
-          request.method.matches('POST|PUT|PATCH') &&
-          !request.method.matches('OPTIONS') &&
-          (!has(request.headers['content-type']) ||
-           !request.headers['content-type'].matches('application/json.*|multipart/form-data.*'))
-        EOF
-      }
-    }
-    description = "Require proper Content-Type for API requests"
-  }
-
-  # DEFAULT ALLOW
-  rule {
-    action   = "allow"
-    priority = "2147483647"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = ["*"]
-      }
-    }
-    description = "Default allow rule"
-  }
-
-  # Enable adaptive protection for DDoS
-  adaptive_protection_config {
-    layer_7_ddos_defense_config {
-      enable          = true
-      rule_visibility = "STANDARD"
-    }
-  }
-}
+# TODO: Remove comment once quota is increased
+# resource "google_compute_security_policy" "api_security_policy" {
+#   name        = "tellme-api-security-policy"
+#   project     = var.project_id
+#   description = "Security policy for TellMe API with EU geo-restriction, DDoS protection and WAF rules"
+#
+#   # BLOCK NON-EUROPEAN TRAFFIC
+#   rule {
+#     action   = "deny(403)"
+#     priority = "100"
+#     match {
+#       expr {
+#         expression = "!origin.region_code.matches('AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE|CH|NO|IS|LI|GB')"
+#       }
+#     }
+#     description = "Block traffic from outside Europe"
+#   }
+#
+#   # Block known malicious IPs
+#   rule {
+#     action   = "deny(403)"
+#     priority = "200"
+#     match {
+#       versioned_expr = "SRC_IPS_V1"
+#       config {
+#         src_ip_ranges = [
+#           "185.220.100.0/22",
+#           "198.98.48.0/20",
+#           "23.129.64.0/18"
+#         ]
+#       }
+#     }
+#     description = "Block known malicious IP ranges"
+#   }
+#
+#   # Processing endpoints rate limit
+#   rule {
+#     action   = "throttle"
+#     priority = "1100"
+#     match {
+#       expr {
+#         expression = "request.path.matches('/processing/v1/.*')"
+#       }
+#     }
+#     description = "Rate limiting for processing endpoints"
+#
+#     rate_limit_options {
+#       conform_action = "allow"
+#       exceed_action  = "deny(429)"
+#       enforce_on_key = "IP"
+#
+#       rate_limit_threshold {
+#         count        = 50
+#         interval_sec = 60
+#       }
+#     }
+#   }
+#
+#   # General API rate limiting
+#   rule {
+#     action   = "throttle"
+#     priority = "1150"
+#     match {
+#       expr {
+#         expression = "request.path.matches('/api/.*')"
+#       }
+#     }
+#     description = "General API rate limiting"
+#
+#     rate_limit_options {
+#       conform_action = "allow"
+#       exceed_action  = "deny(429)"
+#       enforce_on_key = "IP"
+#
+#       rate_limit_threshold {
+#         count        = 300
+#         interval_sec = 60
+#       }
+#     }
+#   }
+#
+#   # SQL Injection
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1200"
+#     match {
+#       expr {
+#         expression = "evaluatePreconfiguredExpr('sqli-stable')"
+#       }
+#     }
+#     description = "Block SQL injection attempts"
+#   }
+#
+#   # XSS Protection
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1300"
+#     match {
+#       expr {
+#         expression = "evaluatePreconfiguredExpr('xss-stable')"
+#       }
+#     }
+#     description = "Block cross-site scripting attempts"
+#   }
+#
+#   # LFI Protection
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1350"
+#     match {
+#       expr {
+#         expression = "evaluatePreconfiguredExpr('lfi-stable')"
+#       }
+#     }
+#     description = "Block local file inclusion attempts"
+#   }
+#
+#   # RCE Protection
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1360"
+#     match {
+#       expr {
+#         expression = "evaluatePreconfiguredExpr('rce-stable')"
+#       }
+#     }
+#     description = "Block remote code execution attempts"
+#   }
+#
+#   # Block large request bodies (Uses Content-Length header)
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1400"
+#     match {
+#       expr {
+#         # logic: has content-length AND length > 10MB AND NOT processing endpoint
+#         expression = "has(request.headers['content-length']) && int(request.headers['content-length']) > 10485760 && !request.path.matches('/processing/v1/queue.*')"
+#       }
+#     }
+#     description = "Block requests with large bodies (except processing endpoints)"
+#   }
+#
+#   # Block suspicious user agents
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1500"
+#     match {
+#       expr {
+#         expression = <<-EOF
+#           has(request.headers['user-agent']) &&
+#           request.headers['user-agent'].lower().matches('.*sqlmap.*|.*nikto.*|.*nessus.*|.*masscan.*|.*gobuster.*|.*dirb.*|.*burp.*')
+#         EOF
+#       }
+#     }
+#     description = "Block requests from known scanning tools"
+#   }
+#
+#   # Allow only specific HTTP methods
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1600"
+#     match {
+#       expr {
+#         expression = "!(request.method.matches('GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD'))"
+#       }
+#     }
+#     description = "Block unsupported HTTP methods"
+#   }
+#
+#   # Block requests without proper headers (FIXED: Returns 403 instead of 400)
+#   rule {
+#     action   = "deny(403)"
+#     priority = "1700"
+#     match {
+#       expr {
+#         expression = <<-EOF
+#           request.path.matches('/api/.*') &&
+#           request.method.matches('POST|PUT|PATCH') &&
+#           !request.method.matches('OPTIONS') &&
+#           (!has(request.headers['content-type']) ||
+#            !request.headers['content-type'].matches('application/json.*|multipart/form-data.*'))
+#         EOF
+#       }
+#     }
+#     description = "Require proper Content-Type for API requests"
+#   }
+#
+#   # DEFAULT ALLOW
+#   rule {
+#     action   = "allow"
+#     priority = "2147483647"
+#     match {
+#       versioned_expr = "SRC_IPS_V1"
+#       config {
+#         src_ip_ranges = ["*"]
+#       }
+#     }
+#     description = "Default allow rule"
+#   }
+#
+#   # Enable adaptive protection for DDoS
+#   adaptive_protection_config {
+#     layer_7_ddos_defense_config {
+#       enable          = true
+#       rule_visibility = "STANDARD"
+#     }
+#   }
+# }
 
 # SSL Certificate for the Load Balancer
 resource "google_compute_managed_ssl_certificate" "api_ssl_cert" {
@@ -238,7 +239,8 @@ resource "google_compute_backend_service" "api_backend" {
   port_name                       = "https"
   timeout_sec                     = 30
 
-  security_policy = google_compute_security_policy.api_security_policy.id
+  # TODO: Remove comment once quota is increased
+  # security_policy = google_compute_security_policy.api_security_policy.id
 
   # Pointing to API Gateway via Serverless NEG (no health checks needed)
   backend {
