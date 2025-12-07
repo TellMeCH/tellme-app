@@ -32,13 +32,15 @@ def setup_litellm():
     if hasattr(settings, 'LANGFUSE_SECRET_KEY') and settings.LANGFUSE_SECRET_KEY:
         os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
     if hasattr(settings, 'LANGFUSE_HOST') and settings.LANGFUSE_HOST:
-        os.environ["LANGFUSE_OTEL_HOST"] = settings.LANGFUSE_HOST
+        os.environ["LANGFUSE_HOST"] = settings.LANGFUSE_HOST
     else:
         # Default to EU region
-        os.environ["LANGFUSE_OTEL_HOST"] = "https://cloud.langfuse.com"
+        os.environ["LANGFUSE_HOST"] = "https://cloud.langfuse.com"
 
-    # Enable Langfuse OTEL callback
-    litellm.callbacks = ["langfuse_otel"]
+    # Enable Langfuse callback (using sync callback to avoid async task warnings)
+    # Use "langfuse" instead of "langfuse_otel" to prevent "Task was destroyed" warnings
+    # when calling litellm.completion() from synchronous Django views
+    litellm.callbacks = ["langfuse"]
 
     # Configure API keys
     if hasattr(settings, 'OPENAI_API_KEY') and settings.OPENAI_API_KEY:
