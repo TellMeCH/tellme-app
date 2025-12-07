@@ -19,12 +19,10 @@ class OrganizationAPIKeyAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
 
         # Check for API key in X-Forwarded-Authorization
-        auth_header = request.headers.get('X-Forwarded-Authorization')
+        auth_header = request.headers.get('Authorization')
         if not auth_header:
-            auth_header = request.headers.get('Authorization')  # TODO: Remove once API Gateway Access is enforced
-            if not auth_header:
-                logger.debug("No Authorization or X-Forwarded-Authorization header found")
-                return None
+            logger.debug("No Authorization header found")
+            return None
 
         # Check if the header starts with the expected keyword (f.e X-API-KEY <key>)
         parts = auth_header.split()
@@ -59,7 +57,7 @@ class ProcessingKeyAuthentication(authentication.BaseAuthentication):
     API_TOKEN_SCHEMA = 'Token '
 
     def authenticate(self, request):
-        auth_header = request.META.get('HTTP_AUTHORIZATION', None)
+        auth_header = request.META.get('HTTP_X_TELLME_TOKEN', None)
         if not auth_header:
             logger.debug("No Authorization header found")
             return None

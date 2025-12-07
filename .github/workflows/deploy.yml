@@ -105,6 +105,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
           ALLOWED_HOSTS: "127.0.0.1,localhost"
         run: |
           uv run python manage.py spectacular --color --file terraform/configs/spec.yaml
@@ -215,6 +216,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
         run: |
           uv run python manage.py migrate
 
@@ -232,6 +234,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
         run: |
           uv run python manage.py collectstatic --noinput
 
@@ -250,6 +253,7 @@ jobs:
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
         run: |
           uv run python manage.py create_superusers
 
@@ -347,6 +351,7 @@ jobs:
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
           CALL_PROCESSING_ENDPOINT: ${{ needs.deploy.outputs.cloud_run_url }}${{ vars.CALL_PROCESSING_ADDRESS }}
           SUMMARIZATION_ENDPOINT: ${{ needs.deploy.outputs.cloud_run_url }}${{ vars.SUMMARIZATION_ADDRESS }}
+          SERVICE_ACCOUNT_EMAIL: "None"
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1

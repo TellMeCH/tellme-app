@@ -84,9 +84,12 @@ def create_processing_task(
             "url": process_url,
             "headers": {
                 "Content-Type": "application/json",
-                "Authorization": f"Token {settings.PROCESSING_PIPELINE_KEY}"
+                "X-Tellme-Token": f"Token {settings.PROCESSING_PIPELINE_KEY}"
             },
-            "body": json.dumps(payload).encode()
+            "body": json.dumps(payload).encode(),
+            "oidc_token": {
+                "service_account_email": settings.SERVICE_ACCOUNT_EMAIL,
+            }
         }
     }
     # Specify the task schedule time

@@ -142,9 +142,12 @@ def create_summarization_task(
             "url": settings.SUMMARIZATION_ENDPOINT,
             "headers": {
                 "Content-Type": "application/json",
-                "Authorization": f"Token {settings.PROCESSING_PIPELINE_KEY}"
+                "X-Tellme-Token": f"Token {settings.PROCESSING_PIPELINE_KEY}"
             },
-            "body": json.dumps(payload).encode()
+            "body": json.dumps(payload).encode(),
+            "oidc_token": {
+                "service_account_email": settings.SERVICE_ACCOUNT_EMAIL,
+            }
         }
     }
 
