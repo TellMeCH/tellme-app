@@ -286,6 +286,14 @@ resource "google_compute_url_map" "api_url_map" {
 
   path_matcher {
     name = "allpaths"
+
+    default_route_action {
+      weighted_backend_services {
+        backend_service = google_compute_backend_service.api_backend.id
+        weight          = 100
+      }
+    }
+
     path_rule {
       paths = ["/*"]
       route_action {
@@ -298,6 +306,7 @@ resource "google_compute_url_map" "api_url_map" {
   }
 
   # Default route action (Fallback)
+  # This top-level default applies if the Host header doesn't match
   default_route_action {
     weighted_backend_services {
       backend_service = google_compute_backend_service.api_backend.id
