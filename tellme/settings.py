@@ -60,6 +60,9 @@ TELLME_ENV = env('TELLME_ENV')
 GOOGLE_CLOUD_PROJECT = env("GOOGLE_CLOUD_PROJECT")
 REGION = env("REGION")
 
+# Use X-Forwarded-Host header from API Gateway in non-dev environments
+USE_X_FORWARDED_HOST = TELLME_ENV != 'dev'
+
 CLOUDRUN_SERVICE_URLS = env("CLOUDRUN_SERVICE_URLS", default=None)
 if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
     CSRF_TRUSTED_ORIGINS = env("CLOUDRUN_SERVICE_URLS").split(",")
