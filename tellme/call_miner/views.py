@@ -699,7 +699,19 @@ class AgentViewSet(TrendsActionsViewSet, SummaryActionsViewSet):
     def managed_agents(self, request, pk=None):
         obj = self.get_object()
         serializer = self.get_serializer(obj)
-        return response.Response(serializer.get_agent_data(obj))
+        # return response.Response(serializer.get_agent_data(obj))
+
+        # Debug
+        headers = {}
+        for k, v in request.META.items():
+            # Standard headers start with HTTP_
+            if k.startswith('HTTP_'):
+                headers[k] = v
+            # Content-Type and Content-Length sometimes don't have the prefix
+            elif k in ['CONTENT_TYPE', 'CONTENT_LENGTH']:
+                headers[k] = v
+
+        return response.Response(headers)
 
     def get_summary_name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}"
