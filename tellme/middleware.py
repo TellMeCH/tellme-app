@@ -1,5 +1,6 @@
 import posthog
 import logging
+from urllib.parse import urlparse
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 
@@ -199,3 +200,32 @@ class PostHogMiddleware(MiddlewareMixin):
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
+
+
+class ForceCloudRunHostMiddleware:
+    """
+    Middleware to force the Host header to match the public Load Balancer/Domain URL.
+    This fixes absolute URL generation (pagination) because API Gateway strips X-Forwarded-Host.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.primary_host = None
+
+        # Logic: Find the first URL in CLOUDRUN_SERVICE_URLS that is NOT a run.app URL (Load Balancer URL)
+        if settings.TELLME_ENV != 'dev' and settings.CLOUDRUN_SERVICE_URLS:
+            urls = settings.CLOUDRUN_SERVICE_URLS.split(',')
+            for url in urls:
+                if 'run.app' not in url:
+                    # Extract domain (e.g., 'test-api.tell-me.ch')
+                    self.primary_host = urlparse(url).netloc
+                    break
+
+    def __call__(self, request):
+        if self.primary_host:
+            # Inject the missing header so Django realizes it's behind the Load Balancer
+            request.META['HTTP_X_FORWARDED_HOST'] = self.primary_host
+            request.META['HTTP_X_FORWARDED_PROTO'] = 'https'  # Ensure we always generate HTTPS links
+
+        response = self.get_response(request)
+        return response
