@@ -291,7 +291,7 @@ class TestSmokeTestCloudRunWithLogs:
             queue_url,
             data=data,
             files=files,
-            headers={"Authorization": f"X-API-KEY {self.__api_key_plain}"}
+            headers={"X-Tellme-Api-Key": f"X-API-KEY {self.__api_key_plain}"}
         )
         assert response.status_code == 202, f"Unexpected status code: {response.status_code}"
         response_data = response.json()
