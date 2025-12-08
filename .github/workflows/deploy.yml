@@ -263,7 +263,7 @@ jobs:
           CONSTRUCTED_URL="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.terraform_apply.outputs.cloud_run_url }},${CONSTRUCTED_URL}"
+            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.terraform_apply.outputs.load_balancer_url }},${{ steps.terraform_apply.outputs.cloud_run_url }},${CONSTRUCTED_URL}"
 
       - name: Update the Application to use the correct Call Processing Endpoint
         run: |
