@@ -1,15 +1,23 @@
 """
 LiteLLM configuration for TellMe call processing.
 
-This module configures LiteLLM with fallback settings and Langfuse integration.
+This module configures LiteLLM with fallback settings for model providers.
 All AI processing components should use this configuration for consistent
-fallback behavior and observability.
+fallback behavior.
+
+Note: Langfuse observability is handled directly via @observe decorators
+and langfuse_context.update_current_observation() in individual modules,
+not through LiteLLM callbacks.
 """
 
 import os
+import warnings
 import litellm
+import logging
 from django.conf import settings
 from .llm_configs import (
+    API_MAX_RETRIES,
+    API_REQUEST_TIMEOUT,
     ENRICHMENT_PIPELINE,
     DIARIZATION_CONFIG,
     SUMMARIZER_CONFIGS,
@@ -19,28 +27,19 @@ from .llm_configs import (
 
 def setup_litellm():
     """
-    Configure LiteLLM with Langfuse integration and global settings.
+    Configure LiteLLM with global settings for model fallbacks and retries.
 
     This should be called once during application startup to:
-    - Set up Langfuse OTEL integration for observability
     - Configure global LiteLLM settings
     - Set API keys for different providers
-    """
-    # Configure Langfuse integration
-    if hasattr(settings, 'LANGFUSE_PUBLIC_KEY') and settings.LANGFUSE_PUBLIC_KEY:
-        os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
-    if hasattr(settings, 'LANGFUSE_SECRET_KEY') and settings.LANGFUSE_SECRET_KEY:
-        os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
-    if hasattr(settings, 'LANGFUSE_HOST') and settings.LANGFUSE_HOST:
-        os.environ["LANGFUSE_HOST"] = settings.LANGFUSE_HOST
-    else:
-        # Default to EU region
-        os.environ["LANGFUSE_HOST"] = "https://cloud.langfuse.com"
 
-    # Enable Langfuse callback (using sync callback to avoid async task warnings)
-    # Use "langfuse" instead of "langfuse_otel" to prevent "Task was destroyed" warnings
-    # when calling litellm.completion() from synchronous Django views
-    litellm.callbacks = ["langfuse"]
+    Note: Langfuse observability is handled directly via @observe decorators
+    and langfuse_context in individual modules, not through LiteLLM callbacks.
+    """
+    # Suppress async task warnings from LiteLLM's internal logging
+    warnings.filterwarnings('ignore', message='coroutine.*was never awaited')
+    warnings.filterwarnings('ignore', message='.*Enable tracemalloc.*')
+    warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*async.*')
 
     # Configure API keys
     if hasattr(settings, 'OPENAI_API_KEY') and settings.OPENAI_API_KEY:
@@ -48,13 +47,43 @@ def setup_litellm():
     if hasattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS'):
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
 
-    # Configure global LiteLLM settings
-    litellm.drop_params = True  # Drop unsupported parameters
-    litellm.set_verbose = False  # Reduce logging noise
-
     # Configure retry settings
-    litellm.num_retries = 3  # Number of retries
-    litellm.request_timeout = 300  # Timeout in seconds
+    litellm.num_retries = API_MAX_RETRIES  # Number of retries
+    litellm.request_timeout = API_REQUEST_TIMEOUT  # Timeout in seconds
+
+
+def get_provider_from_model(model_used: str, litellm_config: dict) -> str:
+    """
+    Determine the provider that was used based on the model name and litellm_config.
+
+    LiteLLM's completion.model doesn't include the provider prefix (e.g., returns
+    'gemini-2.0-flash-001' instead of 'vertex_ai/gemini-2.0-flash-001'), so we need
+    to match against the configured models to determine which provider was used.
+
+    Args:
+        model_used (str): The model name returned by litellm.completion (without provider prefix)
+        litellm_config (dict): The litellm config dict containing 'model' and 'fallbacks'
+
+    Returns:
+        str: Provider name ('openai', 'vertex_ai', etc.) or 'unknown' if not found
+    """
+    # Check primary model
+    primary_model = litellm_config.get("model", "")
+    if "/" in primary_model:
+        provider, model_name = primary_model.split("/", 1)
+        if model_name == model_used:
+            return provider
+
+    # Check fallback models
+    fallbacks = litellm_config.get("fallbacks", [])
+    for fallback in fallbacks:
+        fallback_model = fallback.get("model", "")
+        if "/" in fallback_model:
+            provider, model_name = fallback_model.split("/", 1)
+            if model_name == model_used:
+                return provider
+
+    return "unknown"
 
 
 def _convert_enrichment_config_to_litellm(step_config):
@@ -91,6 +120,9 @@ def _convert_enrichment_config_to_litellm(step_config):
         _add_additional_properties_false(schema)
 
     # LiteLLM fallback format: each model entry has model + params
+    # Add provider prefix only if not already present
+    if "/" not in openai_model:
+        openai_model = f"openai/{openai_model}"
     openai_entry = {"model": openai_model}
     openai_entry.update(openai_litellm_params)
     models.append(openai_entry)
@@ -104,6 +136,9 @@ def _convert_enrichment_config_to_litellm(step_config):
         vertexai_litellm_params["response_format"]["json_schema"].pop("strict", None)
 
     # LiteLLM fallback format: each model entry has model + params
+    # Add provider prefix only if not already present
+    if "/" not in vertexai_model:
+        vertexai_model = f"vertex_ai/{vertexai_model}"
     vertexai_entry = {"model": vertexai_model}
     vertexai_entry.update(vertexai_litellm_params)
     models.append(vertexai_entry)

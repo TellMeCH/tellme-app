@@ -7,7 +7,7 @@ from langfuse.decorators import observe, langfuse_context
 from django.conf import settings
 from tellme.call_miner.utils.period_utils import period_bounds
 from tellme.call_processing.utils.llm_configs import SUMMARIZER_PROMPTS, SUMMARIZER_CONFIGS
-from tellme.call_processing.utils.litellm_config import setup_litellm, get_meta_summarization_config
+from tellme.call_processing.utils.litellm_config import setup_litellm, get_meta_summarization_config, get_provider_from_model
 
 
 # Model-specific token limits (max context window for each model)
@@ -201,7 +201,7 @@ class MetaSummarizer:
         config_kwargs = self.configs[prompt_category]
 
         # Extract model name with provider prefix (e.g., "openai/gpt-4o-mini")
-        model_name = config_kwargs["model"][0]["model"]
+        model_name = config_kwargs["model"]
         token_cutoff = self._get_token_cutoff(model_name)
 
         # Token-aware random selection
@@ -228,15 +228,28 @@ class MetaSummarizer:
             )
 
             # Call LiteLLM with automatic fallbacks and retries
-            # Pass trace_data as metadata for Langfuse logging
             completion = litellm.completion(
                 messages=[
                     {"role": "system", "content": prompt.prompt},
                     {"role": "user", "content": selected_text}
                 ],
-                metadata=trace_data,
                 **config_kwargs
             )
+
+            # Update Langfuse observation with completion details
+            model_used = completion.model
+
+            langfuse_context.update_current_observation(
+                model=model_used,
+                prompt=prompt,
+                usage={
+                    "promptTokens": completion.usage.prompt_tokens,
+                    "completionTokens": completion.usage.completion_tokens,
+                    "totalTokens": completion.usage.total_tokens
+                },
+                **trace_data
+            )
+
             response = completion.choices[0].message
 
             if response.refusal:

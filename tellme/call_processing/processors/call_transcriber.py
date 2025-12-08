@@ -28,7 +28,7 @@ from tellme.call_processing.utils.llm_configs import (
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
     TRANSCRIPTION_MODEL_NAME_GROQ
 )
-from tellme.call_processing.utils.litellm_config import setup_litellm, get_diarization_config
+from tellme.call_processing.utils.litellm_config import setup_litellm, get_diarization_config, get_provider_from_model
 from tellme.call_processing.utils import gcs_utils
 from .config import CHUNK_SIZE
 
@@ -363,22 +363,18 @@ class CallTranscriber:
         # Get LiteLLM fallback configuration
         litellm_config = get_diarization_config(self.diarization_prompt)
 
-        # Prepare metadata for Langfuse
-        metadata = {"langfuse_prompt": self.diarization_prompt}
-
         # Execute with LiteLLM (handles retries and fallbacks automatically)
         completion = litellm.completion(
             messages=[
                 {"role": "system", "content": self.diarization_prompt.prompt},
                 {"role": "user", "content": f"This is the list of transcribed phrases:\n{transcript}"}
             ],
-            metadata=metadata,
             **litellm_config
         )
 
         # Update Langfuse observation with actual model used
         model_used = completion.model
-        provider = model_used.split('/')[0] if '/' in model_used else 'unknown'
+        provider = get_provider_from_model(model_used, litellm_config)
 
         langfuse_context.update_current_observation(
             name=f"diarization_{provider}",
@@ -388,7 +384,8 @@ class CallTranscriber:
                 "promptTokens": completion.usage.prompt_tokens,
                 "completionTokens": completion.usage.completion_tokens,
                 "totalTokens": completion.usage.total_tokens
-            }
+            },
+            metadata={"langfuse_prompt": self.diarization_prompt}
         )
 
         return completion.choices[0].message.content

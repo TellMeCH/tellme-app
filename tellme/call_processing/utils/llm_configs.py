@@ -2,6 +2,7 @@
 API_MAX_RETRIES: int = 5
 API_BASE_DELAY: float = 5.0
 API_BACKOFF_FACTOR: int = 2
+API_REQUEST_TIMEOUT: float = 300
 
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
 
@@ -358,7 +359,7 @@ SUMMARIZER_PROMPTS = {
 
 SUMMARIZER_CONFIGS = {
     "summary_mining": {
-        "model": "gpt-5-nano",
+        "model": "openai/gpt-5-nano",
         "temperature": 1,
         "response_format": {
             "type": "json_schema",
@@ -405,7 +406,7 @@ SUMMARIZER_CONFIGS = {
         }
     },
     "customer_summary": {
-        "model": "gpt-5-nano",
+        "model": "openai/gpt-5-nano",
         "temperature": 1,
         "response_format": {
             "type": "json_schema",
@@ -450,7 +451,7 @@ SUMMARIZER_CONFIGS = {
         }
     },
     "agent_summary": {
-        "model": "gpt-4o-mini",
+        "model": "openai/gpt-4o-mini",
         "temperature": 0.2,
         "response_format": {
             "type": "json_schema",

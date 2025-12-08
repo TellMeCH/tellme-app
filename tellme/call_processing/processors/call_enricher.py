@@ -14,7 +14,7 @@ from langfuse import Langfuse
 from langfuse.decorators import observe, langfuse_context
 
 from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
-from tellme.call_processing.utils.litellm_config import setup_litellm, get_enrichment_config
+from tellme.call_processing.utils.litellm_config import setup_litellm, get_enrichment_config, get_provider_from_model
 from tellme.call_processing.utils import db_handler
 from .utils import create_customer_id
 
@@ -146,31 +146,33 @@ class CallEnricher:
         Returns:
             tuple[dict, int, int]: Parsed JSON response, input tokens, output tokens
         """
-        # Set metadata for Langfuse and LiteLLM
-        metadata = {
-            "step_name": ENRICHMENT_PIPELINE[step]['name'],
-            "step_number": step,
-            "langfuse_prompt": self.enrichment_prompts[step]
-        }
-
         # Execute with LiteLLM (handles retries and fallbacks automatically)
         completion = litellm.completion(
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": f"Here is the call transcript:\n{transcript}"}
             ],
-            metadata=metadata,
             **litellm_config
         )
 
         # Update observation with the actual model used and prompt
-        model_used = completion.model  # LiteLLM provides the actual model used
-        provider = model_used.split('/')[0] if '/' in model_used else 'unknown'
+        model_used = completion.model
+        provider = get_provider_from_model(model_used, litellm_config)
 
         langfuse_context.update_current_observation(
             name=f"enrichment_{provider}_{ENRICHMENT_PIPELINE[step]['name']}",
             prompt=self.enrichment_prompts[step],
-            model=model_used
+            model=model_used,
+            usage={
+                "promptTokens": completion.usage.prompt_tokens,
+                "completionTokens": completion.usage.completion_tokens,
+                "totalTokens": completion.usage.total_tokens
+            },
+            metadata={
+                "step_name": ENRICHMENT_PIPELINE[step]['name'],
+                "step_number": step,
+                "langfuse_prompt": self.enrichment_prompts[step]
+            }
         )
 
         response = completion.choices[0].message
