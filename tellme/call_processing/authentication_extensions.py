@@ -9,8 +9,8 @@ class OrganizationAPIKeyAuthenticationScheme(OpenApiAuthenticationExtension):
         return {
             'type': 'apiKey',
             'in': 'header',
-            'name': 'Authorization',
-            'description': 'Organization API key in Authorization header',
+            'name': 'X-Tellme-Api-Key',
+            'description': 'Organization API key in X-Tellme-Api-Key header (format: X-API-KEY <key>)',
         }
 
 

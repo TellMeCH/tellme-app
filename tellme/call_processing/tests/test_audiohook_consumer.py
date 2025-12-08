@@ -25,7 +25,7 @@ class TestAudioHookConsumer:
         communicator = WebsocketCommunicator(
             AudioHookConsumer.as_asgi(),
             "/testws/",
-            headers=[(b"x-api-key", valid_api_key.encode("utf-8"))]
+            headers=[(b"x-tellme-api-key", f"X-API-KEY {valid_api_key}".encode("utf-8"))]
         )
         connected, subprotocol = await communicator.connect()
         assert connected is True
@@ -143,7 +143,7 @@ class TestAudioHookConsumer:
         communicator = WebsocketCommunicator(
             AudioHookConsumer.as_asgi(),
             "/testws/",
-            headers=[(b"x-api-key", valid_api_key.encode("utf-8"))]
+            headers=[(b"x-tellme-api-key", f"X-API-KEY {valid_api_key}".encode("utf-8"))]
         )
         connected, _ = await communicator.connect()
         assert connected is True
@@ -193,7 +193,7 @@ class TestAudioHookConsumer:
         communicator = WebsocketCommunicator(
             AudioHookConsumer.as_asgi(),
             "/testws/",
-            headers=[(b"x-api-key", valid_api_key.encode("utf-8"))]
+            headers=[(b"x-tellme-api-key", f"X-API-KEY {valid_api_key}".encode("utf-8"))]
         )
         connected, _ = await communicator.connect()
         assert connected is True
