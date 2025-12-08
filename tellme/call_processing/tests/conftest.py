@@ -159,63 +159,6 @@ def mock_groq():
 
 
 @pytest.fixture
-def mock_vertexai():
-    """
-    Mocks out the google.genai.Client used in CallProcessingPipeline.
-    Specifically, it mocks the .models.generate_content call.
-    """
-    with patch("google.genai.Client") as mock_client_cls:
-        client = MagicMock()
-        mock_client_cls.return_value = client
-
-        enrichment_json = """{
-            "title": "Test Call",
-            "summary": "Short summary",
-            "sentiment": 4,
-            "starting_sentiment": 3,
-            "ending_sentiment": 5,
-            "topics": ["Billing"],
-            "suggested_topics": ["Technical Support"],
-            "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
-            "agent_speaker_labels": ["Speaker 0"],
-            "customer_speaker_labels": ["Speaker 1"],
-            "revenue_search_query": "men leather jackets",
-            "resolved": false
-        }"""
-
-        def gen_content_side_effect(*args, **kwargs):
-            """
-            Signature of the real method is
-              generate_content(model, contents, config)
-            but callers may mix positional / keyword args – we handle both.
-            """
-            cfg = kwargs.get("config") or (args[2] if len(args) > 2 else None)
-            is_structured = getattr(cfg, "response_mime_type", None) == "application/json"
-
-            text_payload = enrichment_json if is_structured else diarization_text
-
-            resp = MagicMock()
-            resp.candidates = [
-                MagicMock(
-                    content=MagicMock(
-                        parts=[MagicMock(text=text_payload)]
-                    )
-                )
-            ]
-            resp.usage_metadata = MagicMock(
-                prompt_token_count=10,
-                candidates_token_count=5,
-                total_token_count=15
-            )
-            return resp
-
-        gen_content_mock = MagicMock(side_effect=gen_content_side_effect)
-        client.models.generate_content = gen_content_mock
-
-        yield gen_content_mock
-
-
-@pytest.fixture
 def mock_litellm_setup():
     """
     Mocks out the LiteLLM setup function to prevent actual LiteLLM initialization during tests.
@@ -238,8 +181,19 @@ def mock_litellm():
             # Enrichment has response_format in kwargs, diarization doesn't
             is_structured = "response_format" in kwargs
 
-            metadata = kwargs.get("metadata", {})
-            step_name = metadata.get("step_name", "unknown")
+            # Detect enrichment step by checking the response_format schema
+            step_name = "unknown"
+            if is_structured:
+                response_format = kwargs.get("response_format", {})
+                json_schema = response_format.get("json_schema", {})
+                schema = json_schema.get("schema", {})
+                properties = schema.get("properties", {})
+
+                # speaker_identification step has agent_speaker_labels and customer_speaker_labels
+                if "agent_speaker_labels" in properties and "customer_speaker_labels" in properties:
+                    step_name = "speaker_identification"
+                else:
+                    step_name = "other_enrichment"
 
             if is_structured:
                 # Enrichment response (structured JSON)
@@ -282,11 +236,12 @@ def mock_litellm():
                 completion_tokens=10,
                 total_tokens=60
             )
-            # Return appropriate model based on type
+            # Return model name WITHOUT provider prefix (LiteLLM behavior)
+            # The code will extract provider from litellm_config
             if is_structured:
-                mock_chat_completion.model = "openai/gpt-4o-mini"
+                mock_chat_completion.model = "gpt-4o-mini"
             else:
-                mock_chat_completion.model = "vertex_ai/gemini-2.0-flash-001"
+                mock_chat_completion.model = "gemini-2.0-flash-001"
 
             return mock_chat_completion
 
@@ -319,50 +274,10 @@ def mock_litellm_meta_summarization():
             prompt_tokens=100,
             completion_tokens=50
         )
-        mock_chat_completion.model = "openai/gpt-5-nano"
+        # Return model name WITHOUT provider prefix (LiteLLM behavior)
+        mock_chat_completion.model = "gpt-5-nano"
         mock_completion.return_value = mock_chat_completion
         yield mock_completion
-
-
-@pytest.fixture
-def mock_openai():
-    """
-    Mocks out the OpenAI chat completion call for components not yet migrated to LiteLLM.
-    """
-    with patch("langfuse.openai.OpenAI") as mock_openai_class:
-        mock_openai_instance = MagicMock()
-        mock_openai_class.return_value = mock_openai_instance
-
-        # The structure of the response from openai.chat.completions.create
-        mock_chat_completion = MagicMock()
-        # Mock JSON content from the OpenAI completion
-        mock_chat_completion.choices = [
-            MagicMock(message=MagicMock(
-                content="""{
-                "title": "Test Call",
-                "summary": "Short summary",
-                "sentiment": 4,
-                "starting_sentiment": 3,
-                "ending_sentiment": 5,
-                "topics": ["Billing"],
-                "suggested_topics": ["Technical Support"],
-                "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
-                "agent_speaker_labels": ["Speaker 0"],
-                "customer_speaker_labels": ["Speaker 1"],
-                "revenue_search_query": "men leather jackets",
-                "resolved": false
-                }"""
-            ))
-        ]
-        # Usage data
-        mock_chat_completion.usage = MagicMock(
-            prompt_tokens=50,
-            completion_tokens=10
-        )
-        # Return value from create
-        mock_openai_instance.chat.completions.create.return_value = mock_chat_completion
-
-        yield mock_openai_instance
 
 
 @pytest.fixture

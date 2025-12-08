@@ -92,7 +92,8 @@ class TestCallProcessingPipeline:
                 })))
             ]
             mock_chat_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=10)
-            mock_chat_completion.model = "openai/gpt-4o-mini"
+            # Return model name WITHOUT provider prefix (LiteLLM behavior)
+            mock_chat_completion.model = "gpt-4o-mini"
             return mock_chat_completion
 
         mock_litellm.side_effect = custom_side_effect
@@ -499,8 +500,17 @@ class TestCallEnricher:
 
         # Mock LiteLLM to return customer_info that will be processed
         def custom_side_effect(*args, **kwargs):
-            metadata = kwargs.get("metadata", {})
-            step_name = metadata.get("step_name", "unknown")
+            # Detect enrichment step by checking the response_format schema
+            step_name = "unknown"
+            if "response_format" in kwargs:
+                response_format = kwargs.get("response_format", {})
+                json_schema = response_format.get("json_schema", {})
+                schema = json_schema.get("schema", {})
+                properties = schema.get("properties", {})
+
+                # speaker_identification step has agent_speaker_labels and customer_speaker_labels
+                if "agent_speaker_labels" in properties and "customer_speaker_labels" in properties:
+                    step_name = "speaker_identification"
 
             mock_chat_completion = MagicMock()
             if step_name == "speaker_identification":
@@ -530,9 +540,10 @@ class TestCallEnricher:
                     "resolved": True
                 })
 
-            mock_chat_completion.choices = [MagicMock(message=MagicMock(content=content))]
-            mock_chat_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=10)
-            mock_chat_completion.model = "openai/gpt-4o-mini"
+            mock_chat_completion.choices = [MagicMock(message=MagicMock(content=content, refusal=None))]
+            mock_chat_completion.usage = MagicMock(prompt_tokens=50, completion_tokens=10, total_tokens=60)
+            # Return model name WITHOUT provider prefix (LiteLLM behavior)
+            mock_chat_completion.model = "gpt-4o-mini"
             return mock_chat_completion
 
         mock_litellm.side_effect = custom_side_effect
