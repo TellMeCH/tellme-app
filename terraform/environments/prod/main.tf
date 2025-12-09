@@ -8,13 +8,18 @@ terraform {
   }
 }
 
+# Tell Terraform that the service account moved from here to the api_revision module
+moved {
+  from = google_service_account.app
+  to   = module.api_revision.google_service_account.app
+}
+
 module "api_revision" {
   source                = "../../stacks/api_revision"
   service_name          = var.service_name
   image_url             = var.image_url
   project_id            = var.project_id
   region                = var.region
-  service_account_email = google_service_account.app.email
   min_instance_count    = 2
   max_instance_count    = 20
   tellme_env            = "prod"
@@ -30,4 +35,5 @@ module "api_revision" {
   admin_password        = var.admin_password
   app_username          = var.app_username
   app_password          = var.app_password
+  api_domain            = var.api_domain
 }

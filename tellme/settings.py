@@ -67,6 +67,7 @@ if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
     ALLOWED_HOSTS = [urlparse(url).netloc for url in CSRF_TRUSTED_ORIGINS]
 
     SECURE_SSL_REDIRECT = True
+    USE_X_FORWARDED_HOST = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 else:
     ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='').split(',')
@@ -85,12 +86,16 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'storages',
     'corsheaders',
+    'health_check',
+    'health_check.db',
+    'health_check.cache',
     'tellme.call_miner',
     'tellme.call_processing'
 ]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
+    "tellme.middleware.ForceCloudRunHostMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -167,6 +172,7 @@ MAILER_API_KEY = env('MAILER_API_KEY')
 HASH_KEY = env('HASH_KEY')
 SEARCH_ENGINE_ID = env('SEARCH_ENGINE_ID')
 SEARCH_API_KEY = env('SEARCH_API_KEY')
+SERVICE_ACCOUNT_EMAIL = env('SERVICE_ACCOUNT_EMAIL')
 
 # CORS Settings
 FRONTEND_PATH = env('FRONTEND_PATH')
@@ -187,6 +193,7 @@ CORS_ALLOW_HEADERS = [  # Ensure Authorization and necessary headers are allowed
 ]
 
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]  # Ensure preflight requests are supported
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -259,18 +266,22 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Helping companies know their customers better through call center interactions.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
-    'SECURITY': [
-        {'BearerAuth': []},
+    'SCHEMA_PATH_PREFIX': r'/api/v[0-9]',
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX_TRIM': False,
+    'PREPROCESSING_HOOKS': [],
+    'POSTPROCESSING_HOOKS': [
+        'tellme.utils.spectacular_postprocess_schema',
     ],
-    'SECURITY_SCHEMES': {
-        'BearerAuth': {
-            'type': 'http',
-            'scheme': 'bearer',
-            'bearerFormat': 'Firebase',
-        },
-    },
-    'EXTENSIONS': [
-        'tellme.call_miner.authentication_extensions',
+    'SERVERS': [
+        {
+            'url': '/',
+            'description': 'API Gateway'
+        }
+    ],
+    'TAGS': [
+        {'name': 'health', 'description': 'Health check endpoints'},
+        {'name': 'schema', 'description': 'API schema endpoints'},
     ],
 }
 

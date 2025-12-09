@@ -30,7 +30,7 @@ class TestProcessRecordingView:
 
         # Set the authorization header
         url = reverse("process")
-        api_client.credentials(HTTP_AUTHORIZATION="Token test_pipeline_key")
+        api_client.credentials(HTTP_X_TELLME_TOKEN="Token test_pipeline_key")
         response = api_client.post(url, data={}, format="json")
 
         # Ensure the response shows a failed body payload validation (authentication worked)
@@ -42,7 +42,7 @@ class TestProcessRecordingView:
 
         # Missing user setup
         url = reverse("process")
-        api_client.credentials(HTTP_AUTHORIZATION="Token wrong_key")
+        api_client.credentials(HTTP_X_TELLME_TOKEN="Token wrong_key")
         response = api_client.post(url, data={}, format="json")
 
         # Ensure authentication failure

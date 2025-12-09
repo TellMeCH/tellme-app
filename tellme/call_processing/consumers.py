@@ -50,17 +50,23 @@ class AudioHookConsumer(WebsocketConsumer):
     def authenticate_api_key_from_scope_headers(headers):
         """
         Replicate OrganizationAPIKeyAuthentication with synchronous logic:
-        read from scope headers, find an X-API-KEY, check DB, etc.
+        read from scope headers, find X-Tellme-Api-Key header with X-API-KEY prefix, check DB, etc.
         """
-        api_key = None
+        auth_header = None
         for (name, value) in headers:
-            if name == b'x-api-key':
-                api_key = value.decode('utf-8')
+            if name == b'x-tellme-api-key':
+                auth_header = value.decode('utf-8')
                 break
 
-        if not api_key:
-            raise exceptions.AuthenticationFailed("No Authorization header found.")
+        if not auth_header:
+            raise exceptions.AuthenticationFailed("No X-Tellme-Api-Key header found.")
 
+        # Check if the header starts with the expected keyword (X-API-KEY <key>)
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0] != 'X-API-KEY':
+            raise exceptions.AuthenticationFailed("Invalid X-Tellme-Api-Key header format.")
+
+        api_key = parts[1]
         logger.debug("Got API key from scope headers.")
         hashed_key = hashlib.sha256((settings.HASH_KEY + api_key + settings.HASH_KEY).encode('utf-8')).hexdigest()
         try:

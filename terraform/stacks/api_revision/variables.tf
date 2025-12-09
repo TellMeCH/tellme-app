@@ -18,10 +18,17 @@ variable "region" {
   description = "GCP region"
 }
 
-variable "service_account_email" {
+variable "gateway_region" {
   type        = string
-  description = "Service account email for Cloud Run"
+  description = "API Gateway region (only europe-west1 or europe-west2 supported)"
+  default     = "europe-west1"
+
+  validation {
+    condition     = contains(["europe-west1", "europe-west2"], var.gateway_region)
+    error_message = "Gateway region must be either europe-west1 or europe-west2."
+  }
 }
+
 
 variable "min_instance_count" {
   type        = number
@@ -99,4 +106,10 @@ variable "app_password" {
   type        = string
   description = "CloudSQL app password"
   sensitive   = true
+}
+
+# Load Balancer & Security variables
+variable "api_domain" {
+  type        = string
+  description = "Custom domain for the API Load Balancer (e.g., api.yourdomain.com)"
 }

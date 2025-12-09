@@ -17,12 +17,16 @@ jobs:
     name: Deploy to GCP
 
     runs-on: ubuntu-latest
+    outputs:
+      api_gateway_url: ${{ steps.terraform_apply.outputs.api_gateway_url }}
+      cloud_run_url: ${{ steps.terraform_apply.outputs.cloud_run_url }}
+      load_balancer_url: ${{ steps.terraform_apply.outputs.load_balancer_url }}
     env:
       GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT_ID }}
       REGION: ${{ secrets.GCP_PROJECT_REGION }}
       USE_CLOUD_SQL_AUTH_PROXY: 1
-      COLLECT_STATIC: false
       RUN_MIGRATIONS: true
+      COLLECT_STATIC: false
       CREATE_SUPERUSERS: false
     if: github.event.pull_request.merged == true
 
@@ -56,9 +60,55 @@ jobs:
             migrations:
               - 'tellme/call_miner/migrations/**'
 
-      - name: Print TELLME_ENV
+      - name: Start Cloud SQL Proxy
         run: |
-          echo "TELLME_ENV=$TELLME_ENV"
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          nohup ./cloud-sql-proxy \
+            --port=5433 \
+            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }} \
+            > cloud_sql_proxy.log 2>&1 &
+          sleep 10
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Dependencies
+        run: |
+          uv sync --dev
+
+      - name: Check Cloud SQL Proxy Is Running
+        run: |
+          cat cloud_sql_proxy.log
+          if ! pgrep -f cloud-sql-proxy; then
+            echo "Cloud SQL Proxy is not running."
+            exit 1
+          fi
+
+      - name: Generate OpenAPI Specification
+        env:
+          DEBUG: 0
+          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
+          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
+          CALL_PROCESSING_ENDPOINT: "None"
+          SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
+          ALLOWED_HOSTS: "127.0.0.1,localhost"
+        run: |
+          uv run python manage.py spectacular --color --file terraform/configs/spec.yaml
 
       - name: Login to Google Artifact Registry
         uses: docker/login-action@v3
@@ -139,44 +189,18 @@ jobs:
 
       - name: Terraform Apply
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
-        run: terraform apply -auto-approve tfplan.bin
-
-      - name: Start Cloud SQL Proxy
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
         run: |
-          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
-          chmod +x cloud-sql-proxy
-          nohup ./cloud-sql-proxy \
-            --port=5433 \
-            ${{ secrets.GCP_PROJECT_ID }}:${{ secrets.GCP_PROJECT_REGION }}:${{ vars.SQL_INSTANCE_NAME }} \
-            > cloud_sql_proxy.log 2>&1 &
-          sleep 10
+          terraform apply -auto-approve tfplan.bin
 
-      - name: Set up Python
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
+      - name: Extract Deployment URLs
+        id: terraform_apply
+        working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install Dependencies
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        run: |
-          uv sync --dev
-
-      - name: Check Cloud SQL Proxy Is Running
-        if: steps.detect_changes.outputs.migrations == 'true' || env.COLLECT_STATIC == 'true' || env.CREATE_SUPERUSERS == 'true' || env.RUN_MIGRATIONS == 'true'
-        run: |
-          cat cloud_sql_proxy.log
-          if ! pgrep -f cloud-sql-proxy; then
-            echo "Cloud SQL Proxy is not running."
-            exit 1
-          fi
+          CLOUD_RUN_URL=$(terraform output -raw cloud_run_service_uri)
+          LOAD_BALANCER_URL=$(terraform output -raw load_balancer_url)
+          echo "cloud_run_url=$CLOUD_RUN_URL" >> $GITHUB_OUTPUT
+          echo "load_balancer_url=$LOAD_BALANCER_URL" >> $GITHUB_OUTPUT
+          echo "Load Balancer URL: $LOAD_BALANCER_URL"
 
       - name: Run Migrations
         if: steps.detect_changes.outputs.migrations == 'true' || env.RUN_MIGRATIONS == 'true'
@@ -192,6 +216,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
         run: |
           uv run python manage.py migrate
 
@@ -209,6 +234,7 @@ jobs:
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
         run: |
           uv run python manage.py collectstatic --noinput
 
@@ -227,36 +253,29 @@ jobs:
           PASSWORDS_NAME: ${{ vars.PASSWORDS_NAME }}
           CALL_PROCESSING_ENDPOINT: "None"
           SUMMARIZATION_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
         run: |
           uv run python manage.py create_superusers
 
-      - name: Determine Cloud Run URL
-        id: extract_urls
+      - name: Update the Application to use Service URLs
         run: |
           PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
-          BASE_URL="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
-          DEPLOYED_URL=$(gcloud run services describe ${{ vars.SERVICE_NAME }} --region=${{ secrets.GCP_PROJECT_REGION }} --format="value(status.url)")
-          CLOUD_RUN_URLS="${BASE_URL},${DEPLOYED_URL}"
-          echo "urls=$CLOUD_RUN_URLS" >> $GITHUB_OUTPUT
-          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
-
-      - name: Update the Application to use those Service URLs
-        run: |
+          CONSTRUCTED_URL="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.extract_urls.outputs.urls }}"
+            --update-env-vars "^##^CLOUDRUN_SERVICE_URLS=${{ steps.terraform_apply.outputs.load_balancer_url }},${{ steps.terraform_apply.outputs.cloud_run_url }},${CONSTRUCTED_URL}"
 
       - name: Update the Application to use the correct Call Processing Endpoint
         run: |
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars CALL_PROCESSING_ENDPOINT="${{ steps.extract_urls.outputs.base_url }}${{ vars.CALL_PROCESSING_ADDRESS }}"
+            --update-env-vars CALL_PROCESSING_ENDPOINT="${{ steps.terraform_apply.outputs.cloud_run_url }}${{ vars.CALL_PROCESSING_ADDRESS }}"
 
       - name: Update the Application to use the correct Summarization Endpoint
         run: |
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region ${{ secrets.GCP_PROJECT_REGION }} \
-            --update-env-vars SUMMARIZATION_ENDPOINT="${{ steps.extract_urls.outputs.base_url }}${{ vars.SUMMARIZATION_ADDRESS }}"
+            --update-env-vars SUMMARIZATION_ENDPOINT="${{ steps.terraform_apply.outputs.cloud_run_url }}${{ vars.SUMMARIZATION_ADDRESS }}"
 
   smoke_test:
     environment:
@@ -308,13 +327,6 @@ jobs:
         run: |
           uv sync --dev
 
-      - name: Determine Cloud Run URL
-        id: extract_urls
-        run: |
-          PROJECT_NUMBER=$(gcloud projects describe $GOOGLE_CLOUD_PROJECT --format='value(projectNumber)')
-          CLOUD_RUN_URL="https://${{ vars.SERVICE_NAME }}-${PROJECT_NUMBER}.${{ secrets.GCP_PROJECT_REGION }}.run.app"
-          echo "url=$CLOUD_RUN_URL" >> $GITHUB_OUTPUT
-
       - name: Build Audiohook emulator image
         run: |
           docker build -t genesys_audiohook_emulator:latest \
@@ -337,12 +349,13 @@ jobs:
           PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
           SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
           CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
-          CALL_PROCESSING_ENDPOINT: ${{ steps.extract_urls.outputs.url }}${{ vars.CALL_PROCESSING_ADDRESS }}
-          SUMMARIZATION_ENDPOINT: ${{ steps.extract_urls.outputs.url }}${{ vars.SUMMARIZATION_ADDRESS }}
+          CALL_PROCESSING_ENDPOINT: ${{ needs.deploy.outputs.cloud_run_url }}${{ vars.CALL_PROCESSING_ADDRESS }}
+          SUMMARIZATION_ENDPOINT: ${{ needs.deploy.outputs.cloud_run_url }}${{ vars.SUMMARIZATION_ADDRESS }}
+          SERVICE_ACCOUNT_EMAIL: "None"
           FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
           DEBUG: 0
           USE_CLOUD_SQL_AUTH_PROXY: 1
-          CLOUD_RUN_HOST: ${{ steps.extract_urls.outputs.url }}
+          CLOUD_RUN_HOST: ${{ needs.deploy.outputs.load_balancer_url }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
         run: |
           uv run pytest -v ./tellme/call_processing/tests/test_smoke_remote.py

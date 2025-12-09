@@ -65,6 +65,7 @@ jobs:
           echo "SUMMARIZATION_QUEUE_NAME=''" >> .env
           echo "CALL_PROCESSING_ENDPOINT=''" >> .env
           echo "SUMMARIZATION_ENDPOINT=''" >> .env
+          echo "SERVICE_ACCOUNT_EMAIL=''" >> .env
           echo "TASKS_EMULATOR_ADDRESS=''" >> .env
           echo "CALL_PROCESSING_BUCKET=''" >> .env
           echo "DEEPGRAM_API_KEY=fake_key" >> .env
