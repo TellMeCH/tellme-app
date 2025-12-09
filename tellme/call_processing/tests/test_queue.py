@@ -174,7 +174,7 @@ class TestQueueView:
     ):
         """
         Test that overlapping agent calls are allowed when the organization's
-        allow_simultaneous_calls policy is enabled. To remove
+        allow_simultaneous_calls policy is enabled.
         """
         api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
