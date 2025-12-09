@@ -28,7 +28,7 @@ class TestQueueView:
         If the payload is valid, we should get a 202 response and a valid GCS URI in the response.
         A Cloud Task should also be created.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         url = reverse("queue")
         response = api_client.post(url, data=valid_payload, format="multipart")
@@ -53,7 +53,7 @@ class TestQueueView:
         """
         Agent does not exist in the DB, so the request is invalid.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         current_payload = valid_payload.copy()
         current_payload["agent_id"] = 99999
@@ -70,7 +70,7 @@ class TestQueueView:
         If the agent already has a conversation that hasn't ended by the time the new call starts,
         check_agent_validity() should fail.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         # Create a conversation that ends *after* 2024-01-01T12:00:00, such that the creation of a new one starting
         # at that time will be blocked
@@ -98,7 +98,7 @@ class TestQueueView:
         """
         If any required field is missing, the serializer should fail and return a 400.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         for field in ['agent_id', 'timestamp', 'file']:
             current_payload = valid_payload.copy()
@@ -113,7 +113,7 @@ class TestQueueView:
         Test that queue endpoint works correctly when customer_id is not provided.
         The pipeline should be able to generate a customer_id during processing.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         # Remove customer_id from payload to test without it
         payload_without_customer = valid_payload.copy()
@@ -142,7 +142,7 @@ class TestQueueView:
         """
         Test that the queue endpoint correctly handles MP3 files and preserves the .mp3 extension.
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         # Create payload with MP3 file
         mp3_payload = valid_payload.copy()
@@ -174,9 +174,9 @@ class TestQueueView:
     ):
         """
         Test that overlapping agent calls are allowed when the organization's
-        allow_simultaneous_calls policy is enabled.
+        allow_simultaneous_calls policy is enabled. To remove
         """
-        api_client.credentials(HTTP_AUTHORIZATION=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         # Enable simultaneous calls policy for the organization
         organization = setup_db[0]  # setup_db[0] is the organization
