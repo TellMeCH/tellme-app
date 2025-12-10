@@ -1,6 +1,8 @@
 import datetime
 import logging
 from django.db import transaction
+from django.db.models import DateTimeField
+from django.db.models.expressions import RawSQL
 from django.utils import timezone
 from django.conf import settings
 from django.utils.dateparse import parse_datetime
@@ -11,10 +13,22 @@ from tellme.call_miner.utils.summary_utils import get_default_summary_settings
 logger = logging.getLogger(__name__)
 
 
-def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: datetime.datetime) -> (bool, str):
+def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: datetime.datetime, duration: float = None) -> (bool, str):
     """
-    Checks whether the agent exists in the specified organization and 
-    whether the newly pushed call does not overlap with the agent's last call.
+    Checks whether the agent exists in the specified organization and
+    whether the newly pushed call does not overlap with the agent's existing calls.
+
+    Args:
+        agent_id: The ID of the agent
+        organization_id: The ID of the organization
+        call_timestamp: The start timestamp of the new call
+        duration: The duration of the new call in seconds. When None (default),
+                 only checks if the new call comes after the last call chronologically.
+                 When provided, performs bidirectional overlap checking to ensure the new call
+                 doesn't overlap with any existing calls.
+
+    Returns:
+        tuple: (is_valid, message) where is_valid is a boolean and message is a string
     """
 
     is_valid = False
@@ -29,15 +43,54 @@ def check_agent_validity(agent_id: int, organization_id: int, call_timestamp: da
     # Check if the agent already has conversations
     conversation_qs = Conversation.objects.filter(agent=agent_id)
     if conversation_qs.exists():
-        latest_call = conversation_qs.latest('date')
-        latest_call_end_time = latest_call.date + datetime.timedelta(seconds=latest_call.duration)
+        if duration is None:
+            # Standard mode: Check if new call comes after the last call
+            latest_call = conversation_qs.latest('date')
+            latest_call_end_time = latest_call.date + datetime.timedelta(seconds=latest_call.duration)
 
-        # If the new call timestamp is strictly after the last call ended, we consider the agent "valid."
-        if latest_call_end_time < call_timestamp:
-            is_valid = True
-            message = "Valid agent."
+            # If the new call timestamp is strictly after the last call ended, we consider the agent "valid."
+            if latest_call_end_time < call_timestamp:
+                is_valid = True
+                message = "Valid agent."
+            else:
+                message = "This agent's last call was still taking place when the pushed call recording was taken."
         else:
-            message = "This agent's last call was still taking place when the pushed call recording was taken."
+            # Duration provided: Check for bidirectional overlap with any existing call
+            #
+            # Given:
+            # - New call: [s1, e1] where s1 = call_timestamp, e1 = call_timestamp + duration
+            # - Existing call: [s2, e2] where s2 = date, e2 = date + duration
+            #
+            # Two calls overlap if they share any time in common. This includes:
+            # 1. Left overlap: s1 falls within existing call (s2 < s1 < e2)
+            # 2. Right overlap: e1 falls within existing call (s2 < e1 < e2)
+            # 3. Complete containment: new call is completely within existing call (s2 < s1 < e1 < e2)
+            # 4. New call contains existing: existing call is completely within new call (s1 < s2 < e2 < e1)
+            #
+            # All these cases are covered by: s2 < e1 AND e2 > s1
+            # Equivalently: date < new_call_end AND end_time > new_call_start
+
+            # Calculate the end time of the new call
+            new_call_end = call_timestamp + datetime.timedelta(seconds=duration)
+
+            # Use database-level filtering for efficiency
+            overlapping = conversation_qs.annotate(
+                end_time=RawSQL(
+                    "date + (duration || ' seconds')::interval",
+                    (),
+                    output_field=DateTimeField()
+                )
+            ).filter(
+                date__lt=new_call_end,      # s2 < e1
+                end_time__gt=call_timestamp  # e2 > s1
+            )
+
+            if overlapping.exists():
+                is_valid = False
+                message = "This agent already has a call that overlaps with the time range of the pushed call recording."
+            else:
+                is_valid = True
+                message = "Valid agent."
     else:
         # If the agent has no conversations, this is their first call
         is_valid = True
@@ -127,25 +180,6 @@ def obtain_suggested_topics(organization_id: int):
         suggested_topics += f'\t - {topic.name}: {topic.description}\n'
     return suggested_topics
 
-
-def obtain_simultaneous_call_policy(organization_id: int) -> bool:
-    """
-    Retrieves the organization's policy on whether to allow simultaneous calls from the same agent.
-
-    This function queries the organization's `allow_simultaneous_calls` setting to determine
-    whether agent overlap validation should be enforced. When this policy is enabled (True),
-    agents can have overlapping calls without validation errors. When disabled (False),
-    the system enforces that agents cannot have simultaneous calls.
-
-    Args:
-        organization_id (int): ID of the organization to query
-
-    Returns:
-        bool: True if the organization allows simultaneous calls for agents,
-              False if agent call overlap should be prevented
-    """
-    org = Organization.objects.get(id=organization_id)
-    return org.allow_simultaneous_calls
 
 def check_same_path_conversations(path: str):
     """

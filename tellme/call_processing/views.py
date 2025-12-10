@@ -104,6 +104,7 @@ class QueueRecordingView(APIView):
             agent_id = data.get('agent_id')
             timestamp = data.get('timestamp')
             file_obj = data.get('file')
+            duration = data.get('duration')
             file_format = '.' + file_obj.name.split('.')[-1].lower() if '.' in file_obj.name else None
             file_name = queue_utils.create_storage_path(organization_id, customer_id, agent_id, timestamp, file_format)
 
@@ -113,7 +114,7 @@ class QueueRecordingView(APIView):
             logger.info(f"File: {file_name}")
 
             message, status_code = queue_utils.upload_file_and_create_processing_task(
-                file_name, agent_id, customer_id, organization_id, timestamp, logger, file_obj=file_obj
+                file_name, agent_id, customer_id, organization_id, timestamp, logger, duration=duration, file_obj=file_obj
             )
             return Response(message, status=status_code)
         else:
