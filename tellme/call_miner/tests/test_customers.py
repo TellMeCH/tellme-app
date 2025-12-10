@@ -320,7 +320,7 @@ class TestCustomerSearch:
             next_url = data.get('next')
         return all_results
 
-    def test_search_by_first_name(self, client, analyst_user, customer):
+    def test_search_by_first_name(self, client, analyst_user, customer, conversation):
         """
         Test that customers can be searched and retrieved based on their first name.
         """
@@ -332,7 +332,7 @@ class TestCustomerSearch:
         assert len(results) >= 1
         assert str(customer.id) in customer_ids
 
-    def test_search_by_last_name(self, client, analyst_user, customer):
+    def test_search_by_last_name(self, client, analyst_user, customer, conversation):
         """
         Test that customers can be searched and retrieved based on their last name.
         """
@@ -368,23 +368,56 @@ class TestCustomerSearch:
         assert len(results) >= 1
         assert str(customer.id) in customer_ids
 
-    def test_search_no_duplicates_in_results(self, client, analyst_user, customer, agent):
+    def test_search_no_duplicates_in_results(self, client, analyst_user, customer, agent, conversation):
         """
         Test that customers resulting from a query do not contain duplicates,
         even when multiple customers match the search query.
         """
-        # Create additional customers with similar names to test deduplication
-        Customer.objects.create(
+        # Ensure the main customer has a conversation (from conversation fixture)
+        customer.refresh_from_db()
+
+        # Create additional customers with similar names and conversations to test deduplication
+        utc = zoneinfo.ZoneInfo("UTC")
+        test_date = datetime.now(tz=utc)
+
+        customer2 = Customer.objects.create(
             first_name='Edward',
             last_name='Johnson',
             external_id='different_id_1',
             organization=customer.organization
         )
-        Customer.objects.create(
+        Conversation.objects.create(
+            path='path/to/customer2_conv',
+            date=test_date,
+            duration=120,
+            title='Customer 2 Conversation',
+            summary='Test conversation',
+            transcript='Test transcript',
+            sentiment=3.0,
+            agent=agent,
+            customer=customer2,
+            input_tokens=100,
+            output_tokens=50
+        )
+
+        customer3 = Customer.objects.create(
             first_name='Edward',
             last_name='Brown',
             external_id='different_id_2',
             organization=customer.organization
+        )
+        Conversation.objects.create(
+            path='path/to/customer3_conv',
+            date=test_date,
+            duration=120,
+            title='Customer 3 Conversation',
+            summary='Test conversation',
+            transcript='Test transcript',
+            sentiment=3.0,
+            agent=agent,
+            customer=customer3,
+            input_tokens=100,
+            output_tokens=50
         )
 
         client.force_authenticate(user=analyst_user)
@@ -408,7 +441,7 @@ class TestCustomerSearch:
         url = reverse('customer-search') + f'?query={search_query}'
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.data['detail'] == 'Your query produced no results.'
+        assert response.data['detail'] == 'No results.'
 
     def test_search_with_ordering_by_total_revenue(self, client, analyst_user, agent, organization):
         """
@@ -577,6 +610,68 @@ class TestCustomerSearch:
 
         # High relevance customer should come first (higher rank)
         assert high_index < low_index
+
+    def test_search_without_query_returns_all_customers(self, client, analyst_user, customer, conversation):
+        """
+        Test that search endpoint without a query parameter returns all customers in the basic queryset.
+        The customer must have at least one conversation to appear in search results.
+        """
+        client.force_authenticate(user=analyst_user)
+        url = reverse('customer-search')
+        response = client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) >= 1
+
+        # Verify the customer is in the results
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in response.data['results']]
+        assert str(customer.id) in customer_ids
+
+    def test_search_only_returns_customers_with_conversations(self, client, analyst_user, customer, organization, agent, conversation):
+        """
+        Test that search endpoint only returns customers with at least one conversation,
+        excluding customers with zero conversations.
+        """
+        # Create a customer with no conversations
+        customer_no_conversations = Customer.objects.create(
+            first_name='NoConversations',
+            last_name='Customer',
+            external_id='no_conv_customer',
+            organization=organization
+        )
+
+        # Ensure customer fixture has a conversation (from the conversation fixture)
+        customer.refresh_from_db()
+        assert customer.conversation_count >= 1
+        # Verify new customer has no conversations
+        assert customer_no_conversations.conversation_count == 0
+
+        client.force_authenticate(user=analyst_user)
+
+        # Test search with no query
+        url = reverse('customer-search')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in response.data['results']]
+
+        # Customer with conversations should be included
+        assert str(customer.id) in customer_ids
+        # Customer without conversations should be excluded
+        assert str(customer_no_conversations.id) not in customer_ids
+
+        # Test search with a query that matches both customers' names
+        # Search for the main customer's last name
+        url = reverse('customer-search') + f'?query={customer.last_name}'
+        response = client.get(url)
+
+        # If the query returns results, verify filtering
+        if response.status_code == status.HTTP_200_OK:
+            customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in response.data['results']]
+            # Customer with conversations should be included
+            assert str(customer.id) in customer_ids
+            # Customer without conversations should be excluded
+            assert str(customer_no_conversations.id) not in customer_ids
 
 
 @pytest.mark.django_db

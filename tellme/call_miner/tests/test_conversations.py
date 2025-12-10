@@ -772,7 +772,7 @@ class TestConversationSearch:
         url = reverse('conversation-search') + f'?query={search_query}'
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.data['detail'] == 'Your query produced no results.'
+        assert response.data['detail'] == 'No results.'
 
     def test_search_with_ordering_by_date(self, client, analyst_user, agent, customer, topic):
         """
@@ -917,3 +917,18 @@ class TestConversationSearch:
 
         # High relevance conversation should come first (higher rank)
         assert high_index < low_index
+
+    def test_search_without_query_returns_all_conversations(self, client, analyst_user, conversation):
+        """
+        Test that search endpoint without a query parameter returns all conversations in the basic queryset.
+        """
+        client.force_authenticate(user=analyst_user)
+        url = reverse('conversation-search')
+        response = client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) >= 1
+
+        # Verify the conversation is in the results
+        conversation_ids = [conv['url'].rstrip('/').split('/')[-1] for conv in response.data['results']]
+        assert str(conversation.id) in conversation_ids
