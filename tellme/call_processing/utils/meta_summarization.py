@@ -252,10 +252,12 @@ class MetaSummarizer:
 
             response = completion.choices[0].message
 
-            if response.refusal:
-                raise RuntimeError(f'Model refused to respond. Refusal: {response.refusal}')
-            else:
-                return json.loads(response.content)
+            # Check for refusal (OpenAI-specific attribute)
+            refusal = getattr(response, 'refusal', None)
+            if refusal:
+                raise RuntimeError(f'Model refused to respond. Refusal: {refusal}')
+
+            return json.loads(response.content)
         else:
             return None
 
