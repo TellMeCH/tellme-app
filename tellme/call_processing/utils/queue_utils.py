@@ -125,15 +125,15 @@ def upload_file_and_create_processing_task(
         organization_id: int,
         call_timestamp: datetime.datetime,
         logger,
-        allow_simultaneous_calls: bool = False,
+        duration: float = None,
         file_obj=None
 ):
     """
     Uploads a call recording to Google Cloud Storage (GCS) and creates a processing task.
 
-    This function first verifies the agent's validity if required. If valid, and a recording was provided, it uploads it
-    to GCS. Then, it schedules a background task to process the file. If the agent is invalid and validation is enabled,
-     an error response is returned.
+    This function first verifies the agent's validity. If valid, and a recording was provided, it uploads it
+    to GCS. Then, it schedules a background task to process the file. If the agent is invalid,
+    an error response is returned.
 
     Args:
         file_name (str): The name of the file to be uploaded.
@@ -142,7 +142,8 @@ def upload_file_and_create_processing_task(
         organization_id (int): The ID of the organization.
         call_timestamp (datetime.datetime): The timestamp of the call.
         logger: Logger instance for logging events.
-        allow_simultaneous_calls (bool, optional): Whether to allow simultaneous agent calls. Defaults to False.
+        duration (float, optional): The duration of the call in seconds. When provided, enables proper
+            overlap checking for calls added out of chronological order. Defaults to None.
         file_obj: The file object containing the call recording data.
 
     Returns:
@@ -150,13 +151,8 @@ def upload_file_and_create_processing_task(
             - dict: A response dictionary with a success or error message.
             - int: The corresponding HTTP status code.
     """
-    # Unless the call explictly overrides the org policy, the org policy is followed
-    if allow_simultaneous_calls or db_handler.obtain_simultaneous_call_policy(organization_id):
-        agent_valid = True
-        validity_message = None
-    else:
-        # Check Validity of Request
-        agent_valid, validity_message = db_handler.check_agent_validity(agent_id, organization_id, call_timestamp)
+    # Check Validity of Request
+    agent_valid, validity_message = db_handler.check_agent_validity(agent_id, organization_id, call_timestamp, duration)
 
     if agent_valid:
         # Upload to GCS
