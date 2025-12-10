@@ -64,7 +64,7 @@ class TestQueueView:
         mock_cloud_tasks.create_processing_task.assert_not_called()
 
     def test_check_agent_validity_timestamp_overlap(
-        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_deepgram, mock_groq, mock_openai
+        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_cloud_tasks
     ):
         """
         If the agent already has a conversation that hasn't ended by the time the new call starts,
@@ -169,47 +169,83 @@ class TestQueueView:
         # Verify Cloud Task was created for processing
         mock_cloud_tasks.assert_called_once()
 
-    def test_queue_allows_overlapping_calls_when_policy_permits(
+    def test_queue_duration_overlap_validation(
         self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_cloud_tasks
     ):
         """
-        Test that overlapping agent calls are allowed when the organization's
-        allow_simultaneous_calls policy is enabled
+        Test duration-based overlap validation:
+        - When duration is provided, calls can be added out of chronological order
+        - But they must not have overlapping time ranges with existing calls
+        - Tests both directions: new call starting during existing call, and existing call starting during new call
         """
         api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
-        # Enable simultaneous calls policy for the organization
-        organization = setup_db[0]  # setup_db[0] is the organization
-        organization.allow_simultaneous_calls = True
-        organization.save()
-
-        # Create a conversation that would normally cause overlap validation to fail
-        overlapping_conv = Conversation.objects.create(
+        # Create an existing conversation that runs from T+5min to T+7min
+        base_time = valid_payload['timestamp']
+        existing_conv = Conversation.objects.create(
             agent=setup_db[1],  # setup_db[1] is the agent
-            date=valid_payload['timestamp'] - timedelta(minutes=1),
-            duration=120.0,  # 2 minutes, so it overlaps with the new call
-            transcript="Previous call transcript",
+            date=base_time + timedelta(minutes=5),
+            duration=120.0,  # 2 minutes duration
+            transcript="Existing call transcript",
             sentiment=3.0,
-            summary="Previous call summary",
-            title="Previous call title",
-            path="previous_call.wav",
+            summary="Existing call summary",
+            title="Existing call title",
+            path="existing_call.wav",
             input_tokens=10,
             output_tokens=10,
             customer=setup_db[4]  # setup_db[4] is the customer
         )
-        overlapping_conv.save()
+        existing_conv.save()
 
-        # Attempt to queue a new overlapping call
         queue_url = reverse("queue")
-        response = api_client.post(queue_url, data=valid_payload, format="multipart")
 
-        # Should succeed because organization allows simultaneous calls
+        # Test 1: Queue a call with duration that comes BEFORE the existing call (no overlap)
+        # This call is at T+0 with 60s duration, existing call is at T+5min, so no overlap
+        payload_no_overlap = valid_payload.copy()
+        payload_no_overlap["duration"] = 60.0  # 1 minute
+        payload_no_overlap["file"] = SimpleUploadedFile(
+            "test1.wav",
+            b"Fake File Bytes",
+            content_type="audio/wav"
+        )
+        response = api_client.post(queue_url, data=payload_no_overlap, format="multipart")
+
+        # Should succeed because there's no overlap
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert "file_name" in response.data
 
-        # Verify file was uploaded to GCS and task was created
-        mock_gcs_utils[0].assert_called_once()
-        mock_cloud_tasks.assert_called_once()
+        # Test 2: Queue a call where new call STARTS during existing call
+        # This call starts at T+6min, which is during the existing call (T+5min to T+7min)
+        payload_overlap_case1 = valid_payload.copy()
+        payload_overlap_case1["duration"] = 60.0
+        payload_overlap_case1["timestamp"] = base_time + timedelta(minutes=6)
+        payload_overlap_case1["file"] = SimpleUploadedFile(
+            "test2.wav",
+            b"Fake File Bytes",
+            content_type="audio/wav"
+        )
+        response = api_client.post(queue_url, data=payload_overlap_case1, format="multipart")
+
+        # Should fail because the new call starts during an existing call
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "overlaps" in response.data["message"]
+
+        # Test 3: Queue a call where existing call STARTS during new call
+        # This call starts at T+4min with 180s duration (ends at T+7min)
+        # The existing call at T+5min starts during this new call
+        payload_overlap_case2 = valid_payload.copy()
+        payload_overlap_case2["duration"] = 180.0  # 3 minutes
+        payload_overlap_case2["timestamp"] = base_time + timedelta(minutes=4)
+        payload_overlap_case2["file"] = SimpleUploadedFile(
+            "test3.wav",
+            b"Fake File Bytes",
+            content_type="audio/wav"
+        )
+        response = api_client.post(queue_url, data=payload_overlap_case2, format="multipart")
+
+        # Should fail because an existing call starts during the new call
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "overlaps" in response.data["message"]
 
 
 @pytest.mark.django_db
