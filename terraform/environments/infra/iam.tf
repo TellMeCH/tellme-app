@@ -210,3 +210,11 @@ resource "google_project_iam_member" "compute_network_admin" {
   role    = "roles/compute.networkAdmin"
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
+
+# API Gateway admin
+resource "google_project_iam_member" "apigateway_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/apigateway.admin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
