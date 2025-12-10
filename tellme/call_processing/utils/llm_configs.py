@@ -1,6 +1,20 @@
+# API Retry Configuration
+API_MAX_RETRIES: int = 5
+API_BASE_DELAY: float = 5.0
+API_BACKOFF_FACTOR: int = 2
+API_REQUEST_TIMEOUT: float = 300
+
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
-ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
-CUSTOMER_IDENTIFICATION_METHOD_CHOICES = [('enrichment', 'Enrichment'), ('redaction', 'Redaction')]
+
+# Transcription Model Names
+TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
+TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
+
+DIARIZATION_CONFIG = {
+    "model": "vertex_ai/gemini-2.0-flash-001",
+    "fallback_model": "openai/gpt-4o-mini",
+    "temperature": 0.2
+}
 
 DIARIZATION_PROMPT = """
     You are a helpful diarization assistant, working with transcribed calls between TWO speakers.
@@ -20,10 +34,8 @@ DIARIZATION_PROMPT = """
     'Speaker 0' or 'Speaker 1' as you see fit.
 """
 
-DIARIZATION_CONFIG = {
-    "model": "gemini-2.0-flash-001",
-    "temperature": 0.2
-}
+ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
+CUSTOMER_IDENTIFICATION_METHOD_CHOICES = [('enrichment', 'Enrichment'), ('redaction', 'Redaction')]
 
 ENRICHMENT_PIPELINE = [
     {
@@ -256,6 +268,9 @@ ENRICHMENT_PIPELINE = [
     }
 ]
 
+# Meta-summarization fallback model (Gemini backup for OpenAI)
+META_SUMMARIZATION_MODEL_GEMINI: str = 'gemini-2.0-flash-001'
+
 SUMMARIZER_PROMPTS = {
     'summary_mining': """
         You are a helpful assistant tasked with analyzing customer care interactions to uncover actionable insights about
@@ -292,31 +307,35 @@ SUMMARIZER_PROMPTS = {
         You are a helpful assistant tasked with analysing customer-care interactions for
         actionable insights about an individual customer. Below are summaries of calls
         involving this customer. Answer each question in 2-3 concise sentences:
-        
+
         1. What products or services does this customer purchase most often?
         2. Which features of those products/services does the customer explicitly appreciate?
         3. Which features do they criticise or dislike?
-        4. Have the customer’s expectations been met? If not, how has the company “dropped the ball”?
+        4. Have the customer's expectations been met? If not, how has the company "dropped the ball"?
         5. On a scale from 1 (very unlikely) to 5 (very likely), how probable is it that this customer will churn?
         6. On a scale from 1 (< 100 EUR per year) to 5 (> 10000 EUR per year), how valuable is this customer for the company?
         7. What broader interests does the customer reveal (hobbies, topics, brands)?
         8. Provide any demographic clues (approx. age range, region, gender, employment status).
-        9. What concrete actions could the company take to improve the customer’s perception and overall experience?
+        9. What concrete actions could the company take to improve the customer's perception and overall experience?
         10. Generate an email template that would comfort the customer. Be apologetic and show empathy. Your goal is to make sure the customer feels inclined to purchase again. If the topic has/should be forward to someone else, let them know. This should correspond to the email body.
         11. Following step 10., generate the email subject that would best fit
-        
+        12. Create a concise ticket title for handoff to another department (advisor/sales agent)
+        13. Create a comprehensive ticket description for handoff to another department. This should be structured as a complete issue description suitable for internal processing. Include: customer background from calls, specific problem details, attempted solutions, customer requests, urgency level, and any upselling opportunities. Format this as if you're briefing an insurance advisor or sales agent taking over this case.
+
         Provide the results in a JSON object with exactly these keys:
-        • “Favorite Products/Services”
-        • “Liked Features”
-        • “Disliked Features”
-        • “Expectations Met”
-        • “Churn Potential”
-        • “Customer Value”
-        • “Customer Interests”
-        • “Demographic Profile”
-        • “Improvement Suggestions”
-        • “Suggested Email Body”
-        • “Suggested Email Subject”
+        • "Favorite Products/Services"
+        • "Liked Features"
+        • "Disliked Features"
+        • "Expectations Met"
+        • "Churn Potential"
+        • "Customer Value"
+        • "Customer Interests"
+        • "Demographic Profile"
+        • "Improvement Suggestions"
+        • "Suggested Email Body"
+        • "Suggested Email Subject"
+        • "Ticket Title"
+        • "Ticket Description"
     """,
     'agent_summary': """
         You are a helpful assistant tasked with analysing customer-care interactions for
@@ -340,7 +359,7 @@ SUMMARIZER_PROMPTS = {
 
 SUMMARIZER_CONFIGS = {
     "summary_mining": {
-        "model": "gpt-5-nano",
+        "model": "openai/gpt-5-nano",
         "temperature": 1,
         "response_format": {
             "type": "json_schema",
@@ -387,7 +406,7 @@ SUMMARIZER_CONFIGS = {
         }
     },
     "customer_summary": {
-        "model": "gpt-5-nano",
+        "model": "openai/gpt-5-nano",
         "temperature": 1,
         "response_format": {
             "type": "json_schema",
@@ -406,7 +425,9 @@ SUMMARIZER_CONFIGS = {
                         "Demographic Profile": {"type": "string"},
                         "Improvement Suggestions": {"type": "string"},
                         "Suggested Email Body": {"type": "string"},
-                        "Suggested Email Subject": {"type": "string"}
+                        "Suggested Email Subject": {"type": "string"},
+                        "Ticket Title": {"type": "string"},
+                        "Ticket Description": {"type": "string"}
                     },
                     "required": [
                         "Favorite Products/Services",
@@ -419,7 +440,9 @@ SUMMARIZER_CONFIGS = {
                         "Demographic Profile",
                         "Improvement Suggestions",
                         "Suggested Email Body",
-                        "Suggested Email Subject"
+                        "Suggested Email Subject",
+                        "Ticket Title",
+                        "Ticket Description"
                     ],
                     "additionalProperties": False
                 },
@@ -428,7 +451,7 @@ SUMMARIZER_CONFIGS = {
         }
     },
     "agent_summary": {
-        "model": "gpt-4o-mini",
+        "model": "openai/gpt-4o-mini",
         "temperature": 0.2,
         "response_format": {
             "type": "json_schema",

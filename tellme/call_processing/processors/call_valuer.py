@@ -9,7 +9,9 @@ from googleapiclient.discovery import build
 from django.conf import settings
 
 from tellme.call_processing.utils import db_handler
-from .config import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, MINIMUM_EXPECTED_PRICE, MAXIMUM_EXPECTED_PRICE
+from .config import MINIMUM_EXPECTED_PRICE, MAXIMUM_EXPECTED_PRICE
+from tellme.call_processing.utils.llm_configs import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR
+
 
 class CallValuer:
     """

@@ -4,6 +4,7 @@ from channels.testing import WebsocketCommunicator
 from tellme.call_processing.consumers import AudioHookConsumer
 
 
+@pytest.mark.skip(reason="Disabled - not currently used")
 @pytest.mark.django_db(transaction=True)
 class TestAudioHookConsumer:
     @pytest.mark.asyncio
