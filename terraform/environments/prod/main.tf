@@ -14,6 +14,17 @@ moved {
   to   = module.api_revision.google_service_account.app
 }
 
+# Tell Terraform that the API Gateway IAM binding is now managed by infra environment
+# This prevents Terraform from destroying it in GCP when removing it from this state
+# You can remove this block after successfully running terraform apply
+removed {
+  from = module.api_revision.google_project_iam_member.gw_admin
+
+  lifecycle {
+    destroy = false
+  }
+}
+
 module "api_revision" {
   source                = "../../stacks/api_revision"
   service_name          = var.service_name
