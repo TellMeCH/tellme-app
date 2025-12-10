@@ -116,10 +116,3 @@ resource "google_storage_bucket_iam_member" "github_call_processing_bucket" {
   member = "serviceAccount:${data.google_service_account.github.email}"
 }
 
-# GitHub access to API Gateway
-resource "google_project_iam_member" "gw_admin" {
-  project = var.project_id
-  role    = "roles/apigateway.admin"
-  member  = "serviceAccount:${data.google_service_account.github.email}"
-}
-
