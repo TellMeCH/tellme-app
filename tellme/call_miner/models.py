@@ -26,7 +26,8 @@ class PeriodSummary(models.Model):
     PERIOD_CHOICES = [
         ('week', 'Week'),
         ('month', 'Month'),
-        ('quarter', 'Quarter')
+        ('quarter', 'Quarter'),
+        ('eternity', 'Eternity')
     ]
     DEVIATION_THRESHOLD = 10
 

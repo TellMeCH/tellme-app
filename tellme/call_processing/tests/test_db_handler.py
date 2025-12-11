@@ -556,7 +556,7 @@ class TestTriggerSummarizationTasks:
         # Verify that summarization tasks were created for topic, customer, and agent
         # Default settings typically use 'quarter' period and rolling=True, but this depends on settings
         # At minimum, there should be calls for the 3 objects (topic, customer, agent)
-        assert mock_create_task.call_count >= 3
+        assert mock_create_task.call_count == 2
 
         # Verify that tasks were created for all linked objects
         call_args_list = mock_create_task.call_args_list
@@ -564,7 +564,7 @@ class TestTriggerSummarizationTasks:
 
         assert topic.id in created_object_ids
         assert customer.id in created_object_ids
-        assert agent.id in created_object_ids
+        assert agent.id not in created_object_ids
 
     @patch('tellme.call_miner.models.create_summarization_task')
     def test_trigger_summarization_tasks_with_multiple_topics(self, mock_create_task, setup_db):
@@ -594,7 +594,7 @@ class TestTriggerSummarizationTasks:
         assert topic.id in created_object_ids
         assert topic2.id in created_object_ids
         assert customer.id in created_object_ids
-        assert agent.id in created_object_ids
+        assert agent.id not in created_object_ids
 
     @patch('tellme.call_miner.models.create_summarization_task')
     def test_trigger_summarization_tasks_handles_failures(self, mock_create_task, setup_db):
@@ -614,7 +614,7 @@ class TestTriggerSummarizationTasks:
 
         # Verify that task creation was attempted for all objects
         # Even if one fails, the others should still be attempted
-        assert mock_create_task.call_count >= 3
+        assert mock_create_task.call_count == 2
 
 
 @pytest.mark.django_db

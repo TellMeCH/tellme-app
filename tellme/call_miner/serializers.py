@@ -169,6 +169,11 @@ class MetaSummarySerializer(serializers.Serializer):
         rolling = self.context.get('rolling')
         if isinstance(rolling, str):
             rolling = rolling.lower() == 'true'
+
+        # Force rolling=False for 'eternity' period
+        if period == 'eternity':
+            rolling = False
+
         summary, summary_date, call_count, period_label, status = obj.get_or_create_summary(period, rolling)
         return {
             'summary': summary,

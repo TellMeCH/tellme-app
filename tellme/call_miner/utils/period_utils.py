@@ -12,14 +12,22 @@ def period_bounds(period: str, rolling: bool = False, tz: zoneinfo.ZoneInfo = UT
     Returns the start, end, and label for a given period.
 
     Parameters:
-        period : "week" | "month" | "quarter", Type of time period.
+        period : "week" | "month" | "quarter" | "eternity", Type of time period.
         rolling : bool, default False. If True, returns a rolling window ending yesterday.
+                  For "eternity" period, rolling is ignored.
         tz : zoneinfo.ZoneInfo, default UTC. Timezone for the result.
 
     Returns:
         (start, end, label) : tuple
         Start and end datetimes (tz-aware, [start, end)), and a label string.
     """
+    # Handle 'eternity' period - full history regardless of rolling parameter
+    if period == "eternity":
+        start = datetime.datetime(1900, 1, 1, 0, 0, 0, 0, tzinfo=tz)
+        end = datetime.datetime(2999, 12, 31, 23, 59, 59, 999999, tzinfo=tz)
+        label = "eternity"
+        return start, end, label
+
     ref = datetime.datetime.now(UTC).astimezone(tz)
 
     if rolling:
@@ -45,5 +53,5 @@ def period_bounds(period: str, rolling: bool = False, tz: zoneinfo.ZoneInfo = UT
             end = start + relativedelta(months=3)
             label = f"{start.year}-Q{q_idx + 1}"
         else:
-            raise ValueError("period must be 'week', 'month', or 'quarter'")
+            raise ValueError("period must be 'week', 'month', 'quarter', or 'eternity'")
         return start, end, label
