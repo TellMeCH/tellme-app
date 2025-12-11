@@ -69,6 +69,8 @@ if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
     SECURE_SSL_REDIRECT = True
     USE_X_FORWARDED_HOST = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 else:
     ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='').split(',')
 
@@ -335,6 +337,16 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'WARNING',
             'propagate': False,
+        },
+        'django_otp': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'two_factor': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
         },
     },
 }
