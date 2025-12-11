@@ -439,6 +439,18 @@ wheels = [
 ]
 
 [[package]]
+name = "django-formtools"
+version = "2.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/f8/bb9b228fc33230186f3612a6fc96274a81bab3509817498f2632d7aa6367/django-formtools-2.5.1.tar.gz", hash = "sha256:47cb34552c6efca088863d693284d04fc36eaaf350eb21e1a1d935e0df523c93", size = 88637, upload-time = "2023-12-19T10:30:59.78Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/63/91a107e3aaaf3987bad036494dfd8cc2675f4a66d22e65ffd6711f84ba70/django_formtools-2.5.1-py3-none-any.whl", hash = "sha256:bce9b64eda52cc1eef6961cc649cf75aacd1a707c2fff08d6c3efcbc8e7e761a", size = 170651, upload-time = "2023-12-19T10:30:02.816Z" },
+]
+
+[[package]]
 name = "django-health-check"
 version = "3.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -451,6 +463,30 @@ wheels = [
 ]
 
 [[package]]
+name = "django-otp"
+version = "1.6.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/83/ec6bf6b2b142e394c3dcbf7e9641ad5976c8b36947fba060dc71017a904d/django_otp-1.6.3.tar.gz", hash = "sha256:93f0011bc4cb6ef278733d75de351f3e2de6fd13ece56cf27b63e1da42322d24", size = 74641, upload-time = "2025-10-25T15:36:16.272Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/23/22d8b4e9280351d6236fac1fa30b5f1fc8fff70c4b615ba9d78f20468b5f/django_otp-1.6.3-py3-none-any.whl", hash = "sha256:f7ff9e6980c4aa9e6b9f7a7477de0a65583891a78e5b8c6cae0ec7cc0f78ce55", size = 68346, upload-time = "2025-10-25T15:36:14.748Z" },
+]
+
+[[package]]
+name = "django-phonenumber-field"
+version = "8.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/87/bf/8aa60c9834773b955dff1ddea842e361e8daaf6b0945d5bfc29fc66d53ab/django_phonenumber_field-8.4.0.tar.gz", hash = "sha256:2b83e843dac35eec6a69880a166487235b737a71a1e38c9a52e5ad67d6996083", size = 45512, upload-time = "2025-11-24T15:09:51.904Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/a3/f6b85a9246e22cf719752ad83f5e95aa9ba12419b2f9eff70f20d30e55df/django_phonenumber_field-8.4.0-py3-none-any.whl", hash = "sha256:7a1cb3a6456edb54d879f11ffa0acb227ded08c93b587035d0f28093f0e46511", size = 69528, upload-time = "2025-11-24T15:09:45.479Z" },
+]
+
+[[package]]
 name = "django-storages"
 version = "1.14.6"
 source = { registry = "https://pypi.org/simple" }
@@ -460,6 +496,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ff/d6/2e50e378fff0408d558f36c4acffc090f9a641fd6e084af9e54d45307efa/django_storages-1.14.6.tar.gz", hash = "sha256:7a25ce8f4214f69ac9c7ce87e2603887f7ae99326c316bc8d2d75375e09341c9", size = 87587, upload-time = "2025-04-02T02:34:55.103Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/21/3cedee63417bc5553eed0c204be478071c9ab208e5e259e97287590194f1/django_storages-1.14.6-py3-none-any.whl", hash = "sha256:11b7b6200e1cb5ffcd9962bd3673a39c7d6a6109e8096f0e03d46fab3d3aabd9", size = 33095, upload-time = "2025-04-02T02:34:53.291Z" },
+]
+
+[[package]]
+name = "django-two-factor-auth"
+version = "1.18.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+    { name = "django-formtools" },
+    { name = "django-otp" },
+    { name = "django-phonenumber-field" },
+    { name = "qrcode" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/ba/68d8f5bf2b54869a6d32f234cc6651408bf7b11c393117e8750a6b820764/django_two_factor_auth-1.18.1.tar.gz", hash = "sha256:9d624db63123141cd95a6afe3d626105c3c29a7c8e25a3d93411dd1fac0be464", size = 176500, upload-time = "2025-09-27T17:36:52.578Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f8/85/042d8e380f57396d3221a2f23257444ec1020881b2d1210a4d7915f26586/django_two_factor_auth-1.18.1-py3-none-any.whl", hash = "sha256:ccc9cee10be880037914e572389be6dcae93947709a8a9ff01fb23f7dee254f2", size = 316610, upload-time = "2025-09-27T17:36:50.569Z" },
 ]
 
 [[package]]
@@ -543,6 +595,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/aa/41/859f78701761bed7abdb8a7c050819c654dad17f96c658dcdf263d5a9641/firebase_admin-7.1.0.tar.gz", hash = "sha256:a163014a4368c43f7efa409948065f8856b51bd2ae5d82c24586e546d5fd4a26", size = 194786, upload-time = "2025-07-31T20:36:39.512Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c4/16/eb9bf44cdc7af0317a70ae770ad4170b9fcfbb660ac32806742506be1246/firebase_admin-7.1.0-py3-none-any.whl", hash = "sha256:1913e783b7ad56f891e1aca86e6fdde6a8ec49b7a920dd451da155e8647506c8", size = 137140, upload-time = "2025-07-31T20:36:38.266Z" },
+]
+
+[[package]]
+name = "freezegun"
+version = "1.5.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/95/dd/23e2f4e357f8fd3bdff613c1fe4466d21bfb00a6177f238079b17f7b1c84/freezegun-1.5.5.tar.gz", hash = "sha256:ac7742a6cc6c25a2c35e9292dfd554b897b517d2dec26891a2e8debf205cb94a", size = 35914, upload-time = "2025-08-09T10:39:08.338Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/2e/b41d8a1a917d6581fc27a35d05561037b048e47df50f27f8ac9c7e27a710/freezegun-1.5.5-py3-none-any.whl", hash = "sha256:cd557f4a75cf074e84bc374249b9dd491eaeacd61376b9eb3c423282211619d2", size = 19266, upload-time = "2025-08-09T10:39:06.636Z" },
 ]
 
 [[package]]
@@ -1681,6 +1745,18 @@ wheels = [
 ]
 
 [[package]]
+name = "qrcode"
+version = "8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/b2/7fc2931bfae0af02d5f53b174e9cf701adbb35f39d69c2af63d4a39f81a9/qrcode-8.2.tar.gz", hash = "sha256:35c3f2a4172b33136ab9f6b3ef1c00260dd2f66f858f24d88418a015f446506c", size = 43317, upload-time = "2025-05-01T15:44:24.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/b8/d2d6d731733f51684bbf76bf34dab3b70a9148e8f2cef2bb544fccec681a/qrcode-8.2-py3-none-any.whl", hash = "sha256:16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f", size = 45986, upload-time = "2025-05-01T15:44:22.781Z" },
+]
+
+[[package]]
 name = "referencing"
 version = "0.36.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1868,9 +1944,11 @@ dependencies = [
     { name = "django-environ" },
     { name = "django-health-check" },
     { name = "django-storages" },
+    { name = "django-two-factor-auth" },
     { name = "djangorestframework" },
     { name = "drf-spectacular" },
     { name = "firebase-admin" },
+    { name = "freezegun" },
     { name = "google-api-python-client" },
     { name = "google-cloud-dlp" },
     { name = "google-cloud-secret-manager" },
@@ -1887,6 +1965,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pydub" },
     { name = "python-dateutil" },
+    { name = "qrcode" },
     { name = "sentry-sdk", extra = ["django"] },
     { name = "tenacity" },
     { name = "tiktoken" },
@@ -1913,9 +1992,11 @@ requires-dist = [
     { name = "django-environ", specifier = ">=0.12.0" },
     { name = "django-health-check", specifier = ">=3.20.0" },
     { name = "django-storages", specifier = ">=1.14.6" },
+    { name = "django-two-factor-auth", specifier = ">=1.18.1" },
     { name = "djangorestframework", specifier = ">=3.16.1" },
     { name = "drf-spectacular", specifier = ">=0.28.0" },
     { name = "firebase-admin", specifier = ">=7.1.0" },
+    { name = "freezegun", specifier = ">=1.5.5" },
     { name = "google-api-python-client", specifier = ">=2.183.0" },
     { name = "google-cloud-dlp", specifier = ">=3.32.0" },
     { name = "google-cloud-secret-manager", specifier = ">=2.24.0" },
@@ -1932,6 +2013,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydub", specifier = ">=0.25.1" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
+    { name = "qrcode", specifier = ">=8.2" },
     { name = "sentry-sdk", extras = ["django"], specifier = ">=2.38.0" },
     { name = "tenacity", specifier = ">=9.1.2" },
     { name = "tiktoken", specifier = ">=0.12.0" },
