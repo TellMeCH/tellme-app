@@ -218,6 +218,30 @@ class MetaSummarizer:
                 count += 1
         return count, selected_text
 
+    @staticmethod
+    def _clean_escaped_newlines(data):
+        """
+        Recursively replace escaped newlines (\\n) with actual newlines (\n) in the response.
+
+        LLMs sometimes return escaped newlines in their JSON responses when they should be
+        actual newlines. This method cleans up the response by recursively processing
+        dictionaries, lists, and strings.
+
+        Args:
+            data: The data to clean (dict, list, str, or other)
+
+        Returns:
+            Cleaned data with escaped newlines replaced
+        """
+        if isinstance(data, dict):
+            return {key: MetaSummarizer._clean_escaped_newlines(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [MetaSummarizer._clean_escaped_newlines(item) for item in data]
+        elif isinstance(data, str):
+            return data.replace('\\n', '\n')
+        else:
+            return data
+
     @observe(as_type="generation")
     def _condense_items(self, enriched_summaries: list[str], enriched_transcripts: list[str], trace_data: dict):
         """
@@ -315,7 +339,9 @@ class MetaSummarizer:
             if refusal:
                 raise RuntimeError(f'Model refused to respond. Refusal: {refusal}')
 
-            return json.loads(response.content)
+            # Parse JSON response and clean up escaped newlines
+            result = json.loads(response.content)
+            return self._clean_escaped_newlines(result)
         else:
             return None
 

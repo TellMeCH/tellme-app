@@ -159,6 +159,43 @@ class TestMetaSummarizer:
         # The mock returns standard summarization fields
         assert "Reasons for Calling" in result or "title" in result
 
+    def test_condense_items_cleans_escaped_newlines(self, meta_summarizer, mock_litellm_meta_summarization):
+        """
+        Test that the response from LLM has escaped newlines properly cleaned.
+        """
+        # Override the mock to return a response with escaped newlines
+        def escaped_newlines_side_effect(*args, **kwargs):
+            mock_completion = MagicMock()
+            # Simulate LLM returning escaped newlines in JSON
+            response_with_escaped_newlines = json.dumps({
+                "Reasons for Calling": "Billing issues\\nTechnical support\\nAccount inquiries",
+                "Summary": "Customers called about:\\n- Billing problems\\n- Tech issues"
+            })
+            mock_completion.choices = [MagicMock(message=MagicMock(
+                refusal=None,
+                content=response_with_escaped_newlines
+            ))]
+            mock_completion.model = "openai/gpt-4o-mini"
+            mock_completion.usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+            return mock_completion
+
+        mock_litellm_meta_summarization.side_effect = escaped_newlines_side_effect
+
+        enriched_summaries = ["Test summary"]
+        enriched_transcripts = ["Test transcript"]
+        trace_data = {
+            'metadata': {
+                'object': "<class 'tellme.call_miner.models.Topic'>"
+            }
+        }
+
+        result = meta_summarizer._condense_items(enriched_summaries, enriched_transcripts, trace_data)
+
+        # Verify that escaped newlines were replaced with actual newlines
+        assert isinstance(result, dict)
+        assert result["Reasons for Calling"] == "Billing issues\nTechnical support\nAccount inquiries"
+        assert result["Summary"] == "Customers called about:\n- Billing problems\n- Tech issues"
+
     def test_condense_items_refusal(self, meta_summarizer, mock_litellm_meta_summarization):
         """
         Test handling of LiteLLM refusal response.
@@ -546,6 +583,39 @@ class TestMetaSummarizer:
         assert old_conversation.id in conversation_ids
         assert future_conversation.id in conversation_ids
         assert conversation.id in conversation_ids  # Original conversation from setup_db
+
+    def test_clean_escaped_newlines(self):
+        """
+        Test that escaped newlines (\\n) are properly replaced with actual newlines (\n).
+        """
+        # Test with dictionary
+        data_dict = {
+            'key1': 'Line 1\\nLine 2\\nLine 3',
+            'key2': {
+                'nested': 'Nested\\nValue'
+            },
+            'key3': ['Item 1\\nItem 2', 'Item 3']
+        }
+        cleaned = MetaSummarizer._clean_escaped_newlines(data_dict)
+        assert cleaned['key1'] == 'Line 1\nLine 2\nLine 3'
+        assert cleaned['key2']['nested'] == 'Nested\nValue'
+        assert cleaned['key3'][0] == 'Item 1\nItem 2'
+
+        # Test with list
+        data_list = ['Line 1\\nLine 2', {'key': 'Value\\nWith\\nNewlines'}]
+        cleaned_list = MetaSummarizer._clean_escaped_newlines(data_list)
+        assert cleaned_list[0] == 'Line 1\nLine 2'
+        assert cleaned_list[1]['key'] == 'Value\nWith\nNewlines'
+
+        # Test with plain string
+        data_str = 'Simple\\nString\\nWith\\nNewlines'
+        cleaned_str = MetaSummarizer._clean_escaped_newlines(data_str)
+        assert cleaned_str == 'Simple\nString\nWith\nNewlines'
+
+        # Test with non-string values (should be returned unchanged)
+        assert MetaSummarizer._clean_escaped_newlines(123) == 123
+        assert MetaSummarizer._clean_escaped_newlines(None) is None
+        assert MetaSummarizer._clean_escaped_newlines(True) is True
 
     def test_transcript_vs_summary_selection(self, meta_summarizer):
         """
