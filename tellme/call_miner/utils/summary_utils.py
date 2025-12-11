@@ -18,8 +18,8 @@ DEFAULT_SUMMARY_SETTINGS = {
         'rolling': True
     },
     'customer': {
-        'period': 'quarter',
-        'rolling': True
+        'period': 'eternity',
+        'rolling': False
     },
     'agent': {
         'period': 'month',

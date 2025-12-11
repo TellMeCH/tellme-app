@@ -716,7 +716,6 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     - Modification is only allowed to superusers
     - Viewing is allowed to any employee of the same organization (and superusers)
     """
-    MINIMUM_CALL_COUNT = 2  # Minimum number of calls for a customer to be included in all_summaries result
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
@@ -783,10 +782,10 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
         if self.action in ['all_summaries', 'summary_data']:
             qs = qs.prefetch_related('conversations')
 
-        # For all summaries, load only customers that have a minimum conversation count and would have a summary for the period
+        # For all summaries, load only customers that have at least one conversation and would have a summary for the period
         if self.action == 'all_summaries':
             start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
-            qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT).filter(last_conversation_date__gte=start)
+            qs = qs.filter(conversation_count__gte=1).filter(last_conversation_date__gte=start)
 
         # For search, load only customers with at least one conversation
         if self.action == 'search':
