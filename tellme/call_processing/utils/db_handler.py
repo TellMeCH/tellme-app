@@ -443,11 +443,11 @@ def trigger_summarization_tasks(conversation):
         rolling=settings['customer']['rolling']
     )
 
-    # Check agent
-    conversation.agent.check_and_create_summarization_task(
-        period=settings['agent']['period'],
-        rolling=settings['agent']['rolling']
-    )
+    # Check agent - DISABLED SINCE NOT USED
+    # conversation.agent.check_and_create_summarization_task(
+    #     period=settings['agent']['period'],
+    #     rolling=settings['agent']['rolling']
+    # )
 
 
 def get_object_by_class_string_and_id(class_str, obj_id):
