@@ -169,6 +169,11 @@ class MetaSummarySerializer(serializers.Serializer):
         rolling = self.context.get('rolling')
         if isinstance(rolling, str):
             rolling = rolling.lower() == 'true'
+
+        # Force rolling=False for 'eternity' period
+        if period == 'eternity':
+            rolling = False
+
         summary, summary_date, call_count, period_label, status = obj.get_or_create_summary(period, rolling)
         return {
             'summary': summary,
@@ -349,8 +354,7 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
         model = Organization
         fields = [
             'url', 'name', 'conversation_count', 'max_user_count', 'max_topic_count', 'created', 'updated',
-            'transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count',
-            'allow_simultaneous_calls'
+            'transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count'
         ]
 
     @staticmethod

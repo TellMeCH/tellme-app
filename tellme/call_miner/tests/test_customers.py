@@ -320,7 +320,7 @@ class TestCustomerSearch:
             next_url = data.get('next')
         return all_results
 
-    def test_search_by_first_name(self, client, analyst_user, customer):
+    def test_search_by_first_name(self, client, analyst_user, customer, conversation):
         """
         Test that customers can be searched and retrieved based on their first name.
         """
@@ -332,7 +332,7 @@ class TestCustomerSearch:
         assert len(results) >= 1
         assert str(customer.id) in customer_ids
 
-    def test_search_by_last_name(self, client, analyst_user, customer):
+    def test_search_by_last_name(self, client, analyst_user, customer, conversation):
         """
         Test that customers can be searched and retrieved based on their last name.
         """
@@ -368,23 +368,56 @@ class TestCustomerSearch:
         assert len(results) >= 1
         assert str(customer.id) in customer_ids
 
-    def test_search_no_duplicates_in_results(self, client, analyst_user, customer, agent):
+    def test_search_no_duplicates_in_results(self, client, analyst_user, customer, agent, conversation):
         """
         Test that customers resulting from a query do not contain duplicates,
         even when multiple customers match the search query.
         """
-        # Create additional customers with similar names to test deduplication
-        Customer.objects.create(
+        # Ensure the main customer has a conversation (from conversation fixture)
+        customer.refresh_from_db()
+
+        # Create additional customers with similar names and conversations to test deduplication
+        utc = zoneinfo.ZoneInfo("UTC")
+        test_date = datetime.now(tz=utc)
+
+        customer2 = Customer.objects.create(
             first_name='Edward',
             last_name='Johnson',
             external_id='different_id_1',
             organization=customer.organization
         )
-        Customer.objects.create(
+        Conversation.objects.create(
+            path='path/to/customer2_conv',
+            date=test_date,
+            duration=120,
+            title='Customer 2 Conversation',
+            summary='Test conversation',
+            transcript='Test transcript',
+            sentiment=3.0,
+            agent=agent,
+            customer=customer2,
+            input_tokens=100,
+            output_tokens=50
+        )
+
+        customer3 = Customer.objects.create(
             first_name='Edward',
             last_name='Brown',
             external_id='different_id_2',
             organization=customer.organization
+        )
+        Conversation.objects.create(
+            path='path/to/customer3_conv',
+            date=test_date,
+            duration=120,
+            title='Customer 3 Conversation',
+            summary='Test conversation',
+            transcript='Test transcript',
+            sentiment=3.0,
+            agent=agent,
+            customer=customer3,
+            input_tokens=100,
+            output_tokens=50
         )
 
         client.force_authenticate(user=analyst_user)
@@ -408,7 +441,7 @@ class TestCustomerSearch:
         url = reverse('customer-search') + f'?query={search_query}'
         response = client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.data['detail'] == 'Your query produced no results.'
+        assert response.data['detail'] == 'No results.'
 
     def test_search_with_ordering_by_total_revenue(self, client, analyst_user, agent, organization):
         """
@@ -577,6 +610,68 @@ class TestCustomerSearch:
 
         # High relevance customer should come first (higher rank)
         assert high_index < low_index
+
+    def test_search_without_query_returns_all_customers(self, client, analyst_user, customer, conversation):
+        """
+        Test that search endpoint without a query parameter returns all customers in the basic queryset.
+        The customer must have at least one conversation to appear in search results.
+        """
+        client.force_authenticate(user=analyst_user)
+        url = reverse('customer-search')
+        response = client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['results']) >= 1
+
+        # Verify the customer is in the results
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in response.data['results']]
+        assert str(customer.id) in customer_ids
+
+    def test_search_only_returns_customers_with_conversations(self, client, analyst_user, customer, organization, agent, conversation):
+        """
+        Test that search endpoint only returns customers with at least one conversation,
+        excluding customers with zero conversations.
+        """
+        # Create a customer with no conversations
+        customer_no_conversations = Customer.objects.create(
+            first_name='NoConversations',
+            last_name='Customer',
+            external_id='no_conv_customer',
+            organization=organization
+        )
+
+        # Ensure customer fixture has a conversation (from the conversation fixture)
+        customer.refresh_from_db()
+        assert customer.conversation_count >= 1
+        # Verify new customer has no conversations
+        assert customer_no_conversations.conversation_count == 0
+
+        client.force_authenticate(user=analyst_user)
+
+        # Test search with no query
+        url = reverse('customer-search')
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+        customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in response.data['results']]
+
+        # Customer with conversations should be included
+        assert str(customer.id) in customer_ids
+        # Customer without conversations should be excluded
+        assert str(customer_no_conversations.id) not in customer_ids
+
+        # Test search with a query that matches both customers' names
+        # Search for the main customer's last name
+        url = reverse('customer-search') + f'?query={customer.last_name}'
+        response = client.get(url)
+
+        # If the query returns results, verify filtering
+        if response.status_code == status.HTTP_200_OK:
+            customer_ids = [cust['url'].rstrip('/').split('/')[-1] for cust in response.data['results']]
+            # Customer with conversations should be included
+            assert str(customer.id) in customer_ids
+            # Customer without conversations should be excluded
+            assert str(customer_no_conversations.id) not in customer_ids
 
 
 @pytest.mark.django_db
@@ -1028,21 +1123,22 @@ class TestCustomerActions:
         }
 
         # Create PeriodSummary for each combination we'll test
-        for period in ['week', 'month', 'quarter']:
+        for period in ['week', 'month', 'quarter', 'eternity']:
             for rolling in [True, False]:
-                start, end, label = period_bounds(period, rolling)
+                if not (period == 'eternity' and rolling):
+                    start, end, label = period_bounds(period, rolling)
 
-                PeriodSummary.objects.create(
-                    content_type=content_type,
-                    object_id=customer.id,
-                    period_type=period,
-                    period_label=label,
-                    summary=summary_data,
-                    last_call_at=conversation_today.date,
-                    call_count=1
-                )
+                    PeriodSummary.objects.create(
+                        content_type=content_type,
+                        object_id=customer.id,
+                        period_type=period,
+                        period_label=label,
+                        summary=summary_data,
+                        last_call_at=conversation_today.date,
+                        call_count=1
+                    )
 
-        # Test default request (customer uses quarter period with rolling=True by default)
+        # Test default request (customer uses eternity period with rolling=False by default)
         response = client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert 'summary' in response.data
@@ -1051,7 +1147,7 @@ class TestCustomerActions:
         assert response.data['status'] == 'ready'
 
         # Test all period/rolling combinations
-        for period in ['week', 'month', 'quarter']:
+        for period in ['week', 'month', 'quarter', 'eternity']:
             for rolling in [True, False]:
                 response = client.get(url, {'period': period, 'rolling': rolling})
                 assert response.status_code == status.HTTP_200_OK
@@ -1061,49 +1157,126 @@ class TestCustomerActions:
                 assert response.data['status'] == 'ready'
 
                 # Verify the correct period label is returned
-                start, end, expected_label = period_bounds(period, rolling)
+                # For eternity, rolling is always forced to False
+                actual_rolling = False if period == 'eternity' else rolling
+                start, end, expected_label = period_bounds(period, actual_rolling)
                 assert response.data['period_label'] == expected_label
+
+    def test_customer_summary_data_with_eternity_period(self, client, agent_user, customer, conversation_today):
+        """
+        Test that the 'summary-data' action for a customer works with 'eternity' period.
+        Verifies that the eternity period returns full customer history and ignores rolling parameter.
+        """
+        client.force_authenticate(user=agent_user)
+        url = reverse('customer-summary-data', args=[customer.id])
+        content_type = ContentType.objects.get_for_model(customer.__class__)
+
+        summary_data = {
+            'Customer Lifetime Value': 'High value customer with consistent engagement',
+            'All-Time Favorite Products': 'Premium subscription, Enterprise features',
+            'Historical Churn Indicators': 'No significant churn risk over entire history'
+        }
+
+        # Create PeriodSummary for eternity period
+        start, end, label = period_bounds('eternity', False)
+
+        PeriodSummary.objects.create(
+            content_type=content_type,
+            object_id=customer.id,
+            period_type='eternity',
+            period_label=label,
+            summary=summary_data,
+            last_call_at=conversation_today.date,
+            call_count=1
+        )
+
+        # Test with eternity period and rolling=False
+        response = client.get(url, {'period': 'eternity', 'rolling': False})
+        assert response.status_code == status.HTTP_200_OK
+        assert 'summary' in response.data
+        assert response.data['summary'] == summary_data
+        assert response.data['period_label'] == 'eternity'
+        assert response.data['status'] == 'ready'
+
+        # Test with eternity period and rolling=True (should be forced to False)
+        response = client.get(url, {'period': 'eternity', 'rolling': True})
+        assert response.status_code == status.HTTP_200_OK
+        assert 'summary' in response.data
+        assert response.data['summary'] == summary_data
+        assert response.data['period_label'] == 'eternity'
+        assert response.data['status'] == 'ready'
+
+    def test_customer_default_summary_uses_eternity(self, client, agent_user, customer, conversation_today):
+        """
+        Test that the default summary period for customers is 'eternity' with rolling=False.
+        """
+        client.force_authenticate(user=agent_user)
+        url = reverse('customer-summary-data', args=[customer.id])
+        content_type = ContentType.objects.get_for_model(customer.__class__)
+
+        summary_data = {
+            'Customer Value': 'High value customer'
+        }
+
+        # Create PeriodSummary for eternity period (the new default for customers)
+        PeriodSummary.objects.create(
+            content_type=content_type,
+            object_id=customer.id,
+            period_type='eternity',
+            period_label='eternity',
+            summary=summary_data,
+            last_call_at=conversation_today.date,
+            call_count=1
+        )
+
+        # Test default request (should use eternity period for customers)
+        response = client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert 'summary' in response.data
+        assert response.data['period_label'] == 'eternity'
+        assert response.data['status'] == 'ready'
 
     def test_all_summaries_respects_minimum_call_count_and_period(
             self, client, organization_admin_user, agent, customer, topic, conversation_today
     ):
         """
-        • customer (with 1 call) → add a 2nd call so it qualifies
-        • low_customer  (1 call) → should be filtered out
-        • zero_customer (0 call) → should be filtered out
-        • period label must be quarterly
+        Test that all_summaries only includes customers with at least one conversation
+        within the summarization period (eternity - new default for customers).
+        • customer (with 1 call) → should be included
+        • customer_with_multiple (with 2 calls) → should be included
+        • zero_customer (0 calls) → should be excluded
         """
-        # make qualifying 2nd conversation for 'customer'
         utc = zoneinfo.ZoneInfo("UTC")
+
+        # Create a second customer with multiple conversations
+        customer_with_multiple = Customer.objects.create(
+            external_id="multi123",
+            organization=customer.organization,
+        )
         Conversation.objects.create(
-            path="2nd",
-            date=datetime.now(tz=utc) - timedelta(hours=1),
+            path="multi1",
+            date=datetime.now(tz=utc) - timedelta(hours=2),
             duration=60,
-            title="2nd",
+            title="multi1",
             summary="x",
             transcript="t",
             sentiment=4.2,
             agent=agent,
-            customer=customer,
+            customer=customer_with_multiple,
             input_tokens=10,
             output_tokens=5,
         ).topics.add(topic)
 
-        # low-customer: only 1 conversation
-        low_customer = Customer.objects.create(
-            external_id="low123",
-            organization=customer.organization,
-        )
         Conversation.objects.create(
-            path="low",
-            date=datetime.now(tz=utc),
-            duration=30,
-            title="low",
+            path="multi2",
+            date=datetime.now(tz=utc) - timedelta(hours=1),
+            duration=60,
+            title="multi2",
             summary="x",
             transcript="t",
-            sentiment=3.5,
+            sentiment=4.0,
             agent=agent,
-            customer=low_customer,
+            customer=customer_with_multiple,
             input_tokens=10,
             output_tokens=5,
         ).topics.add(topic)
@@ -1115,14 +1288,17 @@ class TestCustomerActions:
         )
 
         # Create pre-existing PeriodSummaries for all customers with "Customer Value" field
-        customers_to_create_summaries = [customer, low_customer, zero_customer]
-        period_types = ['week', 'month', 'quarter']
+        customers_to_create_summaries = [customer, customer_with_multiple, zero_customer]
+        # Include 'eternity' as the new default period for customers
+        period_types = ['week', 'month', 'quarter', 'eternity']
 
         content_type = ContentType.objects.get_for_model(Customer)
 
         for test_customer in customers_to_create_summaries:
             for period_type in period_types:
-                start, end, label = period_bounds(period_type, True)  # Rolling period
+                # For eternity, always use rolling=False
+                rolling = False if period_type == 'eternity' else True
+                start, end, label = period_bounds(period_type, rolling)
                 PeriodSummary.objects.create(
                     content_type=content_type,
                     object_id=test_customer.id,
@@ -1134,7 +1310,7 @@ class TestCustomerActions:
                         "Issues Resolved": 85
                     },
                     last_call_at=datetime.now(tz=zoneinfo.ZoneInfo("UTC")) - timedelta(days=1),
-                    call_count=2 if test_customer == customer else (1 if test_customer == low_customer else 0)
+                    call_count=test_customer.conversation_count
                 )
 
         client.force_authenticate(user=organization_admin_user)
@@ -1142,11 +1318,12 @@ class TestCustomerActions:
         assert resp.status_code == status.HTTP_200_OK
 
         data = resp.data
-        # qualifying customer included
+        # Customers with at least one conversation should be included
         assert customer.id in data
-        # others excluded
-        assert low_customer.id not in data
+        assert customer_with_multiple.id in data
+        # Customer with zero conversations should be excluded
         assert zero_customer.id not in data
 
-        # correct period label (quarter)
-        assert data[customer.id]["period_label"] == 'Rolling90D'
+        # correct period label (eternity - new default for customers)
+        assert data[customer.id]["period_label"] == 'eternity'
+        assert data[customer_with_multiple.id]["period_label"] == 'eternity'

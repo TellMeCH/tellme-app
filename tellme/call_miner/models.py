@@ -26,7 +26,8 @@ class PeriodSummary(models.Model):
     PERIOD_CHOICES = [
         ('week', 'Week'),
         ('month', 'Month'),
-        ('quarter', 'Quarter')
+        ('quarter', 'Quarter'),
+        ('eternity', 'Eternity')
     ]
     DEVIATION_THRESHOLD = 10
 
@@ -514,7 +515,6 @@ class Organization(models.Model, ConversationTrendMixin):
     enrichment_method = models.CharField(choices=ENRICHMENT_METHOD_CHOICES, default='openai')
     revenue_search_prefix = models.CharField(max_length=255, null=True)
     language = models.CharField(max_length=2, default='en')
-    allow_simultaneous_calls = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name

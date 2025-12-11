@@ -1,6 +1,20 @@
+# API Retry Configuration
+API_MAX_RETRIES: int = 5
+API_BASE_DELAY: float = 5.0
+API_BACKOFF_FACTOR: int = 2
+API_REQUEST_TIMEOUT: float = 300
+
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
-ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
-CUSTOMER_IDENTIFICATION_METHOD_CHOICES = [('enrichment', 'Enrichment'), ('redaction', 'Redaction')]
+
+# Transcription Model Names
+TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
+TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
+
+DIARIZATION_CONFIG = {
+    "model": "vertex_ai/gemini-2.0-flash-001",
+    "fallback_model": "openai/gpt-4o-mini",
+    "temperature": 0.2
+}
 
 DIARIZATION_PROMPT = """
     You are a helpful diarization assistant, working with transcribed calls between TWO speakers.
@@ -20,10 +34,8 @@ DIARIZATION_PROMPT = """
     'Speaker 0' or 'Speaker 1' as you see fit.
 """
 
-DIARIZATION_CONFIG = {
-    "model": "gemini-2.0-flash-001",
-    "temperature": 0.2
-}
+ENRICHMENT_METHOD_CHOICES = [('openai', 'OpenAI'), ('vertexai', 'VertexAI')]
+CUSTOMER_IDENTIFICATION_METHOD_CHOICES = [('enrichment', 'Enrichment'), ('redaction', 'Redaction')]
 
 ENRICHMENT_PIPELINE = [
     {
@@ -256,6 +268,9 @@ ENRICHMENT_PIPELINE = [
     }
 ]
 
+# Meta-summarization fallback model (Gemini backup for OpenAI)
+META_SUMMARIZATION_MODEL_GEMINI: str = 'gemini-2.0-flash-001'
+
 SUMMARIZER_PROMPTS = {
     'summary_mining': """
         You are a helpful assistant tasked with analyzing customer care interactions to uncover actionable insights about
@@ -290,20 +305,24 @@ SUMMARIZER_PROMPTS = {
     """,
     'customer_summary': """
         You are a helpful assistant tasked with analysing customer-care interactions for
-        actionable insights about an individual customer. Below are summaries of calls
-        involving this customer. Answer each question in 2-3 concise sentences:
+        actionable insights about an individual customer. Below are transcripts or summaries of calls
+        involving this customer. Follow this reasoning when analyzing these conversations:
+        a low sentiment and a high revenue at stake imply high risk of a painful loss of revenue, whereas a high sentiment
+        and a relatively low revenue at stake indicate potential for upselling. Answer these questions:
         
         1. What products or services does this customer purchase most often?
-        2. Which features of those products/services does the customer explicitly appreciate?
-        3. Which features do they criticise or dislike?
-        4. Have the customer’s expectations been met? If not, how has the company “dropped the ball”?
+        2. Which features of those products/services does the customer explicitly appreciate? Answer in 2-3 lines.
+        3. Which features do they criticise or dislike? Answer in 2-3 lines.
+        4. Have the customer’s expectations been met? If not, how has the company “dropped the ball”? Present the result as a bulleted list of descending order of relevance, with maximum 4 items.
         5. On a scale from 1 (very unlikely) to 5 (very likely), how probable is it that this customer will churn?
         6. On a scale from 1 (< 100 EUR per year) to 5 (> 10000 EUR per year), how valuable is this customer for the company?
         7. What broader interests does the customer reveal (hobbies, topics, brands)?
         8. Provide any demographic clues (approx. age range, region, gender, employment status).
-        9. What concrete actions could the company take to improve the customer’s perception and overall experience?
-        10. Generate an email template that would comfort the customer. Be apologetic and show empathy. Your goal is to make sure the customer feels inclined to purchase again. If the topic has/should be forward to someone else, let them know. This should correspond to the email body.
+        9. What concrete actions could the company take to improve the customer’s perception and overall experience? Based on the conversations, is there any potential for upselling or cross-selling that will retain the customer? Present the result as a bulleted list of descending order of relevance, with maximum 4 items.
+        10. Generate an email template that would comfort the customer. Be apologetic and show empathy. Your goal is to make sure the customer feels inclined to purchase again. If the topic has/should be forward to someone else, let them know. This should correspond to the email body. Make sure that the resulting format is formal, with an adequate number of line breaks between greeting and body sections.
         11. Following step 10., generate the email subject that would best fit
+        12. Create a Jira ticket that can be redirected to the adequate department to take care of the issue. Structure it as follows: brief context (3-4 bullet points), recommended actions (3-4 bullet points).
+        13. Following step 12, generate a title for the Jira ticket that would best fit
         
         Provide the results in a JSON object with exactly these keys:
         • “Favorite Products/Services”
@@ -317,6 +336,12 @@ SUMMARIZER_PROMPTS = {
         • “Improvement Suggestions”
         • “Suggested Email Body”
         • “Suggested Email Subject”
+        • “Jira Ticket Body”
+        • “Jira Ticket Title”
+        
+        Important: 
+            - For all bulleted lists, follow this format: "- Item A\n- Item B\n- Item C"!
+            - All responses should be in English, except the Email Body in Subject, which should be in the customer's language!
     """,
     'agent_summary': """
         You are a helpful assistant tasked with analysing customer-care interactions for
@@ -340,7 +365,7 @@ SUMMARIZER_PROMPTS = {
 
 SUMMARIZER_CONFIGS = {
     "summary_mining": {
-        "model": "gpt-5-nano",
+        "model": "openai/gpt-5-nano",
         "temperature": 1,
         "response_format": {
             "type": "json_schema",
@@ -387,7 +412,7 @@ SUMMARIZER_CONFIGS = {
         }
     },
     "customer_summary": {
-        "model": "gpt-5-nano",
+        "model": "openai/gpt-5-nano",
         "temperature": 1,
         "response_format": {
             "type": "json_schema",
@@ -406,7 +431,9 @@ SUMMARIZER_CONFIGS = {
                         "Demographic Profile": {"type": "string"},
                         "Improvement Suggestions": {"type": "string"},
                         "Suggested Email Body": {"type": "string"},
-                        "Suggested Email Subject": {"type": "string"}
+                        "Suggested Email Subject": {"type": "string"},
+                        "Jira Ticket Body": {"type": "string"},
+                        "Jira Ticket Title": {"type": "string"},
                     },
                     "required": [
                         "Favorite Products/Services",
@@ -419,7 +446,11 @@ SUMMARIZER_CONFIGS = {
                         "Demographic Profile",
                         "Improvement Suggestions",
                         "Suggested Email Body",
-                        "Suggested Email Subject"
+                        "Suggested Email Subject",
+                        "Ticket Title",
+                        "Ticket Description",
+                        "Jira Ticket Body",
+                        "Jira Ticket Title"
                     ],
                     "additionalProperties": False
                 },
@@ -428,7 +459,7 @@ SUMMARIZER_CONFIGS = {
         }
     },
     "agent_summary": {
-        "model": "gpt-4o-mini",
+        "model": "openai/gpt-4o-mini",
         "temperature": 0.2,
         "response_format": {
             "type": "json_schema",

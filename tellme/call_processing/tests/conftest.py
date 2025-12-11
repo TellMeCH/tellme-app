@@ -159,103 +159,125 @@ def mock_groq():
 
 
 @pytest.fixture
-def mock_vertexai():
+def mock_litellm_setup():
     """
-    Mocks out the google.genai.Client used in CallProcessingPipeline.
-    Specifically, it mocks the .models.generate_content call.
+    Mocks out the LiteLLM setup function to prevent actual LiteLLM initialization during tests.
     """
-    with patch("google.genai.Client") as mock_client_cls:
-        client = MagicMock()
-        mock_client_cls.return_value = client
-
-        diarization_text = "Speaker 0: Diarized from Gemini\nSpeaker 1: Yes, indeed."
-
-        enrichment_json = """{
-            "title": "Test Call",
-            "summary": "Short summary",
-            "sentiment": 4,
-            "starting_sentiment": 3,
-            "ending_sentiment": 5,
-            "topics": ["Billing"],
-            "suggested_topics": ["Technical Support"],
-            "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
-            "agent_speaker_labels": ["Speaker 0"],
-            "customer_speaker_labels": ["Speaker 1"],
-            "revenue_search_query": "men leather jackets",
-            "resolved": false
-        }"""
-
-        def gen_content_side_effect(*args, **kwargs):
-            """
-            Signature of the real method is
-              generate_content(model, contents, config)
-            but callers may mix positional / keyword args – we handle both.
-            """
-            cfg = kwargs.get("config") or (args[2] if len(args) > 2 else None)
-            is_structured = getattr(cfg, "response_mime_type", None) == "application/json"
-
-            text_payload = enrichment_json if is_structured else diarization_text
-
-            resp = MagicMock()
-            resp.candidates = [
-                MagicMock(
-                    content=MagicMock(
-                        parts=[MagicMock(text=text_payload)]
-                    )
-                )
-            ]
-            resp.usage_metadata = MagicMock(
-                prompt_token_count=10,
-                candidates_token_count=5,
-                total_token_count=15
-            )
-            return resp
-
-        gen_content_mock = MagicMock(side_effect=gen_content_side_effect)
-        client.models.generate_content = gen_content_mock
-
-        yield gen_content_mock
+    with patch("tellme.call_processing.utils.litellm_config.setup_litellm") as mock_setup:
+        mock_setup.return_value = None
+        yield mock_setup
 
 
 @pytest.fixture
-def mock_openai():
+def mock_litellm():
     """
-    Mocks out the OpenAI chat completion call.
+    Mocks LiteLLM completion for BOTH enrichment and diarization.
+    Distinguishes between them based on presence of response_format parameter.
     """
-    with patch("langfuse.openai.OpenAI") as mock_openai_class:
-        mock_openai_instance = MagicMock()
-        mock_openai_class.return_value = mock_openai_instance
+    with patch("litellm.completion") as mock_completion:
+        def completion_side_effect(*args, **kwargs):
+            # Check if this is a structured output call (enrichment) or plain text (diarization)
+            # With new fallback format: model is string, fallbacks is list
+            # Enrichment has response_format in kwargs, diarization doesn't
+            is_structured = "response_format" in kwargs
 
-        # The structure of the response from openai.chat.completions.create
+            # Detect enrichment step by checking the response_format schema
+            step_name = "unknown"
+            if is_structured:
+                response_format = kwargs.get("response_format", {})
+                json_schema = response_format.get("json_schema", {})
+                schema = json_schema.get("schema", {})
+                properties = schema.get("properties", {})
+
+                # speaker_identification step has agent_speaker_labels and customer_speaker_labels
+                if "agent_speaker_labels" in properties and "customer_speaker_labels" in properties:
+                    step_name = "speaker_identification"
+                else:
+                    step_name = "other_enrichment"
+
+            if is_structured:
+                # Enrichment response (structured JSON)
+                if step_name == "speaker_identification":
+                    response_content = """{
+                        "agent_speaker_labels": ["Speaker 0"],
+                        "customer_speaker_labels": ["Speaker 1"],
+                        "customer_info": {
+                            "full_name": "John Doe",
+                            "address": "",
+                            "birth_date": "1990-01-15",
+                            "phone_number": "",
+                            "postcode": "",
+                            "loyalty_number": ""
+                        }
+                    }"""
+                else:
+                    response_content = """{
+                        "title": "Test Call",
+                        "summary": "Short summary",
+                        "sentiment": 4,
+                        "starting_sentiment": 3,
+                        "ending_sentiment": 5,
+                        "topics": ["Billing"],
+                        "suggested_topics": ["Technical Support"],
+                        "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
+                        "revenue_search_query": "men leather jackets",
+                        "resolved": false
+                    }"""
+            else:
+                # Diarization response (plain text)
+                response_content = "Speaker 0: Hello, how can I help you?\nSpeaker 1: I need assistance with my order."
+
+            mock_chat_completion = MagicMock()
+            mock_chat_completion.choices = [
+                MagicMock(message=MagicMock(content=response_content, refusal=None))
+            ]
+            mock_chat_completion.usage = MagicMock(
+                prompt_tokens=50,
+                completion_tokens=10,
+                total_tokens=60
+            )
+            # Return model name WITHOUT provider prefix (LiteLLM behavior)
+            # The code will extract provider from litellm_config
+            if is_structured:
+                mock_chat_completion.model = "gpt-4o-mini"
+            else:
+                mock_chat_completion.model = "gemini-2.0-flash-001"
+
+            return mock_chat_completion
+
+        mock_completion.side_effect = completion_side_effect
+        yield mock_completion
+
+
+@pytest.fixture
+def mock_litellm_meta_summarization():
+    """
+    Mocks out LiteLLM completion for meta summarization (different JSON structure).
+    """
+    with patch("litellm.completion") as mock_completion:
         mock_chat_completion = MagicMock()
-        # Mock JSON content from the OpenAI completion
         mock_chat_completion.choices = [
             MagicMock(message=MagicMock(
                 content="""{
-                "title": "Test Call",
-                "summary": "Short summary",
-                "sentiment": 4,
-                "starting_sentiment": 3,
-                "ending_sentiment": 5,
-                "topics": ["Billing"],
-                "suggested_topics": ["Technical Support"],
-                "new_topics": [{"name": "Product Inquiry", "description": "Customer asking about product features"}],
-                "agent_speaker_labels": ["Speaker 0"],
-                "customer_speaker_labels": ["Speaker 1"],
-                "revenue_search_query": "men leather jackets",
-                "resolved": false
-                }"""
+                    "Reasons for Calling": "• Billing inquiries\\n• Technical support requests",
+                    "Stages of the Customer Journey": "Most callers are existing customers seeking post-purchase support.",
+                    "Call Resolution Rates": "85% of issues are resolved in the first call.",
+                    "Churn Potential": "Low churn risk due to positive sentiment trends.",
+                    "Causes for Dissatisfaction": "• Long wait times\\n• Complex billing processes",
+                    "Causes for Engagement": "• Helpful agent responses\\n• Quick issue resolution",
+                    "Suggested Actions": "• Reduce wait times\\n• Simplify billing processes"
+                }""",
+                refusal=None
             ))
         ]
-        # Usage data
         mock_chat_completion.usage = MagicMock(
-            prompt_tokens=50,
-            completion_tokens=10
+            prompt_tokens=100,
+            completion_tokens=50
         )
-        # Return value from create
-        mock_openai_instance.chat.completions.create.return_value = mock_chat_completion
-
-        yield mock_openai_instance
+        # Return model name WITHOUT provider prefix (LiteLLM behavior)
+        mock_chat_completion.model = "gpt-5-nano"
+        mock_completion.return_value = mock_chat_completion
+        yield mock_completion
 
 
 @pytest.fixture
@@ -337,10 +359,10 @@ def mock_langfuse():
         mock_lf_instance = MagicMock()
         mock_lf_class.return_value = mock_lf_instance
 
-        # Mock prompts
+        # Mock prompts - always use fallback to ensure hardcoded configs are used
         mock_prompt = MagicMock()
-        mock_prompt.is_fallback = False
-        mock_prompt.config = ENRICHMENT_PIPELINE[0]['config'] if ENRICHMENT_PIPELINE else {}
+        mock_prompt.is_fallback = True  # Force use of hardcoded configs from llm_configs.py
+        mock_prompt.config = {}  # Not used when is_fallback=True
         mock_prompt.prompt = "Mock prompt text"
         mock_prompt.compile = MagicMock(return_value="Compiled mock prompt")
 

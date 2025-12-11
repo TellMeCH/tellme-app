@@ -4,7 +4,7 @@ CallTranscriber handles audio transcription and diarization.
 This module contains all transcription-related functionality including:
 - Audio chunking
 - Speech-to-text via Deepgram and Groq
-- Speaker diarization via Vertex AI
+- Speaker diarization via LiteLLM (Gemini primary, OpenAI fallback)
 """
 
 import httpx
@@ -14,20 +14,23 @@ from pydub import AudioSegment
 from django.conf import settings
 import deepgram
 import groq
-from google import genai
+import litellm
 from langfuse import Langfuse
 from langfuse.decorators import observe, langfuse_context
 from deepgram.clients.common.v1.errors import DeepgramApiError
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
-from google.genai import types
 
-from tellme.call_processing.utils.llm_configs import DIARIZATION_CONFIG, DIARIZATION_PROMPT
-from tellme.call_processing.utils import gcs_utils
-from .config import (
-    CHUNK_SIZE, API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
+from tellme.call_processing.utils.llm_configs import (
+    DIARIZATION_PROMPT,
+    API_MAX_RETRIES,
+    API_BASE_DELAY,
+    API_BACKOFF_FACTOR,
+    TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
     TRANSCRIPTION_MODEL_NAME_GROQ
 )
-from .utils import vertexai_retry_logic
+from tellme.call_processing.utils.litellm_config import setup_litellm, get_diarization_config, get_provider_from_model
+from tellme.call_processing.utils import gcs_utils
+from .config import CHUNK_SIZE
 
 
 # Transcription costs in dollars per second
@@ -67,11 +70,8 @@ class CallTranscriber:
             raise RuntimeError("Groq API key not found. Please set the GROQ_API_KEY setting value.")
         self.groq = groq.Groq(api_key=settings.GROQ_API_KEY)
 
-        self.vertexai = genai.Client(
-            vertexai=True,
-            project=settings.GOOGLE_CLOUD_PROJECT,
-            location='global'
-        )
+        # Setup LiteLLM with Langfuse integration and retry settings
+        setup_litellm()
 
         # Initialize transcription options
         self.transcription_options = deepgram.PrerecordedOptions(
@@ -347,15 +347,12 @@ class CallTranscriber:
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
 
     @observe(as_type="generation", capture_output=False, capture_input=False)
-    @retry(
-        reraise=True,
-        wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
-        stop=stop_after_attempt(API_MAX_RETRIES),
-        retry=retry_if_exception(vertexai_retry_logic)
-    )
     def diarize_transcript(self, transcript: str) -> str:
         """
-        Apply speaker diarization to transcript using Vertex AI.
+        Apply speaker diarization to transcript using LiteLLM with fallback support.
+
+        Uses Gemini as primary model with OpenAI as fallback. LiteLLM handles
+        retries automatically (configured globally in setup_litellm).
 
         Args:
             transcript (str): Transcript to diarize
@@ -363,32 +360,32 @@ class CallTranscriber:
         Returns:
             str: Diarized transcript with speaker labels
         """
-        # Prepare prompt and response format
-        if self.diarization_prompt.is_fallback:
-            config_kwargs = DIARIZATION_CONFIG
-        else:
-            config_kwargs = {'langfuse_prompt': self.diarization_prompt}
-            config_kwargs.update(self.diarization_prompt.config)
+        # Get LiteLLM fallback configuration
+        litellm_config = get_diarization_config(self.diarization_prompt)
 
-        response = self.vertexai.models.generate_content(
-            model=config_kwargs['model'],
-            contents=f"This is the list of transcribed phrases:\n{transcript}",
-            config=types.GenerateContentConfig(
-                system_instruction=self.diarization_prompt.prompt,
-                temperature=config_kwargs['temperature'],
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
-            ),
+        # Execute with LiteLLM (handles retries and fallbacks automatically)
+        completion = litellm.completion(
+            messages=[
+                {"role": "system", "content": self.diarization_prompt.prompt},
+                {"role": "user", "content": f"This is the list of transcribed phrases:\n{transcript}"}
+            ],
+            **litellm_config
         )
 
-        # Send observation data to Langfuse
+        # Update Langfuse observation with actual model used
+        model_used = completion.model
+        provider = get_provider_from_model(model_used, litellm_config)
+
         langfuse_context.update_current_observation(
-            name="diarization_vertexai",
+            name=f"diarization_{provider}",
             prompt=self.diarization_prompt,
-            model=config_kwargs['model'],
+            model=model_used,
             usage={
-                "promptTokens": response.usage_metadata.prompt_token_count,
-                "completionTokens": response.usage_metadata.candidates_token_count,
-                "totalTokens": response.usage_metadata.total_token_count
-            }
+                "promptTokens": completion.usage.prompt_tokens,
+                "completionTokens": completion.usage.completion_tokens,
+                "totalTokens": completion.usage.total_tokens
+            },
+            metadata={"langfuse_prompt": self.diarization_prompt}
         )
-        return response.candidates[0].content.parts[0].text
+
+        return completion.choices[0].message.content

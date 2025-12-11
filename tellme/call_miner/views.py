@@ -220,25 +220,25 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
         of the ViewSet inheriting this abstract ViewSet.
         """
         query = request.query_params.get('query', None)
-        if not query:
-            return response.Response({"detail": "No search query provided."}, status=400)
 
-        search_query = SearchQuery(query, search_type='websearch')
-
-        # Get the base queryset, and apply the query
+        # Get the base queryset
         queryset = (
             self.get_queryset()
             .select_related(*self.relationships_to_select)
             .prefetch_related(*self.relationships_to_prefetch)
         )
 
-        # Rank the search results by relevance, filter based on a relevance threshold, and sort based on the rank.
-        queryset = (
-            queryset
-            .annotate(rank=SearchRank(self.search_vector, search_query))
-            .filter(rank__gte=0.1)
-            .distinct()
-        )
+        # Apply the query, if provided
+        if query:
+            search_query = SearchQuery(query, search_type='websearch')
+
+            # Rank the search results by relevance, filter based on a relevance threshold, and sort based on the rank.
+            queryset = (
+                queryset
+                .annotate(rank=SearchRank(self.search_vector, search_query))
+                .filter(rank__gte=0.1)
+                .distinct()
+            )
 
         # Apply ordering: use OrderingFilter if explicitly specified, otherwise fallback to search relevance
         ordering_param = getattr(self, 'ordering_param', 'ordering')
@@ -246,20 +246,20 @@ class SearchViewSet(viewsets.ReadOnlyModelViewSet):
             # User explicitly provided ordering parameter
             ordering = filters.OrderingFilter().get_ordering(request, queryset, self)
             queryset = queryset.order_by(*ordering)
-        else:
-            # No ordering parameter provided, use search relevance
+        elif query:
+            # No ordering parameter provided and query given, use search relevance
             queryset = queryset.order_by('-rank')
 
         # Return the results. If empty, raise a 404. Otherwise paginate if necessary.
         if not queryset.exists():
             return response.Response(
-                {'detail': 'Your query produced no results.'},
+                {'detail': 'No results.'},
                 status=status.HTTP_404_NOT_FOUND
             )
         else:
             # For search without ordering, temporarily modify cursor_ordering to prioritize rank
             original_cursor_ordering = getattr(self, 'cursor_ordering', None)
-            if not request.query_params.get(ordering_param):
+            if not request.query_params.get(ordering_param) and query:
                 # Prepend -rank to cursor_ordering for the paginator
                 if original_cursor_ordering:
                     self.cursor_ordering = ['-rank'] + list(original_cursor_ordering)
@@ -716,7 +716,6 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     - Modification is only allowed to superusers
     - Viewing is allowed to any employee of the same organization (and superusers)
     """
-    MINIMUM_CALL_COUNT = 2  # Minimum number of calls for a customer to be included in all_summaries result
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
@@ -783,10 +782,14 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
         if self.action in ['all_summaries', 'summary_data']:
             qs = qs.prefetch_related('conversations')
 
-        # Load only customers that have a minimum conversation count and would have a summary for the period
+        # For all summaries, load only customers that have at least one conversation and would have a summary for the period
         if self.action == 'all_summaries':
             start, end, label = period_bounds(self.summary_period, self.summary_rolling_window)
-            qs = qs.filter(conversation_count__gte=self.MINIMUM_CALL_COUNT).filter(last_conversation_date__gte=start)
+            qs = qs.filter(conversation_count__gte=1).filter(last_conversation_date__gte=start)
+
+        # For search, load only customers with at least one conversation
+        if self.action == 'search':
+            qs = qs.filter(conversation_count__gte=1)
         return qs
 
     @extend_schema(

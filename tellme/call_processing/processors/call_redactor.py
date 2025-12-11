@@ -17,8 +17,8 @@ from django.conf import settings
 import google.cloud.dlp
 
 from .utils import create_customer_id
-from .config import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, MINIMUM_CALLER_AGE
-
+from .config import MINIMUM_CALLER_AGE
+from tellme.call_processing.utils.llm_configs import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR
 
 class CallRedactor:
     """

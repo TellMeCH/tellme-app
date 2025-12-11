@@ -21,6 +21,7 @@ class QueueRecordingSerializer(serializers.Serializer):
     agent_id = serializers.IntegerField(required=True)
     timestamp = serializers.DateTimeField(required=True)
     file = serializers.FileField(required=True)
+    duration = serializers.FloatField(required=False, allow_null=True, default=None)
 
 
 class ProcessRecordingSerializer(serializers.Serializer):
