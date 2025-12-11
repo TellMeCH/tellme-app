@@ -1,5 +1,4 @@
 import json
-import random
 import litellm
 import tiktoken
 from langfuse import Langfuse
@@ -112,7 +111,7 @@ class MetaSummarizer:
         Extract all the object's related conversations, as well as their summaries, for the specified time period.
         Args:
             obj: The object (Topic, Customer, or Agent) to create summary for
-            period (str): Period of conversations to focus on. One of 'week', 'month', or 'quarter'
+            period (str): Period of conversations to focus on. One of 'week', 'month', 'quarter', or 'eternity'
             rolling (bool): Indicates whether to compute the summary on a rolling window basis or not
 
         Returns:
@@ -121,11 +120,11 @@ class MetaSummarizer:
         start, end, label = period_bounds(period, rolling)
 
         # Extract all conversations in the relevant time period
-        conversations = obj.conversations.filter(date__gte=start, date__lt=end)
+        conversations = obj.conversations.filter(date__gte=start, date__lt=end).order_by("-date")
 
         latest_date = getattr(obj, 'last_conversation_date', None)
         if latest_date is None:
-            latest_date = conversations.order_by("-date").values_list("date", flat=True).first()
+            latest_date = conversations.values_list("date", flat=True).first()
 
         return conversations, latest_date, conversations.count(), label
 
@@ -204,9 +203,8 @@ class MetaSummarizer:
         model_name = config_kwargs["model"]
         token_cutoff = self._get_token_cutoff(model_name)
 
-        # Token-aware random selection
+        # Token-aware recency biased selection
         selected_text = ''
-        random.shuffle(summaries)
         for i, summ in enumerate(summaries):
             new_part = f'Conversation #{i + 1}: {summ}'
             potential_payload = f'{prompt.prompt}\n\n{selected_text}\n\n{new_part}'
@@ -268,7 +266,7 @@ class MetaSummarizer:
 
         Args:
             obj: The object (Topic, Customer, or Agent) to create summary for
-            period (str): Period of conversations to focus on. One of 'week', 'month', or 'quarter'
+            period (str): Period of conversations to focus on. One of 'week', 'month', 'quarter', or 'eternity'
             rolling (bool): Indicates whether to compute the summary on a rolling window basis or not
             trace_data (dict): A dictionary containing data to store in the corresponding Langfuse trace
 
