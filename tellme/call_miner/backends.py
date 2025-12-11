@@ -3,14 +3,14 @@ import logging
 import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.backends import BaseBackend
+from django.contrib.auth.backends import ModelBackend
 from firebase_admin import auth as firebase_auth
 from django.core.exceptions import ObjectDoesNotExist
 
 logger = logging.getLogger('django')
 
 
-class FirebaseEmailPasswordBackend(BaseBackend):
+class FirebaseEmailPasswordBackend(ModelBackend):
     """
     Custom authentication backend to sign in users with email and password
     via Firebase's Identity Toolkit REST API. If successful, an ID token is
@@ -74,13 +74,3 @@ class FirebaseEmailPasswordBackend(BaseBackend):
             return None
 
         return user
-
-    def get_user(self, user_id):
-        """
-        Standard method Django calls to re-fetch a user from the database by ID.
-        """
-        user_model = get_user_model()
-        try:
-            return user_model.objects.get(pk=user_id)
-        except user_model.DoesNotExist:
-            return None
