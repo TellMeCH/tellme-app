@@ -239,6 +239,43 @@ def add_missing_endpoints(schema):
         }
     }
 
+    # Common configuration for all Admin paths
+    # security: [] is critical to bypass API Gateway Auth
+    admin_config = {
+        'tags': ['admin'],
+        'security': [],
+        'x-google-backend': 'cloud-run-backend',
+        'responses': {
+            '200': {'description': 'Django Admin Interface'},
+            '302': {'description': 'Redirect'}
+        }
+    }
+
+    # Path 1: Root Admin (/admin)
+    schema['paths']['/admin'] = {
+        'get': {
+            'operationId': 'django_admin_root',
+            'summary': 'Django Admin Root',
+            **admin_config
+        }
+    }
+
+    # Path 2: Recursive Wildcard (/admin/**)
+    # The '/**' suffix is a Google API Gateway specific wildcard that matches
+    # everything recursively (e.g., /admin/login/, /admin/auth/user/add/).
+    schema['paths']['/admin/**'] = {
+        'get': {
+            'operationId': 'django_admin_wildcard_get',
+            'summary': 'Django Admin Wildcard GET',
+            **admin_config
+        },
+        'post': {
+            'operationId': 'django_admin_wildcard_post',
+            'summary': 'Django Admin Wildcard POST',
+            **admin_config
+        }
+    }
+
 
 def add_cors_configuration(schema):
     """
