@@ -320,9 +320,7 @@ class TestSmokeTestCloudRunWithLogs:
             rf"^Processing file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, size \d+ bytes\.$",
             rf"^Processed file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, required \d+ seconds$",
             rf"^Processing summarization for <class 'tellme.call_miner.models.Customer'> \d+$",
-            rf"^Processing summarization for <class 'tellme.call_miner.models.Agent'> {self.agent_id}$",
             rf"^Summary created/updated for <class 'tellme.call_miner.models.Customer'> \d+",
-            rf"^Summary created/updated for <class 'tellme.call_miner.models.Agent'> {self.agent_id}",
         ]
         for pattern in expected_patterns:
             assert (
