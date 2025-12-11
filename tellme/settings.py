@@ -69,6 +69,8 @@ if CLOUDRUN_SERVICE_URLS and TELLME_ENV != 'dev':
     SECURE_SSL_REDIRECT = True
     USE_X_FORWARDED_HOST = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 else:
     ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='').split(',')
 
@@ -89,6 +91,10 @@ INSTALLED_APPS = [
     'health_check',
     'health_check.db',
     'health_check.cache',
+    'django_otp',
+    'django_otp.plugins.otp_static',
+    'django_otp.plugins.otp_totp',
+    'two_factor',
     'tellme.call_miner',
     'tellme.call_processing'
 ]
@@ -101,6 +107,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',
     'tellme.middleware.PostHogMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -232,6 +239,9 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
+# Login with 2FA Page
+LOGIN_URL = 'two_factor:login'
+LOGIN_REDIRECT_URL = 'admin:index'
 
 GS_BUCKET_NAME = env("GS_BUCKET_NAME", default=None)
 if GS_BUCKET_NAME and TELLME_ENV != 'dev':
@@ -327,7 +337,7 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'WARNING',
             'propagate': False,
-        },
+        }
     },
 }
 

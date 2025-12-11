@@ -154,7 +154,8 @@ def add_google_cloud_extensions(schema):
             'cloud-run-backend': {
                 'address': '${cloud_run_url}',
                 'deadline': 60,
-                'jwt_audience': '${cloud_run_url}'
+                'jwt_audience': '${cloud_run_url}',
+                'path_translation': 'APPEND_PATH_TO_ADDRESS'
             }
         }
     }
@@ -236,6 +237,43 @@ def add_missing_endpoints(schema):
                     }
                 }
             }
+        }
+    }
+
+    # Common configuration for all Admin paths
+    # security: [] is critical to bypass API Gateway Auth
+    admin_config = {
+        'tags': ['admin'],
+        'security': [],
+        'x-google-backend': 'cloud-run-backend',
+        'responses': {
+            '200': {'description': 'Django Admin Interface'},
+            '302': {'description': 'Redirect'}
+        }
+    }
+
+    # Path 1: Root Admin (/admin)
+    schema['paths']['/admin'] = {
+        'get': {
+            'operationId': 'django_admin_root',
+            'summary': 'Django Admin Root',
+            **admin_config
+        }
+    }
+
+    # Path 2: Recursive Wildcard (/admin/**)
+    # The '/**' suffix is a Google API Gateway specific wildcard that matches
+    # everything recursively (e.g., /admin/login/, /admin/auth/user/add/).
+    schema['paths']['/admin/**'] = {
+        'get': {
+            'operationId': 'django_admin_wildcard_get',
+            'summary': 'Django Admin Wildcard GET',
+            **admin_config
+        },
+        'post': {
+            'operationId': 'django_admin_wildcard_post',
+            'summary': 'Django Admin Wildcard POST',
+            **admin_config
         }
     }
 
