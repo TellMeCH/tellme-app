@@ -129,58 +129,110 @@ class MetaSummarizer:
         return conversations, latest_date, conversations.count(), label
 
     @staticmethod
-    def _enrich_summaries(conversations):
+    def _enrich_items(conversations):
         """
-        Enriches conversation summaries with key contextual metadata for enhanced AI analysis.
+        Enriches conversation summaries and transcripts with key contextual metadata for enhanced AI analysis.
 
-        This method transforms basic conversation summaries into enriched versions that include
+        This method transforms both summaries and transcripts into enriched versions that include
         critical business context such as sentiment scores, revenue implications, and resolution
         status. This enriched format provides LLM models with the necessary context to make
         informed analytical decisions about customer satisfaction, churn risk, and business impact.
 
         The enrichment follows the pattern:
-        "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {summary}"
+        "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {content}"
 
         Args:
             conversations: QuerySet of Conversation objects to enrich.
-                Each conversation should have date, sentiment, revenue_at_stake, resolved, and
-                summary attributes.
+                Each conversation should have date, sentiment, revenue_at_stake, resolved,
+                summary, and transcript attributes.
 
         Returns:
-            list: List of enriched summary strings. Each string contains the original summary
-                prefixed with contextual metadata in a structured format that helps AI models
-                understand the business context and customer impact of each conversation.
+            tuple: (enriched_summaries, enriched_transcripts)
+                - enriched_summaries: List of enriched summary strings
+                - enriched_transcripts: List of enriched transcript strings
+                Each string contains the original content prefixed with contextual metadata.
 
         Example:
             Input conversations with summaries like "Customer complained about billing error"
-            Output: "(2025-01-12, Sentiment: 2/5, Revenue at Stake: 1500.00, Resolved: False)
+            Output summary: "(2025-01-12, Sentiment: 2/5, Revenue at Stake: 1500.00, Resolved: False)
                     Customer complained about billing error"
+            Output transcript: "(2025-01-12, Sentiment: 2/5, Revenue at Stake: 1500.00, Resolved: False)
+                    <agent>: How can I help you today? <customer>: I have a billing error..."
         """
-        enriched_template = "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {summary}"
+        enriched_template = "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {content}"
 
         enriched_summaries = []
+        enriched_transcripts = []
         for conv in conversations:
+            # Enrich summary
             enriched_summaries.append(
                 enriched_template.format(
                     date=conv.date,
                     sentiment=conv.sentiment,
                     revenue=conv.revenue_at_stake,
                     resolved=conv.resolved,
-                    summary=conv.summary
+                    content=conv.summary
                 )
             )
-        return enriched_summaries
+            # Enrich transcript
+            enriched_transcripts.append(
+                enriched_template.format(
+                    date=conv.date,
+                    sentiment=conv.sentiment,
+                    revenue=conv.revenue_at_stake,
+                    resolved=conv.resolved,
+                    content=conv.transcript
+                )
+            )
+        return enriched_summaries, enriched_transcripts
+
+    def _count_items_within_limit(self, items: list[str], prompt: str, model_name: str, token_cutoff: int) -> tuple[int, str]:
+        """
+        Count how many items fit within the token limit and build the selected text.
+
+        This method iterates through items once, building the selected text while counting
+        how many items can be included before hitting the token limit.
+
+        Args:
+            items (list[str]): List of enriched items (summaries or transcripts)
+            prompt (str): The system prompt to be included in token counting
+            model_name (str): The model name for token counting
+            token_cutoff (int): Maximum number of tokens allowed
+
+        Returns:
+            tuple[int, str]: (count of items that fit, selected text ready for LLM)
+        """
+        selected_text = ''
+        count = 0
+        for i, item in enumerate(items):
+            new_part = f'Conversation #{i + 1}: {item}'
+            potential_payload = f'{prompt}\n\n{selected_text}\n\n{new_part}'
+            counted_tokens = self._count_tokens(potential_payload, model_name)
+            if counted_tokens >= token_cutoff and i > 0:
+                break
+            else:
+                if i == 0:
+                    selected_text = new_part
+                else:
+                    selected_text = f'{selected_text}\n\n{new_part}'
+                count += 1
+        return count, selected_text
 
     @observe(as_type="generation")
-    def _condense_summaries(self, summaries: list[str], trace_data: dict):
+    def _condense_items(self, enriched_summaries: list[str], enriched_transcripts: list[str], trace_data: dict):
         """
-        Condenses a list of conversation summaries into a meta-summary.
+        Condenses a list of conversation summaries or transcripts into a meta-summary.
+
+        This method intelligently chooses between using summaries or transcripts based on which
+        allows more conversations to be included within the token limit. Transcripts are preferred
+        when they enable including the same or more conversations than summaries.
 
         Uses LiteLLM with OpenAI as primary and Gemini as fallback.
         trace_data is passed to Langfuse for observability.
 
         Args:
-            summaries (list[str]): A list of summaries from conversations between customer care agents and customers.
+            enriched_summaries (list[str]): Enriched summaries from conversations
+            enriched_transcripts (list[str]): Enriched transcripts from conversations
             trace_data (dict): A dictionary containing data to store in the corresponding Langfuse trace
 
         Returns:
@@ -203,19 +255,27 @@ class MetaSummarizer:
         model_name = config_kwargs["model"]
         token_cutoff = self._get_token_cutoff(model_name)
 
-        # Token-aware recency biased selection
-        selected_text = ''
-        for i, summ in enumerate(summaries):
-            new_part = f'Conversation #{i + 1}: {summ}'
-            potential_payload = f'{prompt.prompt}\n\n{selected_text}\n\n{new_part}'
-            counted_tokens = self._count_tokens(potential_payload, model_name)
-            if counted_tokens >= token_cutoff and i > 0:
-                break
-            else:
-                if i == 0:
-                    selected_text = new_part
-                else:
-                    selected_text = f'{selected_text}\n\n{new_part}'
+        # Count how many items of each type fit within the token limit and build selected text
+        transcript_count, transcript_text = self._count_items_within_limit(
+            enriched_transcripts, prompt.prompt, model_name, token_cutoff
+        )
+        summary_count, summary_text = self._count_items_within_limit(
+            enriched_summaries, prompt.prompt, model_name, token_cutoff
+        )
+
+        # Choose transcripts if they include same or more conversations
+        # Otherwise use summaries (more concise, includes more conversations)
+        if transcript_count >= summary_count:
+            selected_text = transcript_text
+            item_type = "transcripts"
+        else:
+            selected_text = summary_text
+            item_type = "summaries"
+
+        # Add metadata about selection
+        metadata['item_type_used'] = item_type
+        metadata['transcript_count_possible'] = transcript_count
+        metadata['summary_count_possible'] = summary_count
 
         if len(selected_text) > 0:
             # Update trace with metadata from views.py
@@ -261,8 +321,9 @@ class MetaSummarizer:
 
     def __call__(self, obj, period: str = 'month', rolling: bool = False, trace_data: dict = None):
         """
-        Extract all the object's related conversations, as well as their summaries, for the specified time period.
-        Condense the conversation summaries into a new meta-summary for the object.
+        Extract all the object's related conversations, as well as their summaries and transcripts,
+        for the specified time period. Intelligently choose between summaries and transcripts based on
+        which allows more conversations to be included, then condense into a new meta-summary.
 
         Args:
             obj: The object (Topic, Customer, or Agent) to create summary for
@@ -277,8 +338,8 @@ class MetaSummarizer:
 
         conversations, latest_date, call_count, label = self._retrieve_object_conversations(obj, period, rolling)
 
-        enriched_summaries = self._enrich_summaries(conversations)
+        enriched_summaries, enriched_transcripts = self._enrich_items(conversations)
 
-        new_summary = self._condense_summaries(enriched_summaries, trace_data)
+        new_summary = self._condense_items(enriched_summaries, enriched_transcripts, trace_data)
 
         return new_summary, latest_date, call_count, label
