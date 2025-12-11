@@ -33,11 +33,15 @@ The Django app `call_miner` is meant to organize and serve the data model shown 
 
 ### Conversation Management
 - **Customer**: Organization-specific customer entities with external IDs
+  - All-summaries endpoint includes customers with at least 1 conversation
+  - Default summary period: eternity (full customer history)
+  - Conversation count and revenue aggregations for ordering
 - **Conversation**: Call records with rich metadata
   - Audio path, transcript, sentiment (0-5 scale)
   - Token usage tracking
   - AI-generated summaries and titles
   - Topic and suggested topic associations
+  - Ordered by date descending (most recent first) for meta-summarization
 
 ### Topic System
 - **Topic**: Semantic labels for call categorization
@@ -52,9 +56,13 @@ The Django app `call_miner` is meant to organize and serve the data model shown 
 
 ### Summary System
 - **PeriodSummary**: Automated summary generation for configurable time periods
-  - Weekly, monthly, quarterly aggregations
+  - Weekly, monthly, quarterly, and eternity (full history) aggregations
   - Automatic refresh based on conversation volume changes
   - Generic relation system for any model type
+  - Default settings:
+    - **Topics**: Quarterly summaries with rolling window
+    - **Customers**: Eternity (full history) summaries for comprehensive customer view
+    - **Agents**: Monthly summaries (currently disabled in trigger pipeline)
 
 ### Analytics Capabilities
 All core entities (Agent, Customer, Topic, Organization) inherit:
