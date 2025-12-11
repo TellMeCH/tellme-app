@@ -339,7 +339,9 @@ SUMMARIZER_PROMPTS = {
         • “Jira Ticket Body”
         • “Jira Ticket Title”
         
-        Important: For all bulleted lists, follow this format: "- Item A\n- Item B\n- Item C"
+        Important: 
+            - For all bulleted lists, follow this format: "- Item A\n- Item B\n- Item C"!
+            - All responses should be in English, except the Email Body in Subject, which should be in the customer's language!
     """,
     'agent_summary': """
         You are a helpful assistant tasked with analysing customer-care interactions for
