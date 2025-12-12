@@ -680,3 +680,50 @@ class TestMetaSummarizer:
         # Transcripts should be chosen when they allow same or more conversations
         assert trace_data['metadata']['item_type_used'] == 'transcripts'
         assert trace_data['metadata']['transcript_count_possible'] >= trace_data['metadata']['summary_count_possible']
+
+    def test_transcript_cleaning_in_enrichment(self, setup_db):
+        """
+        Test that transcript cleaning is applied during enrichment process.
+        Verifies that 'Gucci' is converted to 'Gutschein' and 'Bohnen' to 'Bonus'.
+        """
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
+
+        # Create a conversation with transcript containing words that need cleaning
+        test_conversation = Conversation.objects.create(
+            path="test_cleaning.mp3",
+            date=datetime.now(tz=zoneinfo.ZoneInfo("UTC")),
+            duration=180.0,
+            transcript="Agent: Hello. Customer: I want to use my Gucci and my Bohnen rewards. "
+                      "Agent: Your GUCCI is valid. Customer: Great, I love bohnen!",
+            sentiment=4.0,
+            summary="Customer wants to use rewards",
+            title="Rewards Conversation",
+            input_tokens=100,
+            output_tokens=50,
+            customer=customer,
+            agent=agent
+        )
+        test_conversation.topics.add(topic)
+
+        # Retrieve and enrich the conversations
+        conversations = customer.conversations.all()
+        enriched_summaries, enriched_transcripts = MetaSummarizer._enrich_items(conversations)
+
+        # Find our test conversation in the enriched transcripts by looking for unique content
+        test_transcript_found = False
+        for enriched_transcript in enriched_transcripts:
+            # Check if this enriched transcript contains content from our test conversation
+            if "I want to use my" in enriched_transcript:
+                # Verify that cleaning was applied (case-insensitive)
+                assert "Gutschein" in enriched_transcript
+                assert "Bonus" in enriched_transcript
+                assert "Gucci" not in enriched_transcript  # Original should be replaced
+                assert "Bohnen" not in enriched_transcript  # Original should be replaced
+                # Verify case-insensitive replacement worked
+                assert "GUCCI" not in enriched_transcript
+                assert "bohnen" not in enriched_transcript
+                test_transcript_found = True
+                break
+
+        # Ensure we actually tested a transcript
+        assert test_transcript_found, "Test conversation transcript was not found in enriched transcripts"

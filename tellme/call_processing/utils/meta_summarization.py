@@ -7,6 +7,7 @@ from django.conf import settings
 from tellme.call_miner.utils.period_utils import period_bounds
 from tellme.call_processing.utils.llm_configs import SUMMARIZER_PROMPTS, SUMMARIZER_CONFIGS
 from tellme.call_processing.utils.litellm_config import setup_litellm, get_meta_summarization_config, get_provider_from_model
+from tellme.call_processing.utils.transcript_cleaner import clean_transcript
 
 
 # Model-specific token limits (max context window for each model)
@@ -174,14 +175,15 @@ class MetaSummarizer:
                     content=conv.summary
                 )
             )
-            # Enrich transcript
+            # Enrich transcript (apply cleaning before enrichment)
+            cleaned_transcript = clean_transcript(conv.transcript)
             enriched_transcripts.append(
                 enriched_template.format(
                     date=conv.date,
                     sentiment=conv.sentiment,
                     revenue=conv.revenue_at_stake,
                     resolved=conv.resolved,
-                    content=conv.transcript
+                    content=cleaned_transcript
                 )
             )
         return enriched_summaries, enriched_transcripts
