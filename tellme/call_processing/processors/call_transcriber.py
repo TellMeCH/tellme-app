@@ -30,6 +30,7 @@ from tellme.call_processing.utils.llm_configs import (
 )
 from tellme.call_processing.utils.litellm_config import setup_litellm, get_diarization_config, get_provider_from_model
 from tellme.call_processing.utils import gcs_utils
+from tellme.call_processing.utils.transcript_cleaner import clean_transcript
 from .config import CHUNK_SIZE
 
 
@@ -196,6 +197,9 @@ class CallTranscriber:
         # Apply diarization if transcription was done with Groq or fallback
         if transcription_method == 'groq' or (transcription_method != 'groq' and go_to_fallback):
             full_transcript = self.diarize_transcript(full_transcript)
+
+        # Clean the transcript using regex-based corrections
+        full_transcript = clean_transcript(full_transcript)
 
         langfuse_context.update_current_trace(
             metadata={

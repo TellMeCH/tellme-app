@@ -256,6 +256,43 @@ class TestCallTranscriber:
         assert language
         assert duration > 0
 
+    def test_transcript_cleaning_applied(self, transcriber, mock_deepgram, mock_gcs_utils):
+        """
+        Test that transcript cleaning is applied to convert common transcription errors.
+        Verifies that 'Gucci' is converted to 'Gutschein' and 'Bohnen' to 'Bonus'.
+        """
+        # Override the mock to return a transcript with words that need cleaning
+        def deepgram_with_errors(*args, **kwargs):
+            return {
+                'results': {
+                    'channels': [{
+                        'alternatives': [{
+                            'paragraphs': {
+                                'transcript': "Customer has a Gucci available and earned some Bohnen rewards.\n"
+                                             "The GUCCI expires soon. More bohnen coming next month."
+                            }
+                        }],
+                        'detected_language': 'de'
+                    }]
+                },
+                'metadata': {
+                    'duration': 30.0
+                }
+            }
+
+        mock_deepgram.listen.rest.v("1").transcribe_file.return_value = deepgram_with_errors()
+
+        transcript, language, duration = transcriber.transcribe("test.wav", "deepgram")
+
+        # Verify that cleaning was applied (case-insensitive)
+        assert "Gutschein" in transcript
+        assert "Bonus" in transcript
+        assert "Gucci" not in transcript  # Original should be replaced
+        assert "Bohnen" not in transcript  # Original should be replaced
+        # Verify case-insensitive replacement worked
+        assert "GUCCI" not in transcript
+        assert "bohnen" not in transcript
+
 
 @pytest.mark.django_db
 class TestCallRedactor:
