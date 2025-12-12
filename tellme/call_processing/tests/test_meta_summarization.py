@@ -617,6 +617,48 @@ class TestMetaSummarizer:
         assert MetaSummarizer._clean_escaped_newlines(None) is None
         assert MetaSummarizer._clean_escaped_newlines(True) is True
 
+    def test_unwrap_schema_response(self):
+        """
+        Test that JSON Schema metadata is properly unwrapped from LLM responses.
+        """
+        # Test with schema-wrapped response (the problem case)
+        schema_wrapped = {
+            "type": "object",
+            "properties": {
+                "Churn Potential": "Overall potential for relationship strengthening",
+                "Suggested Actions": "- Improve process A\n- Streamline process B",
+                "Reasons for Calling": "- Billing issues\n- Technical support"
+            }
+        }
+        unwrapped = MetaSummarizer._unwrap_schema_response(schema_wrapped)
+        assert "type" not in unwrapped
+        assert "properties" not in unwrapped
+        assert unwrapped["Churn Potential"] == "Overall potential for relationship strengthening"
+        assert unwrapped["Suggested Actions"] == "- Improve process A\n- Streamline process B"
+        assert unwrapped["Reasons for Calling"] == "- Billing issues\n- Technical support"
+
+        # Test with already-unwrapped response (should pass through unchanged)
+        already_unwrapped = {
+            "Churn Potential": "Low churn risk",
+            "Suggested Actions": "- Action 1\n- Action 2",
+            "Reasons for Calling": "- Reason A\n- Reason B"
+        }
+        result = MetaSummarizer._unwrap_schema_response(already_unwrapped)
+        assert result == already_unwrapped
+
+        # Test with non-dict input (should pass through unchanged)
+        assert MetaSummarizer._unwrap_schema_response("string") == "string"
+        assert MetaSummarizer._unwrap_schema_response(123) == 123
+        assert MetaSummarizer._unwrap_schema_response(None) is None
+
+        # Test with dict that has "type" but not schema structure
+        non_schema_dict = {
+            "type": "some_value",
+            "other_field": "data"
+        }
+        result = MetaSummarizer._unwrap_schema_response(non_schema_dict)
+        assert result == non_schema_dict
+
     def test_transcript_vs_summary_selection(self, meta_summarizer):
         """
         Test that the summarizer intelligently chooses between transcripts and summaries

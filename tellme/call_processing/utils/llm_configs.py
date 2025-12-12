@@ -269,7 +269,7 @@ ENRICHMENT_PIPELINE = [
 ]
 
 # Meta-summarization fallback model (Gemini backup for OpenAI)
-META_SUMMARIZATION_MODEL_GEMINI: str = 'gemini-2.0-flash-001'
+META_SUMMARIZATION_MODEL_GEMINI: str = 'vertex_ai/gemini-2.0-flash-001'
 
 SUMMARIZER_PROMPTS = {
     'summary_mining': """
