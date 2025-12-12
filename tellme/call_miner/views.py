@@ -1,7 +1,7 @@
 import zoneinfo
 from rest_framework import viewsets, decorators, response, status, mixins, filters
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
-from django.db.models import functions, Max, Avg, Sum, Value
+from django.db.models import F, functions, Max, Avg, Sum, Value
 from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
