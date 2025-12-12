@@ -1,7 +1,7 @@
 import zoneinfo
 from rest_framework import viewsets, decorators, response, status, mixins, filters
 from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
-from django.db.models import F, Max, Avg, Sum
+from django.db.models import F, functions, Max, Avg, Sum, Value
 from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import MethodNotAllowed
@@ -774,7 +774,7 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
 
         # Add aggregated fields for ordering
         qs = qs.annotate(
-            total_revenue=Sum('conversations__revenue_at_stake'),
+            total_revenue=functions.Coalesce(Sum('conversations__revenue_at_stake'), Value(0.0)),
             avg_sentiment=Avg('conversations__sentiment')
         )
 
