@@ -400,6 +400,8 @@ def remove_internal_endpoints(schema):
         '/processing/v1/process/',
         '/processing/v1/summarize',
         '/processing/v1/summarize/'
+        '/processing/v1/create_ticket',
+        '/processing/v1/create_ticket/'
     ]
 
     # Remove internal endpoints from the schema
