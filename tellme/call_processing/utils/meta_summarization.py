@@ -1,3 +1,5 @@
+import re
+import urllib
 import json
 import litellm
 import tiktoken
@@ -12,26 +14,37 @@ from tellme.call_processing.utils.transcript_cleaner import clean_transcript
 
 # Model-specific token limits (max context window for each model)
 MODEL_TOKEN_LIMITS = {
-    # OpenAI GPT-4 Family
-    "openai/gpt-4": 8192,
-    "openai/gpt-4-32k": 32768,
+    # --- OpenAI GPT-4 Family (Standard) ---
     "openai/gpt-4-turbo": 128000,
     "openai/gpt-4o": 128000,
     "openai/gpt-4o-mini": 128000,
 
-    # OpenAI GPT-5 Family
-    "openai/gpt-5-main": 400000,        # Unified, fast model
-    "openai/gpt-5-main-mini": 400000,   # Fast, high-throughput mini version
-    "openai/gpt-5-thinking": 400000,    # Reasoning model (multi-step, in-depth)
-    "openai/gpt-5-thinking-mini": 400000, # Reasoning mini version
-    "openai/gpt-5-thinking-nano": 400000, # Reasoning nano version
+    # --- OpenAI o-Series (Reasoning) ---
+    "openai/o1": 128000,
+    "openai/o1-mini": 128000,
+    "openai/o3-mini": 200000,
 
-    # Google Gemini Family (Vertex AI)
-    "vertex_ai/gemini-1.0-pro": 30720,
-    "vertex_ai/gemini-1.5-pro": 1000000,
-    "vertex_ai/gemini-1.5-flash": 1000000,
-    "vertex_ai/gemini-2.0-flash-001": 1000000,
-    "vertex_ai/gemini-2.0-flash-exp": 1000000,
+    # --- OpenAI GPT-5 Family (Flagship) ---
+    "openai/gpt-5": 400000,
+    "openai/gpt-5-mini": 400000,
+    "openai/gpt-5-nano": 400000,
+
+    # --- Google Gemini 3 Family (Newest / Preview) ---
+    # Released Nov 2025. Currently in Preview.
+    # Note: Initial context is 1M, distinct from the 2M limit of 1.5 Pro.
+    "vertex_ai/gemini-3-pro-preview": 1048576,
+
+    # --- Google Gemini 2.5 Family (Current Stable) ---
+    # The production standard as of late 2025.
+    "vertex_ai/gemini-2.5-pro": 1048576,
+    "vertex_ai/gemini-2.5-flash": 1048576,
+    "vertex_ai/gemini-2.5-flash-lite": 1048576, # High throughput, lower cost
+
+    # --- Google Gemini Previous Generations ---
+    # Kept for legacy compatibility; 1.5 Pro still offers the largest context (2M).
+    "vertex_ai/gemini-2.0-flash-001": 1048576,
+    "vertex_ai/gemini-1.5-pro": 2097152,        # Still the context king (2M)
+    "vertex_ai/gemini-1.5-flash": 1048576,
 }
 
 # Conservative safety margin (use 80% of max tokens)
@@ -244,6 +257,42 @@ class MetaSummarizer:
         else:
             return data
 
+    @staticmethod
+    def create_mailto_link(email_body: str, subject: str, to_email: str = 'customer@anywhere.com') -> str:
+        """
+        Generates a fully formatted mailto link, handling line break normalization
+        and URL encoding in a single step.
+
+        Args:
+            email_body (str): Raw body text (can contain mixed \n, \r\n, etc).
+            subject (str): Email subject line.
+            to_email (str): Recipient email address.
+
+        Returns:
+            str: A complete, clickable mailto URL with preserved formatting.
+        """
+        if not email_body:
+            email_body = ""
+
+        # Convert all line breaks to \n first
+        text = email_body.replace('\r\n', '\n').replace('\r', '\n')
+
+        # Strip leading/trailing whitespace
+        text = text.strip()
+
+        # Collapse excessive vertical whitespace (3+ newlines become 2)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+
+        # Force Windows-style CRLF (\r\n) for email client compatibility
+        text = text.replace('\n', '\r\n')
+
+        # This turns \r\n into %0D%0A, spaces into %20, and handles umlauts.
+        # safe='' ensures even typically safe chars are encoded to prevent breaking the URL.
+        encoded_subject = urllib.parse.quote(subject, safe='')
+        encoded_body = urllib.parse.quote(text, safe='')
+
+        return f"mailto:{to_email}?subject={encoded_subject}&body={encoded_body}"
+
     @observe(as_type="generation")
     def _condense_items(self, enriched_summaries: list[str], enriched_transcripts: list[str], trace_data: dict):
         """
@@ -341,9 +390,18 @@ class MetaSummarizer:
             if refusal:
                 raise RuntimeError(f'Model refused to respond. Refusal: {refusal}')
 
-            # Parse JSON response and clean up escaped newlines
+            # Parse JSON response, unwrap schema if present, and clean up escaped newlines
             result = json.loads(response.content)
-            return self._clean_escaped_newlines(result)
+            result = self._clean_escaped_newlines(result)
+
+            # Format email body for mailto links if present (customer summaries)
+            if isinstance(result, dict) and "Suggested Email Body" in result and "Suggested Email Subject" in result:
+                result["Suggested Email Mailto"] = self.create_mailto_link(
+                    result["Suggested Email Body"],
+                    result["Suggested Email Subject"],
+                )
+
+            return result
         else:
             return None
 

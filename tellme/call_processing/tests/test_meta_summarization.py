@@ -641,7 +641,7 @@ class TestMetaSummarizer:
             # Create extremely long transcripts (much longer than summaries)
             long_transcripts.append(
                 f"(2025-01-{i+1:02d}, Sentiment: 3/5, Revenue at Stake: 1000.00, Resolved: False) "
-                + "Agent: " + " ".join([f"This is a very detailed and long conversation transcript with lots of back and forth dialogue"] * 500)
+                + "Agent: " + " ".join([f"This is a very detailed and long conversation transcript with lots of back and forth dialogue"] * 10000)
                 + f" Customer: Yes, I agree. Conversation #{i+1}"
             )
 
@@ -727,3 +727,92 @@ class TestMetaSummarizer:
 
         # Ensure we actually tested a transcript
         assert test_transcript_found, "Test conversation transcript was not found in enriched transcripts"
+
+    def test_create_mailto_link(self):
+        """Test mailto link generation with proper encoding."""
+        # Test basic mailto link creation
+        body = "Dear Customer,\n\nWe apologize for the inconvenience.\n\nSincerely,\nTeam"
+        subject = "Apology for Service Issue"
+        mailto_link = MetaSummarizer.create_mailto_link(body, subject, "customer@example.com")
+
+        # Verify it's a valid mailto link
+        assert mailto_link.startswith("mailto:customer@example.com?subject=")
+        assert "body=" in mailto_link
+
+        # Verify URL encoding (spaces become %20, newlines become %0D%0A)
+        assert "%20" in mailto_link  # Spaces encoded
+        assert "%0D%0A" in mailto_link  # CRLF line breaks encoded
+
+        # Verify subject and body are encoded
+        assert "Apology" in mailto_link or "%20" in mailto_link  # Subject is encoded
+
+    def test_create_mailto_link_normalizes_line_breaks(self):
+        """Test that mailto link normalizes different line break styles."""
+        # Test with mixed line breaks
+        body = "Dear Customer,\n\n\n\nWe apologize.\r\n\r\nBest regards"
+        subject = "Test"
+        mailto_link = MetaSummarizer.create_mailto_link(body, subject)
+
+        # Should not have triple newlines (should be collapsed to double)
+        # After encoding, triple \r\n would be %0D%0A%0D%0A%0D%0A
+        assert "%0D%0A%0D%0A%0D%0A" not in mailto_link
+
+    def test_condense_items_creates_mailto_link_for_customer(self, meta_summarizer, mock_litellm_meta_summarization):
+        """Test that customer summaries include a mailto link."""
+        def customer_summary_side_effect(*args, **kwargs):
+            mock_completion = MagicMock()
+            response_json = json.dumps({
+                "Suggested Email Body": "Dear Customer,\n\nWe apologize.\n\nSincerely,\nTeam",
+                "Suggested Email Subject": "Apology for Service Issue"
+            })
+            mock_completion.choices = [MagicMock(message=MagicMock(
+                refusal=None,
+                content=response_json
+            ))]
+            mock_completion.model = "openai/gpt-4o-mini"
+            mock_completion.usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+            return mock_completion
+
+        mock_litellm_meta_summarization.side_effect = customer_summary_side_effect
+
+        result = meta_summarizer._condense_items(
+            ["Test summary"], ["Test transcript"],
+            {'metadata': {'object': "<class 'tellme.call_miner.models.Customer'>"}}
+        )
+
+        # Verify mailto link is included
+        assert "Suggested Email Mailto" in result
+        assert result["Suggested Email Mailto"].startswith("mailto:")
+        assert "subject=" in result["Suggested Email Mailto"]
+        assert "body=" in result["Suggested Email Mailto"]
+
+        # Verify original body and subject are still present
+        assert "Suggested Email Body" in result
+        assert "Suggested Email Subject" in result
+
+    def test_condense_items_no_mailto_for_non_customer(self, meta_summarizer, mock_litellm_meta_summarization):
+        """Test that non-customer summaries don't get mailto links."""
+        def topic_summary_side_effect(*args, **kwargs):
+            mock_completion = MagicMock()
+            response_json = json.dumps({
+                "Reasons for Calling": "Billing issues",
+                "Summary": "Multiple billing complaints"
+            })
+            mock_completion.choices = [MagicMock(message=MagicMock(
+                refusal=None,
+                content=response_json
+            ))]
+            mock_completion.model = "openai/gpt-4o-mini"
+            mock_completion.usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+            return mock_completion
+
+        mock_litellm_meta_summarization.side_effect = topic_summary_side_effect
+
+        result = meta_summarizer._condense_items(
+            ["Test summary"], ["Test transcript"],
+            {'metadata': {'object': "<class 'tellme.call_miner.models.Topic'>"}}
+        )
+
+        # Verify no mailto link for topic summaries
+        assert "Suggested Email Mailto" not in result
+        assert "Reasons for Calling" in result
