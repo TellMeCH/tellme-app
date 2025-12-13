@@ -41,6 +41,8 @@ dependencies = [
     "django-two-factor-auth>=1.18.1",
     "qrcode>=8.2",
     "freezegun>=1.5.5",
+    "cryptography>=44.0.0",
+    "jira>=3.8.0",
 ]
 
 [dependency-groups]
