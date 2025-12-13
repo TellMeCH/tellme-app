@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from tellme.call_miner.models import Conversation
 from django.core.files.uploadedfile import SimpleUploadedFile
-from tellme.call_miner.utils.summary_utils import create_summarization_task, check_summarization_tasks
+from tellme.call_miner.utils.queue_utils import create_summarization_task, check_summarization_tasks
 
 
 @pytest.mark.django_db
