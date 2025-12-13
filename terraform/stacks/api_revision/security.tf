@@ -7,53 +7,7 @@ provider "google-beta" {
 resource "google_compute_security_policy" "api_security_policy" {
   name        = "tellme-api-security-policy"
   project     = var.project_id
-  description = "Security policy for TellMe API with EU geo-restriction, DDoS protection and WAF rules"
-
-  # ALLOW GITHUB ACTIONS RUNNERS
-  # GitHub Actions IP ranges from https://api.github.com/meta (actions field)
-  # Note: Update periodically to maintain current list
-  rule {
-    action   = "allow"
-    priority = "50"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = [
-          # GitHub Actions IPv4 ranges (partial list - major ranges)
-          "4.148.0.0/16", "4.149.0.0/17", "4.150.0.0/17", "4.151.0.0/16",
-          "4.152.0.0/15", "4.154.0.0/15", "4.156.0.0/15", "4.175.0.0/16",
-          "4.180.0.0/16", "4.207.0.0/16", "4.208.0.0/15", "4.210.0.0/16",
-          "4.227.0.0/16", "4.231.0.0/16", "4.236.0.0/16", "4.242.0.0/16",
-          "4.245.0.0/16", "4.246.0.0/16", "4.249.0.0/16", "4.255.0.0/16",
-          "9.93.0.0/18", "9.93.64.0/20", "9.93.80.0/20", "9.93.96.0/21",
-          "9.93.104.0/21", "9.93.112.0/21", "9.93.120.0/21", "9.93.128.0/18",
-          "13.64.0.0/11", "13.104.0.0/14", "20.20.0.0/16", "20.21.0.0/16",
-          "20.26.0.0/16", "20.29.0.0/16", "20.33.0.0/16", "20.38.0.0/16",
-          "20.42.0.0/16", "20.45.0.0/16", "20.49.0.0/16", "20.51.0.0/16",
-          "20.57.0.0/16", "20.59.0.0/16", "20.65.0.0/16", "20.72.0.0/16",
-          "20.83.0.0/16", "20.84.0.0/16", "20.96.0.0/12", "20.112.0.0/13",
-          "20.120.0.0/14", "20.124.0.0/16", "20.125.0.0/16", "20.135.0.0/16",
-          "20.150.0.0/15", "20.157.0.0/16", "20.189.0.0/16", "20.190.0.0/15",
-          "20.192.0.0/10", "23.96.0.0/13", "40.64.0.0/10", "48.208.0.0/12",
-          "52.96.0.0/12", "52.112.0.0/14", "52.184.0.0/13", "52.224.0.0/11",
-          "57.128.0.0/9"
-        ]
-      }
-    }
-    description = "Allow GitHub Actions runners from all regions"
-  }
-
-  # BLOCK NON-EUROPEAN TRAFFIC
-  rule {
-    action   = "deny(403)"
-    priority = "100"
-    match {
-      expr {
-        expression = "!origin.region_code.matches('AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE|CH|NO|IS|LI|GB')"
-      }
-    }
-    description = "Block traffic from outside Europe"
-  }
+  description = "Security policy for TellMe API with DDoS protection and WAF rules"
 
   # Block known malicious IPs
   rule {
