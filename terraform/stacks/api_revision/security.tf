@@ -9,6 +9,18 @@ resource "google_compute_security_policy" "api_security_policy" {
   project     = var.project_id
   description = "Security policy for TellMe API with DDoS protection and WAF rules"
 
+  # ALLOW DJANGO ADMIN ACCESS (bypass WAF rules)
+  rule {
+    action   = "allow"
+    priority = "100"
+    match {
+      expr {
+        expression = "request.path.matches('/admin.*')"
+      }
+    }
+    description = "Allow access to Django admin interface"
+  }
+
   # Block known malicious IPs
   rule {
     action   = "deny(403)"
