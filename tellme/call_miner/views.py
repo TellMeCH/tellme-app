@@ -750,6 +750,50 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     def search(self, request):
         return super().search(request)
 
+    # TODO: BEGIN NEW PART
+    @extend_schema(
+        description='Create a Jira ticket for a customer based on their summary data.',
+        parameters=[ID_PARAMETER_SCHEMA],
+        responses={
+            200: OpenApiResponse(
+                description='Ticket creation response',
+                response={
+                    'type': 'object',
+                    'properties': {
+                        'link': {'type': 'string', 'format': 'uri', 'nullable': True},
+                        'date': {'type': 'string', 'format': 'date-time', 'nullable': True},
+                        'status': {'type': 'string', 'enum': ['ready', 'creating']}
+                    }
+                }
+            ),
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=True, methods=['post'], url_path='create_ticket')
+    def create_ticket(self, request, pk=None):
+        """
+        Create a Jira ticket for a customer based on their summary data.
+
+        This endpoint triggers the creation of a Jira ticket using the customer's
+        summary data. If the customer already has a ticket, it returns the existing
+        ticket information. Otherwise, it queues a ticket creation task.
+
+        Returns:
+            - link: URL to the Jira ticket (None if creating)
+            - date: Date of the ticket (None if creating)
+            - status: 'ready' if ticket exists, 'creating' if being created
+        """
+        customer = self.get_object()
+
+        try:
+            ticket_data = customer.get_or_create_ticket()
+            return response.Response(ticket_data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    # TODO: END NEW PART
+
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'search']:
             return CustomerListSerializer
