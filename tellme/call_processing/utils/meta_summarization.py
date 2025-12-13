@@ -255,35 +255,6 @@ class MetaSummarizer:
         else:
             return data
 
-    @staticmethod
-    def _unwrap_schema_response(data):
-        """
-        Unwrap JSON Schema metadata from LLM responses if present.
-
-        Some LLM responses incorrectly include JSON Schema structure with
-        "type": "object" and "properties" wrappers. This method detects and
-        unwraps such responses to return only the actual data.
-
-        Args:
-            data: The response data (dict)
-
-        Returns:
-            Unwrapped data with schema metadata removed if present
-
-        Example:
-            Input:  {"type": "object", "properties": {"Churn Potential": "...", ...}}
-            Output: {"Churn Potential": "...", ...}
-        """
-        if not isinstance(data, dict):
-            return data
-
-        # Check if this is a schema-wrapped response
-        if "type" in data and data["type"] == "object" and "properties" in data:
-            # Return the properties directly
-            return data["properties"]
-
-        return data
-
     @observe(as_type="generation")
     def _condense_items(self, enriched_summaries: list[str], enriched_transcripts: list[str], trace_data: dict):
         """
@@ -383,7 +354,6 @@ class MetaSummarizer:
 
             # Parse JSON response, unwrap schema if present, and clean up escaped newlines
             result = json.loads(response.content)
-            result = self._unwrap_schema_response(result)
             return self._clean_escaped_newlines(result)
         else:
             return None
