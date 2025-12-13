@@ -505,3 +505,64 @@ def create_periodsummary(obj, summary, latest_date, call_count, label, period):
             period_summary.last_call_at = latest_date
             period_summary.call_count = call_count
             period_summary.save(update_fields=["summary", "last_call_at", "call_count"])
+
+
+def retrieve_data_for_ticket(customer_id: int):
+    """
+    Retrieve all necessary data for creating a Jira ticket for a customer.
+
+    This function gathers:
+    - Customer instance
+    - Organization and its Jira credentials
+    - Customer summary data containing ticket information
+
+    Args:
+        customer_id: ID of the customer to create a ticket for
+
+    Returns:
+        tuple: (customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key)
+            - customer: Customer instance
+            - organization: Organization instance
+            - ticket_title: Title for the Jira ticket
+            - ticket_description: Description for the Jira ticket
+            - summary_date: Date of the latest call in the summary
+            - ticket_api_key: Decrypted API key for Jira
+
+    Raises:
+        Customer.DoesNotExist: If customer with the given ID is not found
+        ValueError: If organization doesn't have Jira credentials configured
+        ValueError: If customer summary doesn't contain ticket data
+    """
+    TICKET_BODY_FIELD = 'Jira Ticket Body'
+    TICKET_TITLE_FIELD = 'Jira Ticket Title'
+
+    # Get the customer instance
+    try:
+        customer = Customer.objects.get(id=customer_id)
+    except Customer.DoesNotExist:
+        raise ValueError(f"Customer with id {customer_id} not found")
+
+    organization = customer.organization
+
+    # Check if organization has Jira credentials configured
+    if not all([organization.ticket_account, organization.ticket_key_encrypted, organization.ticket_project]):
+        raise ValueError(f"Organization {organization.name} does not have Jira credentials configured")
+
+    # Get default customer summary data
+    default_settings = get_default_summary_settings()
+    summary_data, summary_date, call_count, label, status_msg = customer.get_or_create_summary(
+        **default_settings['customer']
+    )
+
+    # Check if summary contains ticket data
+    if summary_data is None or TICKET_TITLE_FIELD not in summary_data or TICKET_BODY_FIELD not in summary_data:
+        raise ValueError(f"No valid ticket data found in customer summary for customer {customer_id} (status={status_msg})")
+
+    # Extract ticket data from summary
+    ticket_title = summary_data.get(TICKET_TITLE_FIELD)
+    ticket_description = summary_data.get(TICKET_BODY_FIELD)
+
+    # Retrieve decrypted API key
+    ticket_api_key = organization.retrieve_ticket_key()
+
+    return customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key
