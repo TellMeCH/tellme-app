@@ -354,7 +354,8 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
         model = Organization
         fields = [
             'url', 'name', 'conversation_count', 'max_user_count', 'max_topic_count', 'created', 'updated',
-            'transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count'
+            'transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count',
+            'ticket_project',
         ]
 
     @staticmethod
@@ -675,7 +676,7 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
         model = Customer
         fields = ['url', 'external_id', 'first_name', 'last_name', 'birth_date', 'conversation_count',
                   'first_conversation_date', 'last_conversation_date', 'total_revenue', 'avg_sentiment',
-                  'latest_conversation_title', 'latest_conversation_url', 'created']
+                  'latest_conversation_title', 'latest_conversation_url', 'ticket_link', 'ticket_date',  'created']
 
     @extend_schema_field({'type': 'number', 'format': 'float'})
     def get_total_revenue(self, obj):

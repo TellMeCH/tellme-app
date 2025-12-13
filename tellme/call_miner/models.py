@@ -6,6 +6,8 @@ import datetime
 import zoneinfo
 import threading
 import logging
+import base64
+from cryptography.fernet import Fernet
 from django.utils import timezone
 from django.db import models, transaction
 from django.conf import settings
@@ -15,8 +17,11 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from tellme.call_miner.utils.period_utils import period_bounds
 import tellme.call_miner.utils.email_utils as email
-from tellme.call_miner.utils.summary_utils import create_summarization_task, check_summarization_tasks
+from tellme.call_miner.utils.queue_utils import (
+    create_summarization_task, check_summarization_tasks, create_ticket_task, check_ticket_tasks
+)
 from tellme.call_processing.utils.llm_configs import TRANSCRIPTION_METHOD_CHOICES, ENRICHMENT_METHOD_CHOICES
+from tellme.call_miner.utils.summary_utils import DEFAULT_SUMMARY_SETTINGS
 
 
 class PeriodSummary(models.Model):
@@ -515,9 +520,34 @@ class Organization(models.Model, ConversationTrendMixin):
     enrichment_method = models.CharField(choices=ENRICHMENT_METHOD_CHOICES, default='openai')
     revenue_search_prefix = models.CharField(max_length=255, null=True)
     language = models.CharField(max_length=2, default='en')
+    ticket_account = models.EmailField(max_length=255, null=True)
+    ticket_key_encrypted = models.CharField(max_length=512, null=True)
+    ticket_project = models.CharField(max_length=100, null=True)
 
     def __str__(self):
         return self.name
+
+    @staticmethod
+    def _get_cipher():
+        """Get Fernet cipher using SECRET_KEY from settings."""
+        # Derive a Fernet-compatible key from SECRET_KEY
+        key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+        return Fernet(key)
+
+    def store_ticket_key(self, plain_key: str):
+        """Encrypt and store the Jira API key."""
+        if plain_key:
+            cipher = self._get_cipher()
+            self.ticket_key_encrypted = cipher.encrypt(plain_key.encode()).decode()
+        else:
+            self.ticket_key_encrypted = None
+
+    def retrieve_ticket_key(self) -> str:
+        """Decrypt and retrieve the Jira API key."""
+        if self.ticket_key_encrypted:
+            cipher = self._get_cipher()
+            return cipher.decrypt(self.ticket_key_encrypted.encode()).decode()
+        return None
 
     class Meta:
         unique_together = ('name',)
@@ -866,6 +896,8 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     birth_date = models.DateField(null=True)
     postcode = models.CharField(max_length=128, null=True)
     loyalty_number = models.CharField(max_length=128, null=True)
+    ticket_link = models.URLField(max_length=500, null=True)
+    ticket_date = models.DateTimeField(null=True, blank=True) # Date of the latest call when the ticket was created
 
     class Meta:
         unique_together = ('organization', 'external_id')
@@ -876,6 +908,58 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
 
     def __str__(self):
         return f"Customer [external_id={self.external_id} | org={self.organization_id}]"
+
+    @transaction.atomic
+    def get_or_create_ticket(self):
+        """
+        Get existing ticket or trigger ticket creation task.
+
+        Returns:
+            dict: Dictionary with fields 'link', 'date', and 'status' where:
+                - link: URL to the Jira ticket (or None if creating/not found)
+                - date: Date of the ticket (or None if creating/not found)
+                - status: One of 'ready', 'creating', or error status
+
+        Raises:
+            ValueError: If customer has no conversations or no summary data
+        """
+        # If ticket already exists, return it
+        if self.ticket_link and self.ticket_date:
+            return {
+                'link': self.ticket_link,
+                'date': self.ticket_date,
+                'status': 'ready'
+            }
+
+        # Check if customer has conversations
+        if not self.conversations.exists():
+            return {
+                'link': None,
+                'date': None,
+                'status': 'no conversations found'
+            }
+
+        # Check if customer has summary data
+        summary_data, summary_date, call_count, label, status_msg = self.get_or_create_summary(
+            **DEFAULT_SUMMARY_SETTINGS['customer']
+        )
+        if summary_data is None:
+            return {
+                'link': None,
+                'date': None,
+                'status': f'no summary found (status={status_msg})'
+            }
+
+        # Otherwise, create a ticket task (if needed) and return creating status
+        task_exists = check_ticket_tasks(self.id)
+        if not task_exists:
+            _ = create_ticket_task(self.id)
+
+        return {
+            'link': None,
+            'date': None,
+            'status': 'creating'
+        }
 
 
 class Conversation(models.Model):
