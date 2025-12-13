@@ -23,6 +23,7 @@ module "api_revision" {
   media_bucket          = var.media_bucket
   processing_queue_name = var.processing_queue_name
   summarization_queue_name = var.summarization_queue_name
+  tickets_queue_name       = var.tickets_queue_name
   call_processing_bucket = var.call_processing_bucket
   frontend_path         = var.frontend_path
   admin_username        = var.admin_username

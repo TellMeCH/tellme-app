@@ -18,6 +18,11 @@ variable "summarization_queue_name" {
   description = "Name of the summarization Cloud Tasks queue"
 }
 
+variable "tickets_queue_name" {
+  type        = string
+  description = "Name of the tickets Cloud Tasks queue"
+}
+
 variable "max_attempts" {
   type        = number
   description = "Maximum number of retry attempts"

@@ -75,6 +75,11 @@ variable "summarization_queue_name" {
   description = "Summarization queue name"
 }
 
+variable "tickets_queue_name" {
+  type        = string
+  description = "Tickets queue name"
+}
+
 variable "call_processing_bucket" {
   type        = string
   description = "Call processing bucket name"
