@@ -20,7 +20,7 @@ from tellme.call_miner.permissions import (ConversationPermission, OrganizationP
                                     TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
 from tellme.call_miner.utils.paginators import CustomListViewPaginator
 from tellme.call_miner.utils.period_utils import period_bounds
-from tellme.call_miner.utils.summary_utils import DEFAULT_SUMMARY_SETTINGS
+from tellme.call_miner.utils.queue_utils import DEFAULT_SUMMARY_SETTINGS
 from tellme.call_miner.authentication import FirebaseAuthentication
 from tellme.call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA,
@@ -750,7 +750,6 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     def search(self, request):
         return super().search(request)
 
-    # TODO: BEGIN NEW PART
     @extend_schema(
         description='Create a Jira ticket for a customer based on their summary data.',
         parameters=[ID_PARAMETER_SCHEMA],
@@ -792,7 +791,6 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
             return response.Response(ticket_data, status=status.HTTP_200_OK)
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    # TODO: END NEW PART
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'search']:
