@@ -46,7 +46,7 @@ Be objective and focus on functional similarity rather than exact word matching.
 """
 
 EVALUATION_CONFIG = {
-    'model': 'gemini-2.5-flash',
+    'model': 'gemini-2.5-pro',
     'temperature': 0.1,
     'response_format': {
         'json_schema': {

@@ -1,13 +1,14 @@
 import os
 import sys
-import time
-import json
 import argparse
-import csv
+import json
+import hashlib
+import traceback
 from datetime import datetime
 from typing import Dict, Any, List
-from unittest.mock import patch, MagicMock
+from unittest.mock import Mock
 from pathlib import Path
+import zoneinfo
 
 # Ensure Django is set up before importing anything that relies on settings
 import django
@@ -18,433 +19,570 @@ if not settings.configured:
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tellme.settings')
     django.setup()
 
-from tellme.call_miner.utils.summary_mining import condense_summaries
+from google import genai
+from google.genai import types
+from tellme.call_processing.utils.meta_summarization import MetaSummarizer
 from tellme.evaluation.metadata import CONVERSATIONS
 
 
-# Model configurations for evaluation
-MODELS_TO_EVALUATE = [
-    # GPT-4 Family
-    "gpt-4o",
-    "gpt-4o-mini",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "gpt-4.1-nano",
+# LLM evaluation prompt and configuration
+EVALUATION_PROMPT = """
+You are an expert evaluator assessing the quality of customer meta-summaries.
+Your task is to evaluate how well the meta-summary captures insights from multiple customer interactions.
 
-    # GPT-5 Family
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano"
-]
+Rate the following aspects on a scale from 0.0 to 1.0 where:
+- 0.0 = Completely inadequate or missing critical information
+- 0.5 = Partially captures insights, some gaps present
+- 1.0 = Excellent, comprehensive, and actionable
 
-# OpenAI pricing per 1K tokens (Standard tier - as of latest official pricing)
-# Prices are per 1M tokens from OpenAI, converted to per 1K tokens
-PRICING_PER_1K_TOKENS = {
-    # Current GPT-4o models
-    "gpt-4o": {"input": 0.0025, "output": 0.010},  # $2.50/$10.00 per 1M tokens
-    "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},  # $0.15/$0.60 per 1M tokens
+Consider the following aspects:
+- Favorite Products/Services: Accurately identifies customer preferences
+- Liked Features: Captures positive feedback themes
+- Disliked Features: Identifies pain points and frustrations
+- Expectations Met: Assesses customer satisfaction levels
+- Churn Potential: Reasonable assessment of customer retention risk
+- Customer Value: Realistic evaluation of customer worth
+- Customer Interests: Identifies patterns in customer behavior
+- Demographic Profile: Extracts relevant demographic information
+- Improvement Suggestions: Provides actionable recommendations
+- Suggested Email Body: Professional, empathetic, and addresses key issues
+- Suggested Email Subject: Clear and relevant
+- Jira Ticket Body: Technical, comprehensive, and actionable
+- Jira Ticket Title: Clear and specific
 
-    # GPT-5 family (current official pricing)
-    "gpt-5": {"input": 0.00125, "output": 0.010},  # $1.25/$10.00 per 1M tokens
-    "gpt-5-mini": {"input": 0.00025, "output": 0.002},  # $0.25/$2.00 per 1M tokens
-    "gpt-5-nano": {"input": 0.00005, "output": 0.0004},  # $0.05/$0.40 per 1M tokens
+Be objective and focus on comprehensiveness, accuracy, and actionability.
+"""
 
-    # Additional current models
-    "gpt-4.1": {"input": 0.002, "output": 0.008},  # $2.00/$8.00 per 1M tokens
-    "gpt-4.1-mini": {"input": 0.0004, "output": 0.0016},  # $0.40/$1.60 per 1M tokens
-    "gpt-4.1-nano": {"input": 0.0001, "output": 0.0004},  # $0.10/$0.40 per 1M tokens
+EVALUATION_CONFIG = {
+    'model': 'gemini-2.5-pro',
+    'temperature': 0.1,
+    'response_format': {
+        'json_schema': {
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'favorite_products_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of favorite products/services analysis'
+                    },
+                    'liked_features_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of liked features analysis'
+                    },
+                    'disliked_features_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of disliked features analysis'
+                    },
+                    'expectations_met_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of expectations assessment'
+                    },
+                    'churn_potential_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of churn potential analysis'
+                    },
+                    'customer_value_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of customer value assessment'
+                    },
+                    'customer_interests_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of customer interests identification'
+                    },
+                    'demographic_profile_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of demographic profile'
+                    },
+                    'improvement_suggestions_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality and actionability of improvement suggestions'
+                    },
+                    'email_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of suggested email (body + subject)'
+                    },
+                    'jira_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Quality of Jira ticket (body + title)'
+                    },
+                    'overall_quality': {
+                        'type': 'number',
+                        'minimum': 0.0,
+                        'maximum': 1.0,
+                        'description': 'Overall quality of the meta-summary'
+                    }
+                },
+                'required': [
+                    'favorite_products_quality', 'liked_features_quality', 'disliked_features_quality',
+                    'expectations_met_quality', 'churn_potential_quality', 'customer_value_quality',
+                    'customer_interests_quality', 'demographic_profile_quality', 'improvement_suggestions_quality',
+                    'email_quality', 'jira_quality', 'overall_quality'
+                ],
+                'additionalProperties': False
+            }
+        }
+    }
 }
 
 
-class SummarizationEvaluator:
+class MetaSummarizationEvaluator:
     """
-    Evaluation framework for testing different LLM models on summarization tasks.
-    Tests performance, cost, quality, and latency across multiple models.
+    Evaluation framework for MetaSummarizer that generates customer summaries
+    from all conversations in metadata.py and evaluates their quality using LLM-based comparison.
     """
 
-    def __init__(self, results_file_path: str = "./tellme/evaluation/summarization_evaluation_results.txt"):
+    def __init__(self, results_file_path: str = "./tellme/evaluation/meta_summarization_results.txt",
+                 verbose: bool = False, period: str = 'eternity', rolling: bool = False):
         """
-        Initialize the summarization evaluator.
+        Initialize the evaluator.
 
         Args:
-            results_file_path: Path to TXT file for storing evaluation results
+            results_file_path: Path to text file for storing evaluation results
+            verbose: If True, prints detailed output
+            period: Time period for meta-summarization ('week', 'month', 'quarter', 'eternity')
+            rolling: Whether to use rolling window for summarization
         """
-        self.results_file_path = results_file_path
+        self.results_path = results_file_path
+        self.verbose = verbose
+        self.period = period
+        self.rolling = rolling
         self.evaluation_date = datetime.now()
+        self.pipeline_hash = self._calculate_pipeline_hash()
 
-        # Extract summaries from conversation metadata
-        self._enrich_summary_text()
+        # VertexAI Client for evaluation
+        self.vertexai = genai.Client(vertexai=True, project=settings.GOOGLE_CLOUD_PROJECT, location='us-central1')
+        self.llm_prompt = EVALUATION_PROMPT
+        self.llm_config = EVALUATION_CONFIG
 
-        print(f"Loaded {len(self.summaries)} summaries for evaluation")
+    @staticmethod
+    def _calculate_pipeline_hash() -> str:
+        """Calculate hash of current meta_summarization script for version tracking."""
+        pipeline_file = Path(__file__).parent.parent / "call_processing" / "utils" / "meta_summarization.py"
+        if pipeline_file.exists():
+            with open(pipeline_file, 'r') as f:
+                content = f.read()
+            return hashlib.sha256(content.encode()).hexdigest()[:16]
+        return "unknown"
 
-    def _enrich_summary_text(self):
-        enriched_template = "({date}, Sentiment: {sentiment}/5, Revenue at Stake: {revenue}, Resolved: {resolved}) {summary}"
-        self.summaries = []
+    def _create_mock_customer(self) -> Mock:
+        """
+        Create a mock Customer object with all conversations from metadata.py.
+
+        All conversations are treated as belonging to the same customer.
+
+        Returns:
+            Mock: Mock customer object with all conversations
+        """
+        customer = Mock()
+        customer.id = 1
+        customer.external_id = "PKZ_TEST_CUSTOMER"
+        customer.first_name = "Test"
+        customer.last_name = "Customer"
+
+        # Create mock conversations from metadata
+        utc = zoneinfo.ZoneInfo("UTC")
+        mock_conversations = []
+
+        for i, conv_data in enumerate(CONVERSATIONS):
+            conv = Mock()
+            conv.id = i + 1
+            conv.date = datetime.fromisoformat(conv_data['input']['timestamp']).astimezone(utc)
+            conv.summary = conv_data['output'].get('summary', '')
+            conv.transcript = conv_data['output'].get('transcript', '')
+            conv.sentiment = float(conv_data['output'].get('sentiment', 3))
+            conv.revenue_at_stake = float(conv_data['output'].get('revenue_at_stake', 0)) if conv_data['output'].get('revenue_at_stake') else 0
+            conv.resolved = conv_data['output'].get('resolved', False)
+
+            mock_conversations.append(conv)
+
+        # Create QuerySet-like object that mimics Django QuerySet behavior
+        conversations_qs = Mock()
+
+        # Create a mock that behaves like a QuerySet after filter().order_by()
+        # It needs to support: .count(), iteration, and be the final result
+        mock_ordered_result = Mock()
+        mock_ordered_result.count.return_value = len(mock_conversations)
+        # Make it iterable by returning the list of conversations when iterated
+        # Note: lambda must accept 'self' parameter since it's called as a method
+        mock_ordered_result.__iter__ = lambda self: iter(mock_conversations)
+
+        # Mock filter().order_by() chain to return our QuerySet-like mock
+        mock_filter_result = Mock()
+        mock_filter_result.order_by.return_value = mock_ordered_result
+        conversations_qs.filter.return_value = mock_filter_result
+
+        # Mock values_list().first() chain for getting latest date
+        mock_values_list = Mock()
+        mock_values_list.first.return_value = mock_conversations[0].date if mock_conversations else None
+        conversations_qs.values_list.return_value = mock_values_list
+
+        customer.conversations = conversations_qs
+        customer.last_conversation_date = mock_conversations[0].date if mock_conversations else None
+
+        return customer
+
+    def _evaluate_with_llm(self, meta_summary: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Use LLM to evaluate the quality of the meta-summary.
+
+        Args:
+            meta_summary: Generated meta-summary from MetaSummarizer
+
+        Returns:
+            Dict containing LLM evaluation results
+        """
+        # Prepare conversation context for evaluation
+        conversation_summaries = []
         for conv in CONVERSATIONS:
-            self.summaries.append(
-                enriched_template.format(
-                    date=conv['input']['timestamp'],
-                    sentiment=conv['output']['sentiment'],
-                    revenue=conv['output']['revenue_at_stake'],
-                    resolved=conv['output']['resolved'],
-                    summary=conv['output']['summary']
-                )
-            )
+            conv_summary = f"""
+File: {conv['input']['file_name']}
+Date: {conv['input']['timestamp']}
+Summary: {conv['output'].get('summary', 'N/A')}
+Sentiment: {conv['output'].get('sentiment', 'N/A')}
+Topics: {', '.join(conv['output'].get('topics', []))}
+Resolved: {conv['output'].get('resolved', 'N/A')}
+Revenue at Stake: {conv['output'].get('revenue_at_stake', 'N/A')}
+"""
+            conversation_summaries.append(conv_summary)
 
-    @staticmethod
-    def _create_mock_prompt(model_name: str):
-        """
-        Create a mock prompt object for the given model.
+        conversations_context = "\n---\n".join(conversation_summaries)
 
-        Args:
-            model_name: The model to use in the configuration
-
-        Returns:
-            Mock prompt object with fixed prompt text and model-specific config
-        """
-        mock_prompt = MagicMock()
-        mock_prompt.prompt = """
-        You are a helpful assistant tasked with analyzing customer care interactions to uncover actionable insights about
-        customer behavior and brand perception. Below are summaries of conversations between customer care agents and customers.
-        Analyze these conversations and answer the questions below. Follow this reasoning when analyzing these conversations:
-        a low sentiment and a high revenue at stake imply high risk of a painful loss of revenue, whereas a high sentiment
-        and a relatively low revenue at stake indicate potential for upselling.
-        1.	What are the recurring reasons customers contact the call center? Present the result as a bulleted list of 
-            descending order of relevance.
-        2.	At which stages of the customer journey are these callers predominantly found? Answer in 2-3 lines.
-        3.	Are the issues commonly resolved during the initial call, or do they require follow-ups? Answer in 2-3 lines.
-        4.	Based on these interactions, are customers more likely to strengthen their relationship with the company or
-            terminate it? Why? Answer in 2-3 lines.
-        5.	What are the most frequent causes of customer dissatisfaction in these calls? Present the result as a 
-            bulleted list of descending order of relevance.
-        6.	What are the most frequent causes of customer engagement and loyalty in these calls? Present the result as a
-            bulleted list of descending order of relevance.
-        7.	What simple actions could the company take to improve customer satisfaction based on these conversations? 
-            This is key question. Think of specific, tangible improvements in business processes and customer handling
-            that would minimize churn and ensure customer retention. Provide them as a bulleted list of descending 
-            impact, so that readers will instantly know the specific actions that really move the needle.
-
-        Provide the results in a JSON format with the following keys:
-        "	"Reasons for Calling"
-        "	"Stages of the Customer Journey"
-        "	"Call Resolution Rates"
-        "	"Churn Potential"
-        "	"Causes for Dissatisfaction"
-        "	"Causes for Engagement"
-        "	"Suggested Actions"
-        """
-
-        mock_prompt.config = {
-            "model": model_name,
-            "temperature": 0.2 if '5' not in model_name else 1,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "summarizer_response",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "Reasons for Calling": {"type": "string"},
-                            "Stages of the Customer Journey": {"type": "string"},
-                            "Call Resolution Rates": {"type": "string"},
-                            "Churn Potential": {"type": "string"},
-                            "Causes for Dissatisfaction": {"type": "string"},
-                            "Causes for Engagement": {"type": "string"},
-                            "Suggested Actions": {"type": "string"}
-                        },
-                        "required": [
-                            "Reasons for Calling",
-                            "Stages of the Customer Journey",
-                            "Call Resolution Rates",
-                            "Churn Potential",
-                            "Causes for Dissatisfaction",
-                            "Causes for Engagement",
-                            "Suggested Actions"
-                        ],
-                        "additionalProperties": False
-                    },
-                    "strict": True
-                }
-            }
-        }
-        mock_prompt.is_fallback = False
-
-        return mock_prompt
-
-    @staticmethod
-    def _calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
-        """
-        Calculate the cost for a given model and token usage.
-
-        Args:
-            model_name: Name of the model used
-            input_tokens: Number of input tokens
-            output_tokens: Number of output tokens
-
-        Returns:
-            Total cost in USD
-        """
-        if model_name not in PRICING_PER_1K_TOKENS:
-            return 0.0
-
-        pricing = PRICING_PER_1K_TOKENS[model_name]
-        input_cost = (input_tokens / 1000) * pricing["input"]
-        output_cost = (output_tokens / 1000) * pricing["output"]
-
-        return input_cost + output_cost
-
-    def evaluate_model(self, model_name: str) -> Dict[str, Any]:
-        """
-        Evaluate a single model on the summarization task.
-
-        Args:
-            model_name: Name of the model to evaluate
-
-        Returns:
-            Dictionary containing evaluation results
-        """
-        print(f"\n{'='*60}")
-        print(f"Evaluating model: {model_name}")
-        print(f"{'='*60}")
-
-        # Create mock trace data for the evaluation
-        trace_data = {
-            'name': f'summarization_eval_{model_name}',
-            'tags': ['evaluation'],
-            'metadata': {
-                'object': "<class 'tellme.call_miner.models.Topic'>",
-                'model': model_name,
-                'evaluation_date': self.evaluation_date.isoformat()
-            }
-        }
+        # Format meta-summary for evaluation
+        meta_summary_text = json.dumps(meta_summary, indent=2)
 
         try:
-            # Mock Langfuse to return our custom prompt with the specified model
-            mock_prompt = self._create_mock_prompt(model_name)
+            generation = self.vertexai.models.generate_content(
+                model=self.llm_config['model'],
+                contents=f"""
+                Here are all the individual conversations from this customer:
 
-            with patch('tellme.call_miner.utils.summary_mining.Langfuse') as mock_langfuse_class:
-                mock_langfuse_instance = MagicMock()
-                mock_langfuse_instance.get_prompt.return_value = mock_prompt
-                mock_langfuse_class.return_value = mock_langfuse_instance
+                {conversations_context}
 
-                # Record start time
-                start_time = time.time()
+                ---
 
-                # Call condense_summaries with our test data
-                result = condense_summaries(self.summaries, trace_data)
+                Here is the generated customer meta-summary:
 
-                # Record end time
-                end_time = time.time()
-                latency = end_time - start_time
+                {meta_summary_text}
 
-                # The function should return a dictionary with the summarization results
-                # We need to extract token usage from the actual OpenAI call
-                # For now, we'll simulate this since we can't easily intercept the OpenAI client
+                Please evaluate the quality of this meta-summary based on how well it captures
+                insights from all the conversations above.
+                """,
+                config=types.GenerateContentConfig(
+                    system_instruction=self.llm_prompt,
+                    temperature=self.llm_config['temperature'],
+                    response_mime_type="application/json",
+                    response_schema=self.llm_config["response_format"]["json_schema"]["schema"]
+                ),
+            )
 
-                # Try to access the mock to get call information
-                print(f" Model: {model_name}")
-                print(f" Latency: {latency:.2f} seconds")
-                print(f" Generated response successfully")
-
-                # Print the response (truncated for readability)
-                if isinstance(result, dict):
-                    print(f" Response type: Dictionary with {len(result)} keys")
-                    print(f"\n📋 FULL GENERATED SUMMARY:")
-                    print("-" * 40)
-                    for key, value in result.items():
-                        print(f"\n🔹 {key}:")
-                        print(f"{str(value)}")
-                    print("-" * 40)
-                else:
-                    print(f" Response: {str(result)[:200]}{'...' if len(str(result)) > 200 else ''}")
-
-                # For demonstration purposes, we'll use estimated token counts
-                # In a real implementation, you'd intercept the OpenAI client call to get actual usage
-                estimated_input_tokens = len(' '.join(self.summaries).split()) * 1.3  # Rough estimate
-                estimated_output_tokens = len(str(result).split()) * 1.3 if result else 0
-
-                estimated_cost = self._calculate_cost(model_name, estimated_input_tokens, estimated_output_tokens)
-
-                print(f" Estimated input tokens: {estimated_input_tokens:.0f}")
-                print(f" Estimated output tokens: {estimated_output_tokens:.0f}")
-                print(f" Estimated cost: ${estimated_cost:.4f}")
-
-                return {
-                    'model_name': model_name,
-                    'success': True,
-                    'latency_seconds': latency,
-                    'estimated_input_tokens': int(estimated_input_tokens),
-                    'estimated_output_tokens': int(estimated_output_tokens),
-                    'estimated_cost_usd': estimated_cost,
-                    'response_length': len(str(result)) if result else 0,
-                    'response_type': type(result).__name__,
-                    'has_response': result is not None,
-                    'generated_response': json.dumps(result, indent=2) if result else None,
-                    'error': None,
-                    'evaluation_date': self.evaluation_date.isoformat()
-                }
+            llm_response = json.loads(generation.candidates[0].content.parts[0].text)
+            return llm_response
 
         except Exception as e:
-            print(f" Error evaluating {model_name}: {str(e)}")
+            print(f"LLM evaluation failed: {e}")
+            traceback.print_exc()
+            # Return default scores
             return {
-                'model_name': model_name,
-                'success': False,
-                'latency_seconds': None,
-                'estimated_input_tokens': None,
-                'estimated_output_tokens': None,
-                'estimated_cost_usd': None,
-                'response_length': None,
-                'response_type': None,
-                'has_response': False,
-                'generated_response': None,
-                'error': str(e),
-                'evaluation_date': self.evaluation_date.isoformat()
+                'favorite_products_quality': 0.0,
+                'liked_features_quality': 0.0,
+                'disliked_features_quality': 0.0,
+                'expectations_met_quality': 0.0,
+                'churn_potential_quality': 0.0,
+                'customer_value_quality': 0.0,
+                'customer_interests_quality': 0.0,
+                'demographic_profile_quality': 0.0,
+                'improvement_suggestions_quality': 0.0,
+                'email_quality': 0.0,
+                'jira_quality': 0.0,
+                'overall_quality': 0.0
             }
 
-    def run_evaluation(self, models: List[str] = None) -> Dict[str, Any]:
-        """
-        Run evaluation across multiple models.
+    def print_meta_summary(self, meta_summary: Dict[str, Any], evaluation: Dict[str, Any]):
+        """Print the meta-summary and evaluation results."""
+        print("\n" + "="*80)
+        print("GENERATED CUSTOMER META-SUMMARY")
+        print("="*80)
 
-        Args:
-            models: List of model names to evaluate. If None, uses default list.
+        for key, value in meta_summary.items():
+            print(f"\n{key}:")
+            # Truncate very long values
+            value_str = str(value)
+            if len(value_str) > 500:
+                print(f"  {value_str[:500]}...")
+                print(f"  [... {len(value_str) - 500} more characters]")
+            else:
+                print(f"  {value_str}")
+
+            # Print evaluation score if available
+            quality_key = f"{key.lower().replace(' ', '_').replace('/', '_')}_quality"
+            if quality_key in evaluation:
+                score = evaluation[quality_key]
+                status = "✓" if score >= 0.7 else "~" if score >= 0.4 else "✗"
+                print(f"  [{status} Quality Score: {score:.2f}]")
+
+        print("\n" + "="*80)
+        print("EVALUATION SCORES")
+        print("="*80)
+
+        for metric, score in evaluation.items():
+            status = "✓" if score >= 0.7 else "~" if score >= 0.4 else "✗"
+            print(f"{status} {metric:40}: {score:.2f}")
+
+    def run_evaluation(self) -> Dict[str, Any]:
+        """
+        Run the complete evaluation on customer meta-summarization.
 
         Returns:
-            Dictionary containing overall results
+            Dict containing evaluation results
         """
-        models_to_test = models or MODELS_TO_EVALUATE
+        print(f"Starting meta-summarization evaluation at {self.evaluation_date}")
+        print(f"Pipeline hash: {self.pipeline_hash}")
+        print(f"Period: {self.period}, Rolling: {self.rolling}")
+        print(f"Total conversations in metadata.py: {len(CONVERSATIONS)}")
+        print("All conversations will be treated as belonging to the same customer.")
 
-        print(f"Starting summarization evaluation at {self.evaluation_date}")
-        print(f"Testing {len(models_to_test)} models on {len(self.summaries)} conversation summaries")
+        try:
+            # Initialize MetaSummarizer
+            print("\nInitializing MetaSummarizer...")
+            summarizer = MetaSummarizer()
 
-        results = []
-        successful_results = []
+            # Create mock customer with all conversations
+            print("Creating mock customer with all conversations...")
+            customer = self._create_mock_customer()
 
-        for model_name in models_to_test:
-            result = self.evaluate_model(model_name)
-            results.append(result)
+            # Prepare trace data for Langfuse
+            trace_data = {
+                'name': 'customer_meta_summary_evaluation',
+                'tags': ['evaluation', 'customer_summary', 'metadata'],
+                'metadata': {
+                    'object': "<class 'tellme.call_miner.models.Customer'>",
+                    'evaluation_date': self.evaluation_date.isoformat(),
+                    'period': self.period,
+                    'rolling': self.rolling,
+                    'conversation_count': len(CONVERSATIONS)
+                }
+            }
 
-            if result['success']:
-                successful_results.append(result)
+            # Run meta-summarization
+            print("\nRunning MetaSummarizer on all conversations...")
+            meta_summary, latest_date, call_count, label = summarizer(
+                obj=customer,
+                period=self.period,
+                rolling=self.rolling,
+                trace_data=trace_data
+            )
 
-        # Save results to text file
-        self._save_results_to_txt(results)
+            if meta_summary is None:
+                print("✗ MetaSummarizer returned None (no conversations to summarize)")
+                return {
+                    'success': False,
+                    'error': 'No summary generated',
+                    'meta_summary': None,
+                    'evaluation': None
+                }
 
-        # Print summary
-        print(f"\n{'='*60}")
-        print("EVALUATION SUMMARY")
-        print(f"{'='*60}")
+            print(f"✓ Meta-summary generated successfully")
+            print(f"  Latest conversation date: {latest_date}")
+            print(f"  Call count: {call_count}")
+            print(f"  Period label: {label}")
 
-        print(f"Total models tested: {len(results)}")
-        print(f"Successful evaluations: {len(successful_results)}")
-        print(f"Success rate: {len(successful_results)/len(results)*100:.1f}%")
+            # Evaluate the meta-summary
+            print("\nEvaluating meta-summary quality with LLM...")
+            evaluation = self._evaluate_with_llm(meta_summary)
 
-        if successful_results:
-            # Sort by latency for performance comparison
-            successful_results.sort(key=lambda x: x['latency_seconds'])
+            # Print results
+            if self.verbose:
+                self.print_meta_summary(meta_summary, evaluation)
 
-            print(f"\nPerformance Ranking (by latency):")
-            for i, result in enumerate(successful_results, 1):
-                print(f"{i:2d}. {result['model_name']:<20} - {result['latency_seconds']:.2f}s - ${result['estimated_cost_usd']:.4f}")
+            # Calculate average score
+            scores = [v for v in evaluation.values() if isinstance(v, (int, float))]
+            avg_score = sum(scores) / len(scores) if scores else 0
 
-            # Cost comparison
-            successful_results.sort(key=lambda x: x['estimated_cost_usd'])
-            print(f"\nCost Ranking (by estimated cost):")
-            for i, result in enumerate(successful_results, 1):
-                print(f"{i:2d}. {result['model_name']:<20} - ${result['estimated_cost_usd']:.4f} - {result['latency_seconds']:.2f}s")
+            print(f"\n✓ Evaluation completed")
+            print(f"  Average quality score: {avg_score:.3f}")
 
-        print(f"\nDetailed results saved to: {self.results_file_path}")
+            # Prepare result
+            result = {
+                'success': True,
+                'evaluation_date': self.evaluation_date.isoformat(),
+                'pipeline_hash': self.pipeline_hash,
+                'period': self.period,
+                'rolling': self.rolling,
+                'conversation_count': call_count,
+                'latest_date': latest_date.isoformat() if latest_date else None,
+                'period_label': label,
+                'meta_summary': meta_summary,
+                'evaluation': evaluation,
+                'average_score': avg_score,
+                'error': None
+            }
 
-        return {
-            'total_models': len(results),
-            'successful_evaluations': len(successful_results),
-            'success_rate': len(successful_results)/len(results) if results else 0,
-            'results': results,
-            'evaluation_date': self.evaluation_date.isoformat()
-        }
+            # Save results
+            self._save_results(result)
 
-    def _save_results_to_txt(self, results: List[Dict[str, Any]]):
-        """Save evaluation results to text file with full summaries."""
-        if not results:
-            return
+            return result
 
-        with open(self.results_file_path, 'w', encoding='utf-8') as f:
-            f.write(f"SUMMARIZATION MODEL EVALUATION RESULTS\n")
-            f.write(f"Evaluation Date: {self.evaluation_date}\n")
-            f.write(f"{'='*80}\n\n")
+        except Exception as e:
+            print(f"✗ Error during evaluation: {str(e)}")
+            traceback.print_exc()
 
-            for result in results:
-                f.write(f"MODEL: {result.get('model_name', 'Unknown')}\n")
-                f.write(f"{'-'*60}\n")
-                f.write(f"Success: {result.get('success', False)}\n")
-                f.write(f"Latency: {result.get('latency_seconds', 0):.2f} seconds\n")
-                f.write(f"Input Tokens: {result.get('estimated_input_tokens', 0):,}\n")
-                f.write(f"Output Tokens: {result.get('estimated_output_tokens', 0):,}\n")
-                f.write(f"Cost: ${result.get('estimated_cost_usd', 0):.4f}\n")
+            result = {
+                'success': False,
+                'evaluation_date': self.evaluation_date.isoformat(),
+                'pipeline_hash': self.pipeline_hash,
+                'period': self.period,
+                'rolling': self.rolling,
+                'error': str(e),
+                'meta_summary': None,
+                'evaluation': None,
+                'average_score': 0.0
+            }
 
-                if result.get('success') and result.get('generated_response'):
-                    f.write(f"\nGENERATED RESPONSE:\n")
-                    try:
-                        response_data = json.loads(result['generated_response'])
-                        for key, value in response_data.items():
-                            f.write(f"\n🔹 {key}:\n{value}\n")
-                    except (json.JSONDecodeError, TypeError):
-                        f.write(f"{result.get('generated_response', 'No response')}\n")
-                elif result.get('error'):
-                    f.write(f"\nERROR: {result.get('error')}\n")
+            self._save_results(result)
+            return result
 
-                f.write(f"\n{'='*80}\n\n")
+    def _save_results(self, result: Dict[str, Any]):
+        """Save evaluation results to text file."""
+        with open(self.results_path, 'a', encoding='utf-8') as f:
+            f.write("\n" + "="*80 + "\n")
+            f.write(f"EVALUATION RUN: {result['evaluation_date']}\n")
+            f.write("="*80 + "\n\n")
 
-            # Add summary statistics
-            successful = [r for r in results if r.get('success')]
-            if successful:
-                f.write(f"SUMMARY STATISTICS\n")
-                f.write(f"{'-'*60}\n")
-                f.write(f"Total models tested: {len(results)}\n")
-                f.write(f"Successful evaluations: {len(successful)}\n")
-                f.write(f"Success rate: {len(successful)/len(results)*100:.1f}%\n\n")
+            f.write(f"Pipeline Hash: {result['pipeline_hash']}\n")
+            f.write(f"Period: {result['period']}\n")
+            f.write(f"Rolling: {result['rolling']}\n")
+            f.write(f"Success: {result['success']}\n")
 
-                # Performance ranking
-                successful.sort(key=lambda x: x['latency_seconds'])
-                f.write(f"PERFORMANCE RANKING (by latency):\n")
-                for i, result in enumerate(successful, 1):
-                    f.write(f"{i:2d}. {result['model_name']:<20} - {result['latency_seconds']:.2f}s - ${result['estimated_cost_usd']:.4f}\n")
+            if result['error']:
+                f.write(f"\nERROR: {result['error']}\n")
+            else:
+                f.write(f"Conversation Count: {result['conversation_count']}\n")
+                f.write(f"Period Label: {result['period_label']}\n")
+                f.write(f"Latest Date: {result['latest_date']}\n")
+                f.write(f"Average Quality Score: {result['average_score']:.3f}\n\n")
 
-                # Cost ranking
-                successful.sort(key=lambda x: x['estimated_cost_usd'])
-                f.write(f"\nCOST RANKING (by estimated cost):\n")
-                for i, result in enumerate(successful, 1):
-                    f.write(f"{i:2d}. {result['model_name']:<20} - ${result['estimated_cost_usd']:.4f} - {result['latency_seconds']:.2f}s\n")
+                f.write("META-SUMMARY:\n")
+                f.write("-"*80 + "\n")
+                f.write(json.dumps(result['meta_summary'], indent=2))
+                f.write("\n\n")
+
+                f.write("EVALUATION SCORES:\n")
+                f.write("-"*80 + "\n")
+                for metric, score in result['evaluation'].items():
+                    status = "✓" if score >= 0.7 else "~" if score >= 0.4 else "✗"
+                    f.write(f"{status} {metric:40}: {score:.3f}\n")
+
+            f.write("\n")
+
+        print(f"\n✓ Results saved to: {self.results_path}")
 
 
 def main():
-    """Main entry point for the summarization evaluation script."""
-    parser = argparse.ArgumentParser(description='Evaluate different LLM models on summarization tasks')
-    parser.add_argument('--models', nargs='+', help='Specific models to evaluate',
-                        choices=MODELS_TO_EVALUATE, default=None)
-    parser.add_argument('--output', type=str, help='Output text file path',
-                        default='./tellme/evaluation/summarization_evaluation_results.txt')
+    """Main entry point for the evaluation script."""
 
-    args = parser.parse_args()
+    # Verify required API keys are available
+    required_keys = [
+        'OPENAI_API_KEY',
+        'GOOGLE_CLOUD_PROJECT'
+    ]
 
-    # Verify OpenAI API key is available
-    if not hasattr(settings, 'OPENAI_API_KEY') or not settings.OPENAI_API_KEY:
-        print("Error: OPENAI_API_KEY not found in settings.")
-        print("Make sure it's set in your .env file or environment variables.")
-        sys.exit(1)
+    missing_keys = []
+    for key in required_keys:
+        if not hasattr(settings, key) or not getattr(settings, key):
+            missing_keys.append(key)
 
-    evaluator = SummarizationEvaluator(results_file_path=args.output)
+    if missing_keys:
+        print(f"Warning: Missing required API keys: {', '.join(missing_keys)}")
+        print("Some features may not work correctly.")
+        print("Make sure these are set in your .env file or environment variables.")
+        print("Continuing with limited functionality...\n")
+    else:
+        print("Environment setup complete. All required API keys found.\n")
 
     try:
-        results = evaluator.run_evaluation(models=args.models)
-        print("\nEvaluation completed successfully!")
-        return results
+        # Parse command line arguments
+        parser = argparse.ArgumentParser(
+            description='Evaluate MetaSummarizer performance on customer data from metadata.py'
+        )
+        parser.add_argument('--verbose', '-v', action='store_true',
+                          help='Show detailed output including full meta-summary')
+        parser.add_argument('--period', type=str, default='eternity',
+                          choices=['week', 'month', 'quarter', 'eternity'],
+                          help='Time period for summarization (default: eternity)')
+        parser.add_argument('--rolling', action='store_true',
+                          help='Use rolling window for summarization')
+        parser.add_argument('--output', type=str,
+                          default='./tellme/evaluation/meta_summarization_results.txt',
+                          help='Output file path for results')
 
-    except KeyboardInterrupt:
-        print("\nEvaluation interrupted by user.")
-        sys.exit(1)
+        args = parser.parse_args()
+
+        evaluator = MetaSummarizationEvaluator(
+            results_file_path=args.output,
+            verbose=args.verbose,
+            period=args.period,
+            rolling=args.rolling
+        )
+
+        print("Configuration:")
+        print(f"  Period:          {evaluator.period}")
+        print(f"  Rolling:         {evaluator.rolling}")
+        print(f"  Verbose:         {evaluator.verbose}")
+        print(f"  Output file:     {evaluator.results_path}")
+        print(f"  Pipeline hash:   {evaluator.pipeline_hash}")
+        print(f"  Conversations:   {len(CONVERSATIONS)} (from metadata.py)")
+        print()
+
+        # Run evaluation
+        result = evaluator.run_evaluation()
+
+        # Print summary
+        print("\n" + "="*80)
+        print("EVALUATION SUMMARY")
+        print("="*80)
+
+        if result['success']:
+            print(f"\n✓ Evaluation completed successfully")
+
+            evaluation = result['evaluation']
+
+            # Print score breakdown
+            print("\nQuality Score Breakdown:")
+            for metric, score in sorted(evaluation.items(), key=lambda x: x[1], reverse=True):
+                status = "✓" if score >= 0.7 else "~" if score >= 0.4 else "✗"
+                print(f"  {status} {metric:40}: {score:.3f}")
+
+            print(f"\nOverall Average: {result['average_score']:.3f}")
+            print(f"\nResults saved to: {evaluator.results_path}")
+        else:
+            print(f"\n✗ Evaluation failed: {result['error']}")
+
+        print("\nEvaluation completed!")
+
     except Exception as e:
-        print(f"\nError during evaluation: {e}")
-        import traceback
+        print(f"Error running evaluation: {e}")
         traceback.print_exc()
         sys.exit(1)
 
