@@ -21,6 +21,7 @@ MODEL_TOKEN_LIMITS = {
     "openai/gpt-4o": 128000,
     "openai/gpt-4o-mini": 128000,
 
+    # TODO: Make sure gpt-5-nano is here
     # OpenAI GPT-5 Family
     "openai/gpt-5-main": 400000,        # Unified, fast model
     "openai/gpt-5-main-mini": 400000,   # Fast, high-throughput mini version
