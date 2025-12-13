@@ -14,6 +14,7 @@ import os
 import warnings
 import litellm
 import logging
+import copy
 from django.conf import settings
 from .llm_configs import (
     API_MAX_RETRIES,
@@ -111,7 +112,7 @@ def _convert_enrichment_config_to_litellm(step_config):
         )
 
     # OpenAI model
-    openai_config = config.copy()
+    openai_config = copy.deepcopy(config)
     openai_model = openai_config["model"]["openai"]
     openai_litellm_params = {k: v for k, v in openai_config.items() if k != "model"}
     # Add additionalProperties: false for OpenAI (required for strict mode)
@@ -128,7 +129,7 @@ def _convert_enrichment_config_to_litellm(step_config):
     models.append(openai_entry)
 
     # VertexAI model
-    vertexai_config = config.copy()
+    vertexai_config = copy.deepcopy(config)
     vertexai_model = vertexai_config["model"]["vertexai"]
     vertexai_litellm_params = {k: v for k, v in vertexai_config.items() if k != "model"}
     # Convert response_format for Vertex AI (remove strict mode)
@@ -318,14 +319,16 @@ def get_meta_summarization_config(meta_prompt, prompt_category: str):
         )
 
     # Extract primary model params (with strict mode for OpenAI)
-    primary_params = {k: v for k, v in base_config.items() if k != "model"}
+    primary_params = copy.deepcopy(base_config)
+    primary_params.pop("model", None)
     # Add additionalProperties: false for OpenAI (required for strict mode)
     if "response_format" in primary_params:
         schema = primary_params["response_format"]["json_schema"]["schema"]
         _add_additional_properties_false(schema)
 
     # Gemini fallback params (without strict mode)
-    gemini_params = {k: v for k, v in base_config.items() if k != "model"}
+    gemini_params = copy.deepcopy(base_config)
+    gemini_params.pop("model", None)
     if "response_format" in gemini_params:
         gemini_params["response_format"]["json_schema"].pop("strict", None)
 
