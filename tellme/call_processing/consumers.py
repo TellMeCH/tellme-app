@@ -9,7 +9,7 @@ from rest_framework import exceptions
 from django.utils import timezone
 from django.conf import settings
 from tellme.call_miner.models import OrganizationAPIKey
-from tellme.call_processing.utils import audio_utils, queue_utils
+from tellme.call_processing.utils import audio_utils, processing_utils
 
 logger = logging.getLogger('django')
 
