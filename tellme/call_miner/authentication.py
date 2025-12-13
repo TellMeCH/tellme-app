@@ -31,7 +31,7 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
             id_token = auth_header[len(self.HEADER_SCHEMA):]
             logger.debug("Got ID Token")
 
-            if (settings.TELLME_ENV == 'dev') or ('x-apigateway-api-userinfo' not in request.headers):  # TODO: Remove this last part when restricting to internal calls
+            if settings.TELLME_ENV == 'dev':
                 try:
                     decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
                     uid = decoded_token['uid']
