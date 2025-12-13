@@ -1,3 +1,5 @@
+import re
+import urllib
 import json
 import litellm
 import tiktoken
