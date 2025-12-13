@@ -1,3 +1,5 @@
+import re
+import urllib
 import json
 import litellm
 import tiktoken
@@ -273,6 +275,42 @@ class MetaSummarizer:
 
         return data
 
+    @staticmethod
+    def create_mailto_link(email_body: str, subject: str, to_email: str = 'customer@anywhere.com') -> str:
+        """
+        Generates a fully formatted mailto link, handling line break normalization
+        and URL encoding in a single step.
+
+        Args:
+            email_body (str): Raw body text (can contain mixed \n, \r\n, etc).
+            subject (str): Email subject line.
+            to_email (str): Recipient email address.
+
+        Returns:
+            str: A complete, clickable mailto URL with preserved formatting.
+        """
+        if not email_body:
+            email_body = ""
+
+        # Convert all line breaks to \n first
+        text = email_body.replace('\r\n', '\n').replace('\r', '\n')
+
+        # Strip leading/trailing whitespace
+        text = text.strip()
+
+        # Collapse excessive vertical whitespace (3+ newlines become 2)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+
+        # Force Windows-style CRLF (\r\n) for email client compatibility
+        text = text.replace('\n', '\r\n')
+
+        # This turns \r\n into %0D%0A, spaces into %20, and handles umlauts.
+        # safe='' ensures even typically safe chars are encoded to prevent breaking the URL.
+        encoded_subject = urllib.parse.quote(subject, safe='')
+        encoded_body = urllib.parse.quote(text, safe='')
+
+        return f"mailto:{to_email}?subject={encoded_subject}&body={encoded_body}"
+
     @observe(as_type="generation")
     def _condense_items(self, enriched_summaries: list[str], enriched_transcripts: list[str], trace_data: dict):
         """
@@ -373,7 +411,16 @@ class MetaSummarizer:
             # Parse JSON response, unwrap schema if present, and clean up escaped newlines
             result = json.loads(response.content)
             result = self._unwrap_schema_response(result)
-            return self._clean_escaped_newlines(result)
+            result = self._clean_escaped_newlines(result)
+
+            # Format email body for mailto links if present (customer summaries)
+            if isinstance(result, dict) and "Suggested Email Body" in result and "Suggested Email Subject" in result:
+                result["Suggested Email Mailto"] = self.create_mailto_link(
+                    result["Suggested Email Body"],
+                    result["Suggested Email Subject"],
+                )
+
+            return result
         else:
             return None
 
