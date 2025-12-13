@@ -14,27 +14,37 @@ from tellme.call_processing.utils.transcript_cleaner import clean_transcript
 
 # Model-specific token limits (max context window for each model)
 MODEL_TOKEN_LIMITS = {
-    # OpenAI GPT-4 Family
-    "openai/gpt-4": 8192,
-    "openai/gpt-4-32k": 32768,
+    # --- OpenAI GPT-4 Family (Standard) ---
     "openai/gpt-4-turbo": 128000,
     "openai/gpt-4o": 128000,
     "openai/gpt-4o-mini": 128000,
 
-    # TODO: Make sure gpt-5-nano is here
-    # OpenAI GPT-5 Family
-    "openai/gpt-5-main": 400000,        # Unified, fast model
-    "openai/gpt-5-main-mini": 400000,   # Fast, high-throughput mini version
-    "openai/gpt-5-thinking": 400000,    # Reasoning model (multi-step, in-depth)
-    "openai/gpt-5-thinking-mini": 400000, # Reasoning mini version
-    "openai/gpt-5-thinking-nano": 400000, # Reasoning nano version
+    # --- OpenAI o-Series (Reasoning) ---
+    "openai/o1": 128000,
+    "openai/o1-mini": 128000,
+    "openai/o3-mini": 200000,
 
-    # Google Gemini Family (Vertex AI)
-    "vertex_ai/gemini-1.0-pro": 30720,
-    "vertex_ai/gemini-1.5-pro": 1000000,
-    "vertex_ai/gemini-1.5-flash": 1000000,
-    "vertex_ai/gemini-2.0-flash-001": 1000000,
-    "vertex_ai/gemini-2.0-flash-exp": 1000000,
+    # --- OpenAI GPT-5 Family (Flagship) ---
+    "openai/gpt-5": 400000,
+    "openai/gpt-5-mini": 400000,
+    "openai/gpt-5-nano": 400000,
+
+    # --- Google Gemini 3 Family (Newest / Preview) ---
+    # Released Nov 2025. Currently in Preview.
+    # Note: Initial context is 1M, distinct from the 2M limit of 1.5 Pro.
+    "vertex_ai/gemini-3-pro-preview": 1048576,
+
+    # --- Google Gemini 2.5 Family (Current Stable) ---
+    # The production standard as of late 2025.
+    "vertex_ai/gemini-2.5-pro": 1048576,
+    "vertex_ai/gemini-2.5-flash": 1048576,
+    "vertex_ai/gemini-2.5-flash-lite": 1048576, # High throughput, lower cost
+
+    # --- Google Gemini Previous Generations ---
+    # Kept for legacy compatibility; 1.5 Pro still offers the largest context (2M).
+    "vertex_ai/gemini-2.0-flash-001": 1048576,
+    "vertex_ai/gemini-1.5-pro": 2097152,        # Still the context king (2M)
+    "vertex_ai/gemini-1.5-flash": 1048576,
 }
 
 # Conservative safety margin (use 80% of max tokens)
