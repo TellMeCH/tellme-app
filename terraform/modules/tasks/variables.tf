@@ -33,13 +33,13 @@ variable "max_retry_duration" {
 variable "min_backoff" {
   type        = string
   description = "Minimum backoff duration"
-  default     = "20s"
+  default     = "60s"
 }
 
 variable "max_backoff" {
   type        = string
   description = "Maximum backoff duration"
-  default     = "80s"
+  default     = "280s"
 }
 
 variable "max_doublings" {
