@@ -85,6 +85,8 @@ module "cloud_run_v2" {
     max_instance_count = var.max_instance_count
   }
 
+  max_instance_request_concurrency = var.max_concurrent_requests
+
   ingress = "INGRESS_TRAFFIC_ALL"
   members = [
    "serviceAccount:${google_service_account.app.email}",  # API Gateway can invoke
@@ -96,7 +98,10 @@ module "cloud_run_v2" {
       container_image = var.image_url
 
       resources = {
-        limits = { memory = "1Gi" }
+        limits = {
+          memory = var.instance_memory
+          cpu    = var.instance_cpu
+        }
       }
 
       volume_mounts = [

@@ -16,6 +16,9 @@ module "api_revision" {
   region                = var.region
   min_instance_count    = 2
   max_instance_count    = 20
+  max_concurrent_requests = 10
+  instance_memory       = "2Gi"
+  instance_cpu          = "2000m"
   tellme_env            = "prod"
   settings_name         = var.settings_name
   sql_instance_name     = var.sql_instance

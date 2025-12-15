@@ -40,6 +40,21 @@ variable "max_instance_count" {
   description = "Maximum number of Cloud Run container instances"
 }
 
+variable "max_concurrent_requests" {
+  type        = number
+  description = "Maximum number of concurrent requests per Cloud Run instance"
+}
+
+variable "instance_memory" {
+  type        = string
+  description = "Memory of the Cloud Run instance"
+}
+
+variable "instance_cpu" {
+  type        = string
+  description = "CPU of the Cloud Run instance"
+}
+
 variable "tellme_env" {
   type        = string
   description = "Environment (staging/prod)"

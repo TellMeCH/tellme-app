@@ -33,24 +33,30 @@ variable "max_retry_duration" {
 variable "min_backoff" {
   type        = string
   description = "Minimum backoff duration"
-  default     = "20s"
+  default     = "30s"
 }
 
 variable "max_backoff" {
   type        = string
   description = "Maximum backoff duration"
-  default     = "80s"
+  default     = "280s"
 }
 
 variable "max_doublings" {
   type        = number
   description = "Maximum number of doublings"
-  default     = 3
+  default     = 5
 }
 
 variable "max_concurrent_dispatches" {
   type        = number
   description = "Maximum concurrent dispatches"
+  default     = 100
+}
+
+variable "max_dispatches_per_second" {
+  type        = number
+  description = "Maximum dispatches per second"
   default     = 10
 }
 
