@@ -51,7 +51,7 @@ variable "max_doublings" {
 variable "max_concurrent_dispatches" {
   type        = number
   description = "Maximum concurrent dispatches"
-  default     = 20
+  default     = 100
 }
 
 variable "max_dispatches_per_second" {
