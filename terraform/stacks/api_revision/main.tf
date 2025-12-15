@@ -99,8 +99,8 @@ module "cloud_run_v2" {
 
       resources = {
         limits = {
-          memory = "1Gi"
-          cpu    = "1000m"
+          memory = var.instance_memory
+          cpu    = var.instance_cpu
         }
       }
 

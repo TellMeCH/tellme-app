@@ -43,7 +43,16 @@ variable "max_instance_count" {
 variable "max_concurrent_requests" {
   type        = number
   description = "Maximum number of concurrent requests per Cloud Run instance"
-  default     = 10  # Cloud Run default, reasonable for most workloads
+}
+
+variable "instance_memory" {
+  type        = string
+  description = "Memory of the Cloud Run instance"
+}
+
+variable "instance_cpu" {
+  type        = string
+  description = "CPU of the Cloud Run instance"
 }
 
 variable "tellme_env" {
