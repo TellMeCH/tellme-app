@@ -111,23 +111,23 @@ module "cloud_run_v2" {
         }
       ]
 
-      env = [
-        { name = "GOOGLE_CLOUD_PROJECT",     value = var.project_id },
-        { name = "REGION",                   value = var.region },
-        { name = "TELLME_ENV",               value = var.tellme_env },
-        { name = "DEBUG",                    value = "0" },
-        { name = "SETTINGS_NAME",            value = var.settings_name },
-        { name = "SQL_INSTANCE_NAME",        value = var.sql_instance_name },
-        { name = "DATABASE_NAME",            value = var.database_name },
-        { name = "GS_BUCKET_NAME",           value = google_storage_bucket.media_bucket.name },
-        { name = "PROCESSING_QUEUE_NAME",    value = module.tasks.call_processing_queue_name },
-        { name = "SUMMARIZATION_QUEUE_NAME", value = module.tasks.summarization_queue_name },
-        { name = "CALL_PROCESSING_BUCKET",   value = var.call_processing_bucket },
-        { name = "FRONTEND_PATH",            value = var.frontend_path },
-        { name = "CALL_PROCESSING_ENDPOINT", value = "None" },
-        { name = "SUMMARIZATION_ENDPOINT",   value = "None" },
-        { name = "SERVICE_ACCOUNT_EMAIL",    value = google_service_account.app.email }
-      ]
+      env_vars = {
+        GOOGLE_CLOUD_PROJECT     = var.project_id
+        REGION                   = var.region
+        TELLME_ENV               = var.tellme_env
+        DEBUG                    = "0"
+        SETTINGS_NAME            = var.settings_name
+        SQL_INSTANCE_NAME        = var.sql_instance_name
+        DATABASE_NAME            = var.database_name
+        GS_BUCKET_NAME           = google_storage_bucket.media_bucket.name
+        PROCESSING_QUEUE_NAME    = module.tasks.call_processing_queue_name
+        SUMMARIZATION_QUEUE_NAME = module.tasks.summarization_queue_name
+        CALL_PROCESSING_BUCKET   = var.call_processing_bucket
+        FRONTEND_PATH            = var.frontend_path
+        CALL_PROCESSING_ENDPOINT = "None"
+        SUMMARIZATION_ENDPOINT   = "None"
+        SERVICE_ACCOUNT_EMAIL    = google_service_account.app.email
+      }
     }
   ]
 
