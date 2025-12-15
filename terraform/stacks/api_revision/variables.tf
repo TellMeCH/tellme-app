@@ -40,6 +40,12 @@ variable "max_instance_count" {
   description = "Maximum number of Cloud Run container instances"
 }
 
+variable "max_concurrent_requests" {
+  type        = number
+  description = "Maximum number of concurrent requests per Cloud Run instance"
+  default     = 10  # Cloud Run default, reasonable for most workloads
+}
+
 variable "tellme_env" {
   type        = string
   description = "Environment (staging/prod)"

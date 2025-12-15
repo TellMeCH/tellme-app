@@ -719,10 +719,10 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [CustomerPermission]
     pagination_class = CustomListViewPaginator
-    cursor_ordering = ['-last_conversation_date', 'conversation_count']
+    cursor_ordering = ['-last_conversation_date', 'conversation_count', 'id']
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['last_conversation_date', 'conversation_count', 'created', 'total_revenue', 'avg_sentiment']
-    ordering = ['-last_conversation_date', 'conversation_count']  # Match cursor_ordering for consistency
+    ordering = ['-last_conversation_date', 'conversation_count', 'id']
     relationships_to_select = ['latest_conversation']
     relationships_to_prefetch = []
     search_vector = (
