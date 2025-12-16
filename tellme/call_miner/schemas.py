@@ -1005,3 +1005,35 @@ VALIDATION_ERROR_RESPONSE_SCHEMA = OpenApiResponse(
     },
     description='Error response when input validation fails.'
 )
+
+CREATE_TICKET_RESPONSE_SCHEMA = OpenApiResponse(
+    response={
+        'type': 'object',
+        'properties': {
+            'link': {
+                'type': 'string',
+                'format': 'uri',
+                'nullable': True,
+                'description': 'URL to the Jira ticket. Null if ticket is being created.'
+            },
+            'date': {
+                'type': 'string',
+                'format': 'date-time',
+                'nullable': True,
+                'description': 'Date when the ticket was created. Null if ticket is being created.'
+            },
+            'status': {
+                'type': 'string',
+                'enum': ['ready', 'creating'],
+                'description': 'Status of the ticket: "ready" if ticket already exists, "creating" if being created asynchronously.'
+            }
+        },
+        'required': ['link', 'date', 'status'],
+        'example': {
+            'link': 'https://example.atlassian.net/browse/PROJ-123',
+            'date': '2025-12-16T10:30:00Z',
+            'status': 'ready'
+        }
+    },
+    description='Response returned when creating a Jira ticket for a customer.'
+)

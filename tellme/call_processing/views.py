@@ -351,7 +351,11 @@ class TicketCreationView(APIView):
 
         except ValueError as exc:
             logger.error(str(exc))
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            if 'not found' in str(exc):
+                status_code = status.HTTP_404_NOT_FOUND
+            else:
+                status_code = status.HTTP_400_BAD_REQUEST
+            return Response({"error": str(exc)}, status=status_code)
         except Exception as exc:
             logger.error(f"Ticket creation failed for customer {customer_id}: {str(exc)}")
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

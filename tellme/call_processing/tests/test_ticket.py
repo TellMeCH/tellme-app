@@ -135,6 +135,7 @@ class TestTicketCreationView:
 
         # Verify customer was updated
         customer.refresh_from_db()
+        conversation.refresh_from_db()
         assert customer.ticket_link == "https://jira.example.com/browse/PROJ-123"
         assert customer.ticket_date == conversation.date
 
@@ -213,7 +214,7 @@ class TestTicketCreationView:
         response = api_client.post(url, data=payload, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "No ticket data found in customer summary" in response.data["error"]
+        assert "No valid ticket data found in customer summary for customer" in response.data["error"]
 
 
 @pytest.mark.django_db
