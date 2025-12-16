@@ -20,7 +20,7 @@ from tellme.call_miner.permissions import (ConversationPermission, OrganizationP
                                     TopicPermission, AgentPermission, CustomerPermission, EmployeePermission)
 from tellme.call_miner.utils.paginators import CustomListViewPaginator
 from tellme.call_miner.utils.period_utils import period_bounds
-from tellme.call_miner.utils.queue_utils import DEFAULT_SUMMARY_SETTINGS
+from tellme.call_miner.utils.summary_utils import DEFAULT_SUMMARY_SETTINGS
 from tellme.call_miner.authentication import FirebaseAuthentication
 from tellme.call_miner.schemas import (
     ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA,
@@ -30,7 +30,8 @@ from tellme.call_miner.schemas import (
     REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
     NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA,
-    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA, get_search_parameters_schema
+    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA, CREATE_TICKET_RESPONSE_SCHEMA,
+    get_search_parameters_schema
 )
 
 
@@ -754,23 +755,13 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
         description='Create a Jira ticket for a customer based on their summary data.',
         parameters=[ID_PARAMETER_SCHEMA],
         responses={
-            200: OpenApiResponse(
-                description='Ticket creation response',
-                response={
-                    'type': 'object',
-                    'properties': {
-                        'link': {'type': 'string', 'format': 'uri', 'nullable': True},
-                        'date': {'type': 'string', 'format': 'date-time', 'nullable': True},
-                        'status': {'type': 'string', 'enum': ['ready', 'creating']}
-                    }
-                }
-            ),
+            200: CREATE_TICKET_RESPONSE_SCHEMA,
             400: ERROR_RESPONSE_SCHEMA,
             403: FORBIDDEN_RESPONSE_SCHEMA,
             404: NOT_FOUND_RESPONSE_SCHEMA
         }
     )
-    @decorators.action(detail=True, methods=['post'], url_path='create_ticket')
+    @decorators.action(detail=True, methods=['get'], url_path='create_ticket')
     def create_ticket(self, request, pk=None):
         """
         Create a Jira ticket for a customer based on their summary data.

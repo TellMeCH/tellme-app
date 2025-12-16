@@ -1328,8 +1328,8 @@ class TestCustomerActions:
         assert data[customer.id]["period_label"] == 'eternity'
         assert data[customer_with_multiple.id]["period_label"] == 'eternity'
 
-    @patch('tellme.call_miner.utils.summary_utils.create_ticket_task')
-    @patch('tellme.call_miner.utils.summary_utils.check_ticket_tasks')
+    @patch('tellme.call_miner.models.create_ticket_task')
+    @patch('tellme.call_miner.models.check_ticket_tasks')
     def test_create_ticket_for_customer_with_summary(
             self, mock_check_ticket_tasks, mock_create_ticket_task,
             client, analyst_user, customer, conversation_today
@@ -1362,7 +1362,7 @@ class TestCustomerActions:
 
         client.force_authenticate(user=analyst_user)
         url = reverse('customer-create-ticket', args=[customer.id])
-        response = client.post(url)
+        response = client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] == 'creating'
@@ -1376,14 +1376,13 @@ class TestCustomerActions:
         """Test that creating a ticket fails when customer has no conversations."""
         client.force_authenticate(user=analyst_user)
         url = reverse('customer-create-ticket', args=[customer.id])
-        response = client.post(url)
+        response = client.get(url)
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'error' in response.data
-        assert 'no conversations' in response.data['error'].lower()
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'no conversations found'
 
-    @patch('tellme.call_miner.utils.summary_utils.create_ticket_task')
-    @patch('tellme.call_miner.utils.summary_utils.check_ticket_tasks')
+    @patch('tellme.call_miner.models.create_ticket_task')
+    @patch('tellme.call_miner.models.check_ticket_tasks')
     def test_get_existing_ticket_for_customer(
             self, mock_check_ticket_tasks, mock_create_ticket_task,
             client, analyst_user, customer, conversation_today
@@ -1416,7 +1415,7 @@ class TestCustomerActions:
 
         client.force_authenticate(user=analyst_user)
         url = reverse('customer-create-ticket', args=[customer.id])
-        response = client.post(url)
+        response = client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] == 'ready'

@@ -6,7 +6,6 @@ from rest_framework.test import APIClient
 from tellme.call_miner.models import (
     Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
 )
-from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
 
 
 @pytest.fixture(autouse=True)
