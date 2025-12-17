@@ -32,6 +32,11 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Remove internal processing endpoints from API Gateway spec
     remove_internal_endpoints(result)
 
+    # If request is None, we are running via CLI (generating spec.yaml for Gateway).
+    # We must convert the standard Bearer auth to GCP OAuth2 format.
+    if request is None:
+        convert_auth_for_gcp_gateway(result)
+
     return result
 
 
@@ -408,3 +413,30 @@ def remove_internal_endpoints(schema):
     for endpoint in internal_endpoints:
         if endpoint in schema['paths']:
             del schema['paths'][endpoint]
+
+
+def convert_auth_for_gcp_gateway(schema):
+    """
+    Overwrites the standard HTTP Bearer security scheme with the
+    Google Cloud API Gateway specific OAuth2 definition.
+    Only runs when generating the static YAML file.
+    """
+    if 'components' in schema and 'securitySchemes' in schema['components']:
+        security_schemes = schema['components']['securitySchemes']
+
+        # Look for the scheme name defined in your AuthenticationExtension ('FirebaseAuth')
+        if 'FirebaseAuth' in security_schemes:
+            security_schemes['FirebaseAuth'] = {
+                'type': 'oauth2',
+                'flows': {
+                    'implicit': {
+                        'authorizationUrl': '',
+                        'scopes': {}
+                    }
+                },
+                'x-google-auth': {
+                    'issuer': f'https://securetoken.google.com/{settings.GOOGLE_CLOUD_PROJECT}',
+                    'jwksUri': 'https://www.googleapis.com/service_accounts/v1/metadata/x509/securetoken@system.gserviceaccount.com',
+                    'audiences': [settings.GOOGLE_CLOUD_PROJECT]
+                }
+            }
