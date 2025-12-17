@@ -509,7 +509,7 @@ def create_periodsummary(obj, summary, latest_date, call_count, label, period):
             period_summary.save(update_fields=["summary", "last_call_at", "call_count"])
 
 
-def retrieve_data_for_ticket(customer_id: int, requester_id: int):
+def retrieve_data_for_ticket(customer_id: int, requester_id: str):
     """
     Retrieve all necessary data for creating a Jira ticket for a customer.
 
@@ -521,7 +521,7 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: int):
 
     Args:
         customer_id: ID of the customer to create a ticket for
-        requester_id: ID of the user requesting the ticket
+        requester_id: UUID string of the user requesting the ticket
 
     Returns:
         tuple: (customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key, requester_email)

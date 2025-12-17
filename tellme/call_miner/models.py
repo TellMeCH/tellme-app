@@ -910,12 +910,12 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
         return f"Customer [external_id={self.external_id} | org={self.organization_id}]"
 
     @transaction.atomic
-    def get_or_create_ticket(self, requester_id: int):
+    def get_or_create_ticket(self, requester_id: str):
         """
         Get existing ticket or trigger ticket creation task.
 
         Args:
-            requester_id: ID of the user requesting the ticket
+            requester_id: UUID string of the user requesting the ticket
 
         Returns:
             dict: Dictionary with fields 'link', 'date', and 'status' where:
