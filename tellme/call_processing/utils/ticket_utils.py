@@ -4,6 +4,7 @@ import sys
 from typing import Tuple, Optional
 from jira import JIRA
 from jira.exceptions import JIRAError
+from django.conf import settings
 
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ def create_ticket(
     ticket_project: str,
     ticket_description: str,
     ticket_title: str,
+    customer_id: int,
     issue_type: str = "Task"
 ) -> Tuple[Optional[str], str]:
     """
@@ -27,6 +29,7 @@ def create_ticket(
         ticket_project: Jira project key (e.g., 'PROJ')
         ticket_description: Description/body of the ticket
         ticket_title: Title/summary of the ticket
+        customer_id: Customer ID for generating the TellMe link
         issue_type: The issue type name (default: "Task")
 
     Returns:
@@ -35,6 +38,10 @@ def create_ticket(
     try:
         # Clean the server URL to avoid double slashes later
         server_url = ticket_server.rstrip('/')
+
+        # Append TellMe link to ticket description
+        tellme_url = f"{settings.FRONTEND_PATH}/customer-experiences/{customer_id}"
+        enhanced_description = f"{ticket_description}\n\nFor more information, visit [tellme|{tellme_url}]"
 
         # Create JIRA client instance
         jira = JIRA(
@@ -46,7 +53,7 @@ def create_ticket(
         issue_dict = {
             'project': {'key': ticket_project},
             'summary': ticket_title,
-            'description': ticket_description,
+            'description': enhanced_description,
             'issuetype': {'name': issue_type},
         }
 
@@ -81,6 +88,7 @@ def main():
     parser.add_argument("--user", required=True, help="Jira Login Email")
     parser.add_argument("--token", required=True, help="Jira API Token")
     parser.add_argument("--project", required=True, help="Project Key (e.g., KAN)")
+    parser.add_argument("--customer-id", required=True, type=int, help="Customer ID")
 
     # Optional arguments
     parser.add_argument("--title", default="Test Ticket from Script", help="Ticket Title")
@@ -98,6 +106,7 @@ def main():
         ticket_project=args.project,
         ticket_description=args.desc,
         ticket_title=args.title,
+        customer_id=args.customer_id,
         issue_type=args.type
     )
 
