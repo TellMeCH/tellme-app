@@ -185,12 +185,13 @@ def check_ticket_tasks(customer_id: int) -> bool:
         return False
 
 
-def create_ticket_task(customer_id: int, task_id: str = None):
+def create_ticket_task(customer_id: int, requester_id: int, task_id: str = None):
     """
     Create a Google Cloud Task for creating a Jira ticket for a customer.
 
     Args:
         customer_id (int): ID of the customer
+        requester_id (int): ID of the user requesting the ticket
         task_id (str, optional): Optional task ID for tracking
 
     Returns:
@@ -201,6 +202,7 @@ def create_ticket_task(customer_id: int, task_id: str = None):
 
     payload = {
         "customer_id": customer_id,
+        "requester_id": requester_id,
         "task_id": task_id
     }
 
