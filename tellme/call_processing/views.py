@@ -324,7 +324,8 @@ class TicketCreationView(APIView):
                 ticket_api_key=ticket_api_key,
                 ticket_project=organization.ticket_project,
                 ticket_description=ticket_description,
-                ticket_title=ticket_title
+                ticket_title=ticket_title,
+                customer_id=customer_id
             )
 
             # Update customer with ticket information
