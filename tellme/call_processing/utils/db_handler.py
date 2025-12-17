@@ -7,7 +7,9 @@ from django.utils import timezone
 from django.conf import settings
 from django.utils.dateparse import parse_datetime
 from django.contrib.contenttypes.models import ContentType
-from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary
+from tellme.call_miner.models import (
+    Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary, User
+)
 from tellme.call_miner.utils.summary_utils import get_default_summary_settings
 
 logger = logging.getLogger(__name__)
@@ -507,7 +509,7 @@ def create_periodsummary(obj, summary, latest_date, call_count, label, period):
             period_summary.save(update_fields=["summary", "last_call_at", "call_count"])
 
 
-def retrieve_data_for_ticket(customer_id: int):
+def retrieve_data_for_ticket(customer_id: int, requester_id: int):
     """
     Retrieve all necessary data for creating a Jira ticket for a customer.
 
@@ -515,26 +517,31 @@ def retrieve_data_for_ticket(customer_id: int):
     - Customer instance
     - Organization and its Jira credentials
     - Customer summary data containing ticket information
+    - Requester user information
 
     Args:
         customer_id: ID of the customer to create a ticket for
+        requester_id: ID of the user requesting the ticket
 
     Returns:
-        tuple: (customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key)
+        tuple: (customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key, requester_email)
             - customer: Customer instance
             - organization: Organization instance
             - ticket_title: Title for the Jira ticket
             - ticket_description: Description for the Jira ticket
             - summary_date: Date of the latest call in the summary
             - ticket_api_key: Decrypted API key for Jira
+            - requester_email: Email of the user requesting the ticket
 
     Raises:
         Customer.DoesNotExist: If customer with the given ID is not found
+        User.DoesNotExist: If requester user with the given ID is not found
         ValueError: If organization doesn't have Jira credentials configured
         ValueError: If customer summary doesn't contain ticket data
     """
-    TICKET_BODY_FIELD = 'Jira Ticket Body'
-    TICKET_TITLE_FIELD = 'Jira Ticket Title'
+
+    ticket_body_field = 'Jira Ticket Body'
+    ticket_title_field = 'Jira Ticket Title'
 
     # Get the customer instance
     try:
@@ -542,10 +549,17 @@ def retrieve_data_for_ticket(customer_id: int):
     except Customer.DoesNotExist:
         raise ValueError(f"Customer with id {customer_id} not found")
 
+    # Get the requester user
+    try:
+        requester = User.objects.get(id=requester_id)
+        requester_email = requester.email
+    except User.DoesNotExist:
+        raise ValueError(f"User with id {requester_id} not found")
+
     organization = customer.organization
 
     # Check if organization has Jira credentials configured
-    if not all([organization.ticket_account, organization.ticket_key_encrypted, organization.ticket_project]):
+    if not all([organization.ticket_server, organization.ticket_key_encrypted, organization.ticket_project]):
         raise ValueError(f"Organization {organization.name} does not have Jira credentials configured")
 
     # Get default customer summary data
@@ -555,14 +569,14 @@ def retrieve_data_for_ticket(customer_id: int):
     )
 
     # Check if summary contains ticket data
-    if summary_data is None or TICKET_TITLE_FIELD not in summary_data or TICKET_BODY_FIELD not in summary_data:
+    if summary_data is None or ticket_title_field not in summary_data or ticket_body_field not in summary_data:
         raise ValueError(f"No valid ticket data found in customer summary for customer {customer_id} (status={status_msg})")
 
     # Extract ticket data from summary
-    ticket_title = summary_data.get(TICKET_TITLE_FIELD)
-    ticket_description = summary_data.get(TICKET_BODY_FIELD)
+    ticket_title = summary_data.get(ticket_title_field)
+    ticket_description = summary_data.get(ticket_body_field)
 
     # Retrieve decrypted API key
     ticket_api_key = organization.retrieve_ticket_key()
 
-    return customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key
+    return customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key, requester_email

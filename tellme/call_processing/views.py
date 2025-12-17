@@ -310,15 +310,17 @@ class TicketCreationView(APIView):
 
         # Extract validated data
         customer_id = serializer.validated_data.get("customer_id")
+        requester_id = serializer.validated_data.get("requester_id")
         logger.info(f"Processing ticket creation for customer {customer_id}")
 
         try:
             # Retrieve all necessary data for ticket creation
-            customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key = retrieve_data_for_ticket(customer_id)
+            customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key, requester_email = retrieve_data_for_ticket(customer_id, requester_id)
 
             # Create the Jira ticket
             ticket_link, ticket_status = ticket_utils.create_ticket(
-                ticket_account=organization.ticket_account,
+                ticket_server=organization.ticket_server,
+                ticket_account=requester_email,
                 ticket_api_key=ticket_api_key,
                 ticket_project=organization.ticket_project,
                 ticket_description=ticket_description,
