@@ -17,7 +17,7 @@ class CustomUserAdmin(admin.ModelAdmin):
 
 class OrganizationAdmin(admin.ModelAdmin):
     form = OrganizationAdminForm
-    list_display = ['name', 'ticket_account', 'ticket_project', 'has_jira_key']
+    list_display = ['name', 'ticket_server', 'ticket_project', 'has_jira_key']
     search_fields = ['name']
     fieldsets = (
         ('Basic Information', {
@@ -27,7 +27,7 @@ class OrganizationAdmin(admin.ModelAdmin):
             'fields': ('transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language')
         }),
         ('Jira Integration', {
-            'fields': ('ticket_account', 'ticket_project', 'ticket_api_key'),
+            'fields': ('ticket_server', 'ticket_project', 'ticket_api_key'),
             'description': 'Configure Jira integration for automatic ticket creation.'
         }),
     )
