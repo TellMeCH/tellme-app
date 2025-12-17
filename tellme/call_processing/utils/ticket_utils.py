@@ -1,56 +1,44 @@
-"""
-Utilities for creating Jira tickets via the Jira Python SDK.
-"""
+import logging
+import argparse
+import sys
+from typing import Tuple, Optional
 from jira import JIRA
 from jira.exceptions import JIRAError
-import logging
-from typing import Tuple
+
 
 logger = logging.getLogger(__name__)
 
-
 def create_ticket(
+    ticket_server: str,
     ticket_account: str,
     ticket_api_key: str,
     ticket_project: str,
     ticket_description: str,
-    ticket_title: str
-) -> Tuple[str, str]:
+    ticket_title: str,
+    issue_type: str = "Task"
+) -> Tuple[Optional[str], str]:
     """
     Create a Jira ticket using the Jira Python SDK.
 
     Args:
-        ticket_account: Jira service account email (used to extract Jira domain)
-        ticket_api_key: Jira API key for authentication
+        ticket_server: The full URL to the instance (e.g. "https://domain.atlassian.net")
+        ticket_account: Jira service account email
+        ticket_api_key: Jira API token
         ticket_project: Jira project key (e.g., 'PROJ')
         ticket_description: Description/body of the ticket
         ticket_title: Title/summary of the ticket
+        issue_type: The issue type name (default: "Task")
 
     Returns:
-        Tuple of (ticket_link, status) where:
-            - ticket_link: URL to the created ticket, or None if failed
-            - status: 'created' or 'failed'
+        Tuple of (ticket_link, status)
     """
     try:
-        # Extract Jira domain from email (assumes format: user@domain.atlassian.net)
-        # or use a standard format
-        if '@' in ticket_account:
-            domain_part = ticket_account.split('@')[1]
-            if '.atlassian.net' in domain_part:
-                jira_server = f"https://{domain_part.split('.atlassian.net')[0]}.atlassian.net"
-            else:
-                # Assume the domain before @ is the Jira cloud subdomain
-                jira_server = f"https://{ticket_account.split('@')[0]}.atlassian.net"
-        else:
-            # If account is just a domain/subdomain
-            if 'http' in ticket_account:
-                jira_server = ticket_account
-            else:
-                jira_server = f"https://{ticket_account}.atlassian.net"
+        # Clean the server URL to avoid double slashes later
+        server_url = ticket_server.rstrip('/')
 
         # Create JIRA client instance
         jira = JIRA(
-            server=jira_server,
+            server=server_url,
             basic_auth=(ticket_account, ticket_api_key)
         )
 
@@ -59,14 +47,14 @@ def create_ticket(
             'project': {'key': ticket_project},
             'summary': ticket_title,
             'description': ticket_description,
-            'issuetype': {'name': 'Task'},
+            'issuetype': {'name': issue_type},
         }
 
         # Create the issue
         new_issue = jira.create_issue(fields=issue_dict)
 
         # Build ticket link
-        ticket_link = f"{jira_server}/browse/{new_issue.key}"
+        ticket_link = f"{server_url}/browse/{new_issue.key}"
         logger.info(f"Successfully created Jira ticket: {ticket_link}")
         return ticket_link, 'created'
 
@@ -80,3 +68,47 @@ def create_ticket(
     except Exception as e:
         logger.error(f"Unexpected error while creating Jira ticket: {str(e)}")
         return None, 'failed'
+
+
+def main():
+    """
+    Main entrypoint for testing execution.
+    """
+    parser = argparse.ArgumentParser(description="Test Jira Ticket Creation")
+
+    # Required arguments
+    parser.add_argument("--server", required=True, help="Jira URL (e.g., https://company.atlassian.net)")
+    parser.add_argument("--user", required=True, help="Jira Login Email")
+    parser.add_argument("--token", required=True, help="Jira API Token")
+    parser.add_argument("--project", required=True, help="Project Key (e.g., KAN)")
+
+    # Optional arguments
+    parser.add_argument("--title", default="Test Ticket from Script", help="Ticket Title")
+    parser.add_argument("--desc", default="This is a test ticket created via Python.", help="Ticket Description")
+    parser.add_argument("--type", default="Task", help="Issue Type (Task, Story, Bug, etc.)")
+
+    args = parser.parse_args()
+
+    print("--- Starting Jira Ticket Test ---")
+
+    link, status = create_ticket(
+        ticket_server=args.server,
+        ticket_account=args.user,
+        ticket_api_key=args.token,
+        ticket_project=args.project,
+        ticket_description=args.desc,
+        ticket_title=args.title,
+        issue_type=args.type
+    )
+
+    print("-" * 30)
+    if status == 'created':
+        print(f"✅ SUCCESS: Ticket created at {link}")
+        sys.exit(0)
+    else:
+        print("❌ FAILURE: Could not create ticket. Check logs above.")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
