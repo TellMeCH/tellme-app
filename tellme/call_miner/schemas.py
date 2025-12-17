@@ -13,7 +13,7 @@ SUMMARY_PERIOD_PARAMETER_SCHEMA = OpenApiParameter(
     name='period',
     type=OpenApiTypes.STR,
     location=OpenApiParameter.QUERY,
-    description='Summarization period (week, month, quarter)',
+    description='Summarization period (week, month, quarter, eternity)',
     required=False,
     default='month',
 )
@@ -22,7 +22,7 @@ SUMMARY_ROLLING_PARAMETER_SCHEMA = OpenApiParameter(
     name='rolling',
     type=OpenApiTypes.BOOL,
     location=OpenApiParameter.QUERY,
-    description='Whether the summarization window is rolling (week, month, quarter)',
+    description='Whether the summarization window is rolling',
     required=False,
     default=False,
 )
@@ -180,7 +180,7 @@ SUMMARY_DATA_RESPONSE_SCHEMA = OpenApiResponse(
             },
             'period_label': {
                 'type': 'string',
-                'description': 'Described the period for which the summary was obtained. Three formats: 2025-W14 for weeks, 2025-03 for months, 2025-Q1 for quarters.'
+                'description': 'Described the period for which the summary was obtained. Four formats: 2025-W14 for weeks, 2025-03 for months, 2025-Q1 for quarters, eternity for eternity.'
             },
         },
         'required': ['summary', 'summary_date', 'summary_call_count', 'period_label'],
