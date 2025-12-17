@@ -778,7 +778,7 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
         customer = self.get_object()
 
         try:
-            ticket_data = customer.get_or_create_ticket()
+            ticket_data = customer.get_or_create_ticket(requester_id=request.user.id)
             return response.Response(ticket_data, status=status.HTTP_200_OK)
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
