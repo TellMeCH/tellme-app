@@ -1,6 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from tellme.call_miner.models import Employee, Analyst, Agent, User
+from tellme.call_miner.models import Employee, Analyst, Agent, User, Organization
 
 
 class EmployeeCreationForm(forms.ModelForm):
@@ -71,3 +71,43 @@ class AgentCreationForm(EmployeeCreationForm):
         if commit:
             agent.save()
         return agent
+
+
+class OrganizationAdminForm(forms.ModelForm):
+    """
+    Custom form for Organization that handles encrypted Jira API key.
+    Provides a plain text input field for the API key that gets encrypted on save.
+    """
+    ticket_api_key = forms.CharField(
+        label='Jira API Key',
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text='Enter your Jira API token. Leave blank to keep existing key. This will be encrypted when saved.'
+    )
+
+    class Meta:
+        model = Organization
+        fields = ['name', 'max_user_count', 'max_topic_count', 'transcription_method',
+                  'enrichment_method', 'revenue_search_prefix', 'language',
+                  'ticket_account', 'ticket_project', 'ticket_api_key']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # If editing an existing organization with a key, show a placeholder
+        if self.instance.pk and self.instance.ticket_key_encrypted:
+            self.fields['ticket_api_key'].help_text = '🔒 API key is currently set. Enter a new key to replace it, or leave blank to keep the existing key.'
+
+    def save(self, commit=True):
+        organization = super().save(commit=False)
+
+        # Handle API key encryption
+        ticket_api_key = self.cleaned_data.get('ticket_api_key')
+        if ticket_api_key:
+            # New key provided - encrypt it
+            organization.store_ticket_key(ticket_api_key)
+        # If no key provided and it's a new organization, ticket_key_encrypted remains None
+        # If no key provided and it's an existing organization, keep the existing encrypted key
+
+        if commit:
+            organization.save()
+        return organization
