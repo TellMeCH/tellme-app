@@ -53,5 +53,5 @@ class TicketCreationSerializer(serializers.Serializer):
     A serializer for requests from the Cloud Task Manager to create Jira tickets
     """
     customer_id = serializers.IntegerField(required=True)
-    requester_id = serializers.IntegerField(required=True)
+    requester_id = serializers.CharField(required=True)
     task_id = serializers.CharField(required=False, allow_null=True)
