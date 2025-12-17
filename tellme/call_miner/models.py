@@ -520,7 +520,7 @@ class Organization(models.Model, ConversationTrendMixin):
     enrichment_method = models.CharField(choices=ENRICHMENT_METHOD_CHOICES, default='openai')
     revenue_search_prefix = models.CharField(max_length=255, null=True)
     language = models.CharField(max_length=2, default='en')
-    ticket_account = models.EmailField(max_length=255, null=True)
+    ticket_server = models.URLField(max_length=255, null=True)
     ticket_key_encrypted = models.CharField(max_length=512, null=True)
     ticket_project = models.CharField(max_length=100, null=True)
 
@@ -910,9 +910,12 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
         return f"Customer [external_id={self.external_id} | org={self.organization_id}]"
 
     @transaction.atomic
-    def get_or_create_ticket(self):
+    def get_or_create_ticket(self, requester_id: int):
         """
         Get existing ticket or trigger ticket creation task.
+
+        Args:
+            requester_id: ID of the user requesting the ticket
 
         Returns:
             dict: Dictionary with fields 'link', 'date', and 'status' where:
@@ -953,7 +956,7 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
         # Otherwise, create a ticket task (if needed) and return creating status
         task_exists = check_ticket_tasks(self.id)
         if not task_exists:
-            _ = create_ticket_task(self.id)
+            _ = create_ticket_task(self.id, requester_id)
 
         return {
             'link': None,
