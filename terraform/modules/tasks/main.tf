@@ -59,6 +59,7 @@ resource "google_cloud_tasks_queue" "tickets_queue" {
 
   rate_limits {
     max_concurrent_dispatches = var.max_concurrent_dispatches
+    max_dispatches_per_second = var.max_dispatches_per_second
   }
 
   stackdriver_logging_config {
