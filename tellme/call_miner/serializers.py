@@ -349,13 +349,39 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
     employee_count = serializers.SerializerMethodField(
         help_text='Count of employees associated to the organization'
     )
+    ticket_api_key = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text='Jira API token (write-only, will be encrypted when saved)'
+    )
 
     class Meta:
         model = Organization
         fields = [
             'url', 'name', 'conversation_count', 'max_user_count', 'max_topic_count', 'created', 'updated',
-            'transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count'
+            'transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count',
+            'ticket_server', 'ticket_account', 'ticket_project', 'ticket_api_key',
         ]
+        read_only_fields = ['ticket_key_encrypted']
+
+    def create(self, validated_data):
+        """Handle ticket_api_key encryption on organization creation."""
+        ticket_api_key = validated_data.pop('ticket_api_key', None)
+        organization = super().create(validated_data)
+        if ticket_api_key:
+            organization.store_ticket_key(ticket_api_key)
+            organization.save()
+        return organization
+
+    def update(self, instance, validated_data):
+        """Handle ticket_api_key encryption on organization update."""
+        ticket_api_key = validated_data.pop('ticket_api_key', None)
+        organization = super().update(instance, validated_data)
+        if ticket_api_key:
+            organization.store_ticket_key(ticket_api_key)
+            organization.save()
+        return organization
 
     @staticmethod
     @extend_schema_field({'type': 'integer'})
@@ -675,7 +701,7 @@ class CustomerListSerializer(serializers.HyperlinkedModelSerializer):
         model = Customer
         fields = ['url', 'external_id', 'first_name', 'last_name', 'birth_date', 'conversation_count',
                   'first_conversation_date', 'last_conversation_date', 'total_revenue', 'avg_sentiment',
-                  'latest_conversation_title', 'latest_conversation_url', 'created']
+                  'latest_conversation_title', 'latest_conversation_url', 'ticket_link', 'ticket_date',  'created']
 
     @extend_schema_field({'type': 'number', 'format': 'float'})
     def get_total_revenue(self, obj):

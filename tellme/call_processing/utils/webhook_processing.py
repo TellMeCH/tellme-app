@@ -4,7 +4,7 @@ from datetime import datetime
 from django.conf import settings
 from pydub import AudioSegment
 from tellme.call_processing.utils.gcs_utils import upload_to_gcs
-from tellme.call_processing.utils.queue_utils import create_storage_path
+from tellme.call_processing.utils.processing_utils import create_storage_path
 
 
 def parse_created_date(rec):

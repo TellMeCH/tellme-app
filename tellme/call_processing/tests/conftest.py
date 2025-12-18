@@ -6,7 +6,6 @@ from rest_framework.test import APIClient
 from tellme.call_miner.models import (
     Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
 )
-from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +55,7 @@ def mock_cloud_tasks():
     """
     Mocks out the Google Cloud Tasks create_task call.
     """
-    with patch("tellme.call_processing.utils.queue_utils.create_processing_task") as mock_create:
+    with patch("tellme.call_processing.utils.processing_utils.create_processing_task") as mock_create:
         mock_create.return_value = None
         yield mock_create
 

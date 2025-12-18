@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     PeriodSummary, Organization, Employee, Analyst, Agent, Topic, SuggestedTopic, Customer, Conversation, User
 )
-from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm
+from .forms import EmployeeCreationForm, AnalystCreationForm, AgentCreationForm, OrganizationAdminForm
 
 
 class PeriodSummaryAdmin(admin.ModelAdmin):
@@ -16,8 +16,27 @@ class CustomUserAdmin(admin.ModelAdmin):
 
 
 class OrganizationAdmin(admin.ModelAdmin):
-    list_display = ['name']
+    form = OrganizationAdminForm
+    list_display = ['name', 'ticket_server', 'ticket_project', 'has_jira_key']
     search_fields = ['name']
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'max_user_count', 'max_topic_count')
+        }),
+        ('Processing Configuration', {
+            'fields': ('transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language')
+        }),
+        ('Jira Integration', {
+            'fields': ('ticket_server', 'ticket_account', 'ticket_project', 'ticket_api_key'),
+            'description': 'Configure Jira integration for automatic ticket creation.'
+        }),
+    )
+
+    def has_jira_key(self, obj):
+        """Display whether a Jira API key is configured."""
+        return bool(obj.ticket_key_encrypted)
+    has_jira_key.boolean = True
+    has_jira_key.short_description = 'Jira Key Set'
 
 
 class TopicAdmin(admin.ModelAdmin):

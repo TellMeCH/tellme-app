@@ -1,13 +1,15 @@
 import datetime
 import logging
 from django.db import transaction
-from django.db.models import DateTimeField
+from django.db.models import DateTimeField, Sum
 from django.db.models.expressions import RawSQL
 from django.utils import timezone
 from django.conf import settings
 from django.utils.dateparse import parse_datetime
 from django.contrib.contenttypes.models import ContentType
-from tellme.call_miner.models import Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary
+from tellme.call_miner.models import (
+    Agent, Conversation, Customer, Organization, Topic, SuggestedTopic, PeriodSummary, User
+)
 from tellme.call_miner.utils.summary_utils import get_default_summary_settings
 
 logger = logging.getLogger(__name__)
@@ -505,3 +507,103 @@ def create_periodsummary(obj, summary, latest_date, call_count, label, period):
             period_summary.last_call_at = latest_date
             period_summary.call_count = call_count
             period_summary.save(update_fields=["summary", "last_call_at", "call_count"])
+
+
+def retrieve_data_for_ticket(customer_id: int, requester_id: str):
+    """
+    Retrieve all necessary data for creating a Jira ticket for a customer.
+
+    This function gathers:
+    - Customer instance
+    - Organization and its Jira credentials
+    - Customer summary data containing ticket information
+    - Requester user information
+
+    Args:
+        customer_id: ID of the customer to create a ticket for
+        requester_id: UUID string of the user requesting the ticket
+
+    Returns:
+        dict: Wih fields customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key,
+        requester_email, requester_name, revenue_at_stake
+            - customer: Customer instance
+            - organization: Organization instance (access ticket_server and ticket_account from this)
+            - ticket_title: Title for the Jira ticket
+            - ticket_description: Description for the Jira ticket
+            - summary_date: Date of the latest call in the summary
+            - ticket_api_key: Decrypted API key for Jira
+            - requester_email: Email of the user requesting the ticket
+            - requester_name: Full name of the user requesting the ticket
+            - revenue_at_stake: Revenue at stake in the customer relationship
+
+    Raises:
+        Customer.DoesNotExist: If customer with the given ID is not found
+        User.DoesNotExist: If requester user with the given ID is not found
+        ValueError: If organization doesn't have Jira credentials configured
+        ValueError: If customer summary doesn't contain ticket data
+    """
+
+    ticket_body_field = 'Jira Ticket Body'
+    ticket_title_field = 'Jira Ticket Title'
+
+    # Get the customer instance
+    try:
+        customer = Customer.objects.get(id=customer_id)
+    except Customer.DoesNotExist:
+        raise ValueError(f"Customer with id {customer_id} not found")
+
+    # Get the requester user
+    try:
+        requester = User.objects.get(id=requester_id)
+        requester_email = requester.email
+        requester_name = f"{requester.first_name} {requester.last_name}".strip()
+    except User.DoesNotExist:
+        raise ValueError(f"User with id {requester_id} not found")
+
+    organization = customer.organization
+
+    # Check if organization has Jira credentials configured
+    if not all([organization.ticket_server, organization.ticket_account, organization.ticket_key_encrypted, organization.ticket_project]):
+        raise ValueError(f"Organization {organization.name} does not have Jira credentials configured")
+
+    # Get default customer summary data
+    default_settings = get_default_summary_settings()
+    summary_data, summary_date, call_count, label, status_msg = customer.get_or_create_summary(
+        **default_settings['customer']
+    )
+
+    # Check if summary contains ticket data
+    if summary_data is None or ticket_title_field not in summary_data or ticket_body_field not in summary_data:
+        raise ValueError(f"No valid ticket data found in customer summary for customer {customer_id} (status={status_msg})")
+
+    # Extract ticket data from summary
+    ticket_title = summary_data.get(ticket_title_field)
+    ticket_description = summary_data.get(ticket_body_field)
+
+    # Retrieve decrypted API key
+    ticket_api_key = organization.retrieve_ticket_key()
+
+    # Retrieve Customer Revenue at Stake
+    if hasattr(customer, 'total_revenue') and customer.total_revenue is not None:
+        revenue_at_stake = customer.total_revenue
+    else:
+        # Fallback to manual calculation if annotation not available
+        result = customer.conversations.aggregate(
+            total=Sum('revenue_at_stake')
+        )
+        revenue_at_stake = result['total'] or 0.0
+
+    return {
+        'customer': customer,
+        'customer_id': customer_id,
+        'ticket_server': organization.ticket_server,
+        'ticket_account': organization.ticket_account,
+        'ticket_project': organization.ticket_project,
+        'ticket_api_key': ticket_api_key,
+        'ticket_title': ticket_title,
+        'ticket_description': ticket_description,
+        'summary_date': summary_date,
+        'requester_email': requester_email,
+        'requester_name': requester_name,
+        'revenue_at_stake': revenue_at_stake,
+    }
