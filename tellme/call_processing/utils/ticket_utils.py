@@ -51,8 +51,9 @@ def create_ticket(
         # Append requester info and TellMe link to ticket description
         current_date = datetime.now().strftime('%d-%m-%Y')
         tellme_url = f"{settings.FRONTEND_PATH}/customer-experiences/{customer_id}"
+        revenue_text = f"REVENUE AT STAKE WITH CUSTOMER RELATION: CHF {revenue_at_stake:.2f}\n\n" if revenue_at_stake else ""
         enhanced_description = (
-            f"REVENUE AT STAKE WITH CUSTOMER RELATION: CHF {revenue_at_stake:.2f}\n\n" if revenue_at_stake else ""
+            f"{revenue_text}"
             f"{ticket_description}\n\n"
             f"Created by [{requester_name}|mailto:{requester_email}] on {current_date}\n\n"
             f"For more information, visit [tellme|{tellme_url}]"
