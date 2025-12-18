@@ -2,6 +2,7 @@ import logging
 import argparse
 import sys
 from typing import Tuple, Optional
+from datetime import datetime
 from jira import JIRA
 from jira.exceptions import JIRAError
 from django.conf import settings
@@ -17,6 +18,7 @@ def create_ticket(
     ticket_description: str,
     ticket_title: str,
     customer_id: int,
+    requester_email: str,
     issue_type: str = "Task"
 ) -> Tuple[Optional[str], str]:
     """
@@ -24,12 +26,13 @@ def create_ticket(
 
     Args:
         ticket_server: The full URL to the instance (e.g. "https://domain.atlassian.net")
-        ticket_account: Jira service account email
+        ticket_account: Organization's Jira service account email
         ticket_api_key: Jira API token
         ticket_project: Jira project key (e.g., 'PROJ')
         ticket_description: Description/body of the ticket
         ticket_title: Title/summary of the ticket
         customer_id: Customer ID for generating the TellMe link
+        requester_email: Email of the user who requested the ticket
         issue_type: The issue type name (default: "Task")
 
     Returns:
@@ -39,11 +42,16 @@ def create_ticket(
         # Clean the server URL to avoid double slashes later
         server_url = ticket_server.rstrip('/')
 
-        # Append TellMe link to ticket description
+        # Append requester info and TellMe link to ticket description
+        current_date = datetime.now().strftime('%d-%m-%Y')
         tellme_url = f"{settings.FRONTEND_PATH}/customer-experiences/{customer_id}"
-        enhanced_description = f"{ticket_description}\n\nFor more information, visit [tellme|{tellme_url}]"
+        enhanced_description = (
+            f"{ticket_description}\n\n"
+            f"Created by {requester_email} on {current_date}\n\n"
+            f"For more information, visit [tellme|{tellme_url}]"
+        )
 
-        # Create JIRA client instance
+        # Create JIRA client instance using organization account
         jira = JIRA(
             server=server_url,
             basic_auth=(ticket_account, ticket_api_key)
@@ -85,10 +93,11 @@ def main():
 
     # Required arguments
     parser.add_argument("--server", required=True, help="Jira URL (e.g., https://company.atlassian.net)")
-    parser.add_argument("--user", required=True, help="Jira Login Email")
+    parser.add_argument("--user", required=True, help="Organization Jira Account Email")
     parser.add_argument("--token", required=True, help="Jira API Token")
     parser.add_argument("--project", required=True, help="Project Key (e.g., KAN)")
     parser.add_argument("--customer-id", required=True, type=int, help="Customer ID")
+    parser.add_argument("--requester", required=True, help="Requester Email")
 
     # Optional arguments
     parser.add_argument("--title", default="Test Ticket from Script", help="Ticket Title")
@@ -107,6 +116,7 @@ def main():
         ticket_description=args.desc,
         ticket_title=args.title,
         customer_id=args.customer_id,
+        requester_email=args.requester,
         issue_type=args.type
     )
 

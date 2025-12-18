@@ -526,7 +526,7 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: str):
     Returns:
         tuple: (customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key, requester_email)
             - customer: Customer instance
-            - organization: Organization instance
+            - organization: Organization instance (access ticket_server and ticket_account from this)
             - ticket_title: Title for the Jira ticket
             - ticket_description: Description for the Jira ticket
             - summary_date: Date of the latest call in the summary
@@ -559,7 +559,7 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: str):
     organization = customer.organization
 
     # Check if organization has Jira credentials configured
-    if not all([organization.ticket_server, organization.ticket_key_encrypted, organization.ticket_project]):
+    if not all([organization.ticket_server, organization.ticket_account, organization.ticket_key_encrypted, organization.ticket_project]):
         raise ValueError(f"Organization {organization.name} does not have Jira credentials configured")
 
     # Get default customer summary data
