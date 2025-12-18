@@ -320,12 +320,13 @@ class TicketCreationView(APIView):
             # Create the Jira ticket
             ticket_link, ticket_status = ticket_utils.create_ticket(
                 ticket_server=organization.ticket_server,
-                ticket_account=requester_email,
+                ticket_account=organization.ticket_account,
                 ticket_api_key=ticket_api_key,
                 ticket_project=organization.ticket_project,
                 ticket_description=ticket_description,
                 ticket_title=ticket_title,
-                customer_id=customer_id
+                customer_id=customer_id,
+                requester_email=requester_email
             )
 
             # Update customer with ticket information
