@@ -3,7 +3,7 @@ import zoneinfo
 from urllib.parse import urlparse, parse_qs
 from django.utils import timezone
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from django.urls import reverse
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import status
@@ -1327,3 +1327,95 @@ class TestCustomerActions:
         # correct period label (eternity - new default for customers)
         assert data[customer.id]["period_label"] == 'eternity'
         assert data[customer_with_multiple.id]["period_label"] == 'eternity'
+
+    @patch('tellme.call_miner.models.create_ticket_task')
+    @patch('tellme.call_miner.models.check_ticket_tasks')
+    def test_create_ticket_for_customer_with_summary(
+            self, mock_check_ticket_tasks, mock_create_ticket_task,
+            client, analyst_user, customer, conversation_today
+    ):
+        """Test creating a ticket for a customer with existing summary data."""
+        # Setup mocks
+        mock_check_ticket_tasks.return_value = False
+        mock_create_ticket_task.return_value = "task-id-123"
+
+        # Create summary for the customer
+        content_type = ContentType.objects.get_for_model(customer.__class__)
+        start, end, label = period_bounds('eternity', False)
+        summary_data = {
+            'Customer Value': 'High value customer',
+            'Churn Potential': 'Low risk',
+            'Jira Ticket Title': 'Customer Issue - Test',
+            'Jira Ticket Body': 'Customer needs attention'
+        }
+        PeriodSummary.objects.create(
+            content_type=content_type,
+            object_id=customer.id,
+            period_type='eternity',
+            period_label=label,
+            summary=summary_data,
+            last_call_at=conversation_today.date,
+            call_count=1
+        )
+
+        client.force_authenticate(user=analyst_user)
+        url = reverse('customer-create-ticket', args=[customer.id])
+        response = client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'creating'
+        assert response.data['link'] is None
+        assert response.data['date'] is None
+        mock_create_ticket_task.assert_called_once_with(customer.id, analyst_user.id)
+
+    def test_create_ticket_for_customer_without_conversations(
+            self, client, analyst_user, customer
+    ):
+        """Test that creating a ticket fails when customer has no conversations."""
+        client.force_authenticate(user=analyst_user)
+        url = reverse('customer-create-ticket', args=[customer.id])
+        response = client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'no conversations found'
+
+    @patch('tellme.call_miner.models.create_ticket_task')
+    @patch('tellme.call_miner.models.check_ticket_tasks')
+    def test_get_existing_ticket_for_customer(
+            self, mock_check_ticket_tasks, mock_create_ticket_task,
+            client, analyst_user, customer, conversation_today
+    ):
+        """Test getting existing ticket information for a customer."""
+        # Create summary for the customer
+        content_type = ContentType.objects.get_for_model(customer.__class__)
+        start, end, label = period_bounds('eternity', False)
+        summary_data = {
+            'Customer Value': 'High value customer',
+            'Jira Ticket Title': 'Customer Issue',
+            'Jira Ticket Body': 'Customer needs help'
+        }
+        PeriodSummary.objects.create(
+            content_type=content_type,
+            object_id=customer.id,
+            period_type='eternity',
+            period_label=label,
+            summary=summary_data,
+            last_call_at=conversation_today.date,
+            call_count=1
+        )
+
+        # Set existing ticket information
+        customer.ticket_link = "https://jira.example.com/browse/PROJ-123"
+        customer.ticket_date = conversation_today.date
+        customer.save()
+
+        client.force_authenticate(user=analyst_user)
+        url = reverse('customer-create-ticket', args=[customer.id])
+        response = client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'ready'
+        assert response.data['link'] == "https://jira.example.com/browse/PROJ-123"
+        assert response.data['date'] == conversation_today.date
+        # Should not create a new task if ticket already exists
+        mock_create_ticket_task.assert_not_called()

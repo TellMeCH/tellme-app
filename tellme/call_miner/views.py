@@ -30,7 +30,8 @@ from tellme.call_miner.schemas import (
     REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
     NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA,
-    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA, get_search_parameters_schema
+    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA, CREATE_TICKET_RESPONSE_SCHEMA,
+    get_search_parameters_schema
 )
 
 
@@ -749,6 +750,38 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     @decorators.action(detail=False, methods=['get'], url_path='search')
     def search(self, request):
         return super().search(request)
+
+    @extend_schema(
+        description='Create a Jira ticket for a customer based on their summary data.',
+        parameters=[ID_PARAMETER_SCHEMA],
+        responses={
+            200: CREATE_TICKET_RESPONSE_SCHEMA,
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=True, methods=['get'], url_path='create_ticket')
+    def create_ticket(self, request, pk=None):
+        """
+        Create a Jira ticket for a customer based on their summary data.
+
+        This endpoint triggers the creation of a Jira ticket using the customer's
+        summary data. If the customer already has a ticket, it returns the existing
+        ticket information. Otherwise, it queues a ticket creation task.
+
+        Returns:
+            - link: URL to the Jira ticket (None if creating)
+            - date: Date of the ticket (None if creating)
+            - status: 'ready' if ticket exists, 'creating' if being created
+        """
+        customer = self.get_object()
+
+        try:
+            ticket_data = customer.get_or_create_ticket(requester_id=request.user.id)
+            return response.Response(ticket_data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'search']:

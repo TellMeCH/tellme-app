@@ -55,6 +55,7 @@ module "tasks" {
   region                       = var.region
   call_processing_queue_name   = var.processing_queue_name
   summarization_queue_name     = var.summarization_queue_name
+  tickets_queue_name           = var.tickets_queue_name
 }
 
 # Cloud Run service that depends on the above resources
@@ -122,10 +123,12 @@ module "cloud_run_v2" {
         GS_BUCKET_NAME           = google_storage_bucket.media_bucket.name
         PROCESSING_QUEUE_NAME    = module.tasks.call_processing_queue_name
         SUMMARIZATION_QUEUE_NAME = module.tasks.summarization_queue_name
+        TICKETS_QUEUE_NAME       = module.tasks.tickets_queue_name
         CALL_PROCESSING_BUCKET   = var.call_processing_bucket
         FRONTEND_PATH            = var.frontend_path
         CALL_PROCESSING_ENDPOINT = "None"
         SUMMARIZATION_ENDPOINT   = "None"
+        TICKETS_ENDPOINT         = "None"
         SERVICE_ACCOUNT_EMAIL    = google_service_account.app.email
       }
     }

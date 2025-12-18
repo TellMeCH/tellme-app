@@ -54,6 +54,12 @@ variable "summarization_queue_name" {
   default     = "summarization"
 }
 
+variable "tickets_queue_name" {
+  type        = string
+  description = "Tickets queue name"
+  default     = "tickets"
+}
+
 variable "frontend_path" {
   type        = string
   description = "Frontend path"
