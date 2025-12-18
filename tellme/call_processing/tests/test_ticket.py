@@ -250,7 +250,8 @@ class TestTicketUtilsCreateTicket:
             ticket_description="Test description",
             ticket_title="Test ticket",
             customer_id=1,
-            requester_email="requester@example.com"
+            requester_email="requester@example.com",
+            requester_name="Test Requester"
         )
 
         # Verify JIRA was initialized correctly (using org account, not requester)
@@ -265,7 +266,7 @@ class TestTicketUtilsCreateTicket:
         assert call_args['fields']['project'] == {'key': 'PROJ'}
         assert call_args['fields']['summary'] == 'Test ticket'
         assert 'Test description' in call_args['fields']['description']
-        assert 'Created by requester@example.com on' in call_args['fields']['description']
+        assert 'Created by [Test Requester|mailto:requester@example.com] on' in call_args['fields']['description']
         assert 'For more information, visit [tellme|' in call_args['fields']['description']
         assert '/customer-experiences/1]' in call_args['fields']['description']
         assert call_args['fields']['issuetype'] == {'name': 'Task'}
@@ -298,7 +299,8 @@ class TestTicketUtilsCreateTicket:
             ticket_description="Test description",
             ticket_title="Test ticket",
             customer_id=1,
-            requester_email="requester@example.com"
+            requester_email="requester@example.com",
+            requester_name="Test Requester"
         )
 
         # Verify failure
@@ -322,7 +324,8 @@ class TestTicketUtilsCreateTicket:
             ticket_description="Test description",
             ticket_title="Test ticket",
             customer_id=1,
-            requester_email="requester@example.com"
+            requester_email="requester@example.com",
+            requester_name="Test Requester"
         )
 
         # Verify failure
@@ -358,7 +361,8 @@ class TestTicketUtilsCreateTicket:
                 ticket_description="desc",
                 ticket_title="title",
                 customer_id=1,
-                requester_email="requester@example.com"
+                requester_email="requester@example.com",
+                requester_name="Test Requester"
             )
 
             # Verify the server URL was used as-is
