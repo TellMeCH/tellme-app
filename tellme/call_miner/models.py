@@ -521,6 +521,7 @@ class Organization(models.Model, ConversationTrendMixin):
     revenue_search_prefix = models.CharField(max_length=255, null=True)
     language = models.CharField(max_length=2, default='en')
     ticket_server = models.URLField(max_length=255, null=True)
+    ticket_account = models.EmailField(max_length=255, null=True)
     ticket_key_encrypted = models.CharField(max_length=512, null=True)
     ticket_project = models.CharField(max_length=100, null=True)
 
