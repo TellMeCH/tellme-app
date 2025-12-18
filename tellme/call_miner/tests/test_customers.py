@@ -1345,10 +1345,8 @@ class TestCustomerActions:
         summary_data = {
             'Customer Value': 'High value customer',
             'Churn Potential': 'Low risk',
-            'ticket_data': {
-                'title': 'Customer Issue - Test',
-                'description': 'Customer needs attention'
-            }
+            'Jira Ticket Title': 'Customer Issue - Test',
+            'Jira Ticket Body': 'Customer needs attention'
         }
         PeriodSummary.objects.create(
             content_type=content_type,
@@ -1368,7 +1366,7 @@ class TestCustomerActions:
         assert response.data['status'] == 'creating'
         assert response.data['link'] is None
         assert response.data['date'] is None
-        mock_create_ticket_task.assert_called_once_with(customer.id)
+        mock_create_ticket_task.assert_called_once_with(customer.id, analyst_user.id)
 
     def test_create_ticket_for_customer_without_conversations(
             self, client, analyst_user, customer
@@ -1393,10 +1391,8 @@ class TestCustomerActions:
         start, end, label = period_bounds('eternity', False)
         summary_data = {
             'Customer Value': 'High value customer',
-            'ticket_data': {
-                'title': 'Customer Issue',
-                'description': 'Customer needs help'
-            }
+            'Jira Ticket Title': 'Customer Issue',
+            'Jira Ticket Body': 'Customer needs help'
         }
         PeriodSummary.objects.create(
             content_type=content_type,

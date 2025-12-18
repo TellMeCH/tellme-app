@@ -11,9 +11,11 @@ import zoneinfo
 @pytest.mark.django_db
 class TestTicketCreationView:
     @pytest.fixture
-    def valid_ticket_payload(self):
+    def valid_ticket_payload(self, setup_db):
+        org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
         return {
             "customer_id": 1,
+            "requester_id": agent.user.id,
             "task_id": "test-task-123"
         }
 
@@ -21,11 +23,12 @@ class TestTicketCreationView:
     def organization_with_jira_config(self, setup_db):
         """Create an organization with Jira configuration."""
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
-        org.ticket_account = "test@example.atlassian.net"
+        org.ticket_server = "https://test.atlassian.net"
+        org.ticket_account = "jira-bot@test.org"
         org.ticket_project = "PROJ"
         org.store_ticket_key("test-api-key-123")
         org.save()
-        return org, customer, conversation
+        return org, agent, customer, conversation
 
     def test_authentication_success(self, settings, setup_db, api_client):
         settings.PROCESSING_PIPELINE_KEY = "test_pipeline_key"
@@ -85,7 +88,7 @@ class TestTicketCreationView:
         self, mock_create_ticket, api_client, organization_with_jira_config, mock_processing_user
     ):
         """Test successful ticket creation."""
-        org, customer, conversation = organization_with_jira_config
+        org, agent, customer, conversation = organization_with_jira_config
 
         # Create summary with Jira ticket fields
         content_type = ContentType.objects.get_for_model(customer.__class__)
@@ -113,6 +116,7 @@ class TestTicketCreationView:
 
         payload = {
             "customer_id": customer.id,
+            "requester_id": agent.user.id,
             "task_id": "test-task-123"
         }
 
@@ -128,10 +132,11 @@ class TestTicketCreationView:
         # Verify ticket was created with correct parameters
         mock_create_ticket.assert_called_once()
         call_args = mock_create_ticket.call_args[1]
-        assert call_args["ticket_account"] == "test@example.atlassian.net"
+        assert call_args["ticket_server"] == "https://test.atlassian.net"
         assert call_args["ticket_project"] == "PROJ"
         assert call_args["ticket_title"] == "Customer Issue - Test"
         assert call_args["ticket_description"] == "Customer needs immediate attention"
+        assert call_args["customer_id"] == customer.id
 
         # Verify customer was updated
         customer.refresh_from_db()
@@ -144,7 +149,7 @@ class TestTicketCreationView:
         self, mock_create_ticket, api_client, organization_with_jira_config, mock_processing_user
     ):
         """Test failed ticket creation."""
-        org, customer, conversation = organization_with_jira_config
+        org, agent, customer, conversation = organization_with_jira_config
 
         # Create summary with Jira ticket fields
         content_type = ContentType.objects.get_for_model(customer.__class__)
@@ -168,6 +173,7 @@ class TestTicketCreationView:
 
         payload = {
             "customer_id": customer.id,
+            "requester_id": agent.user.id,
             "task_id": "test-task-123"
         }
 
@@ -187,7 +193,7 @@ class TestTicketCreationView:
         self, api_client, organization_with_jira_config, mock_processing_user
     ):
         """Test that ticket creation fails when summary has no ticket_data field."""
-        org, customer, conversation = organization_with_jira_config
+        org, agent, customer, conversation = organization_with_jira_config
 
         # Create summary WITHOUT ticket_data
         content_type = ContentType.objects.get_for_model(customer.__class__)
@@ -207,6 +213,7 @@ class TestTicketCreationView:
 
         payload = {
             "customer_id": customer.id,
+            "requester_id": agent.user.id,
             "task_id": "test-task-123"
         }
 
@@ -236,28 +243,32 @@ class TestTicketUtilsCreateTicket:
 
         # Call create_ticket
         ticket_link, status = create_ticket(
-            ticket_account="test@example.atlassian.net",
+            ticket_server="https://example.atlassian.net",
+            ticket_account="jira-bot@example.com",
             ticket_api_key="test-api-key",
             ticket_project="PROJ",
             ticket_description="Test description",
-            ticket_title="Test ticket"
+            ticket_title="Test ticket",
+            customer_id=1,
+            requester_email="requester@example.com"
         )
 
-        # Verify JIRA was initialized correctly
+        # Verify JIRA was initialized correctly (using org account, not requester)
         mock_jira_class.assert_called_once_with(
             server="https://example.atlassian.net",
-            basic_auth=("test@example.atlassian.net", "test-api-key")
+            basic_auth=("jira-bot@example.com", "test-api-key")
         )
 
-        # Verify create_issue was called with correct parameters
-        mock_jira_instance.create_issue.assert_called_once_with(
-            fields={
-                'project': {'key': 'PROJ'},
-                'summary': 'Test ticket',
-                'description': 'Test description',
-                'issuetype': {'name': 'Task'},
-            }
-        )
+        # Verify create_issue was called with correct parameters (description should include requester info and TellMe link)
+        mock_jira_instance.create_issue.assert_called_once()
+        call_args = mock_jira_instance.create_issue.call_args[1]
+        assert call_args['fields']['project'] == {'key': 'PROJ'}
+        assert call_args['fields']['summary'] == 'Test ticket'
+        assert 'Test description' in call_args['fields']['description']
+        assert 'Created by requester@example.com on' in call_args['fields']['description']
+        assert 'For more information, visit [tellme|' in call_args['fields']['description']
+        assert '/customer-experiences/1]' in call_args['fields']['description']
+        assert call_args['fields']['issuetype'] == {'name': 'Task'}
 
         # Verify return values
         assert ticket_link == "https://example.atlassian.net/browse/PROJ-123"
@@ -280,11 +291,14 @@ class TestTicketUtilsCreateTicket:
 
         # Call create_ticket
         ticket_link, status = create_ticket(
-            ticket_account="test@example.atlassian.net",
+            ticket_server="https://example.atlassian.net",
+            ticket_account="jira-bot@example.com",
             ticket_api_key="invalid-key",
             ticket_project="PROJ",
             ticket_description="Test description",
-            ticket_title="Test ticket"
+            ticket_title="Test ticket",
+            customer_id=1,
+            requester_email="requester@example.com"
         )
 
         # Verify failure
@@ -301,11 +315,14 @@ class TestTicketUtilsCreateTicket:
 
         # Call create_ticket
         ticket_link, status = create_ticket(
-            ticket_account="test@example.atlassian.net",
+            ticket_server="https://example.atlassian.net",
+            ticket_account="jira-bot@example.com",
             ticket_api_key="test-api-key",
             ticket_project="PROJ",
             ticket_description="Test description",
-            ticket_title="Test ticket"
+            ticket_title="Test ticket",
+            customer_id=1,
+            requester_email="requester@example.com"
         )
 
         # Verify failure
@@ -313,8 +330,8 @@ class TestTicketUtilsCreateTicket:
         assert status == "failed"
 
     @patch("tellme.call_processing.utils.ticket_utils.JIRA")
-    def test_create_ticket_domain_extraction_variants(self, mock_jira_class):
-        """Test various formats of ticket_account for domain extraction."""
+    def test_create_ticket_uses_provided_server(self, mock_jira_class):
+        """Test that ticket_server parameter is used directly without modification."""
         from tellme.call_processing.utils.ticket_utils import create_ticket
 
         # Mock the JIRA instance
@@ -324,24 +341,26 @@ class TestTicketUtilsCreateTicket:
         mock_issue.key = "TEST-1"
         mock_jira_instance.create_issue.return_value = mock_issue
 
-        test_cases = [
-            ("user@mycompany.atlassian.net", "https://mycompany.atlassian.net"),
-            ("mycompany@gmail.com", "https://mycompany.atlassian.net"),
-            ("https://custom.atlassian.net", "https://custom.atlassian.net"),
-            ("mycompany", "https://mycompany.atlassian.net"),
+        test_servers = [
+            "https://mycompany.atlassian.net",
+            "https://custom.atlassian.net",
+            "https://another-instance.atlassian.net",
         ]
 
-        for account, expected_server in test_cases:
+        for server_url in test_servers:
             mock_jira_class.reset_mock()
 
             create_ticket(
-                ticket_account=account,
+                ticket_server=server_url,
+                ticket_account="jira-bot@example.com",
                 ticket_api_key="test-key",
                 ticket_project="TEST",
                 ticket_description="desc",
-                ticket_title="title"
+                ticket_title="title",
+                customer_id=1,
+                requester_email="requester@example.com"
             )
 
-            # Verify the server URL was extracted correctly
+            # Verify the server URL was used as-is
             call_args = mock_jira_class.call_args
-            assert call_args[1]['server'] == expected_server
+            assert call_args[1]['server'] == server_url.rstrip('/')
