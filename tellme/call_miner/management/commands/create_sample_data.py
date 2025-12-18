@@ -136,18 +136,20 @@ class Command(BaseCommand):
 
             # Add Jira ticket configuration if environment variables are available
             ticket_server = os.environ.get('TICKET_SERVER')
+            ticket_account = os.environ.get('TICKET_ACCOUNT')
             ticket_key = os.environ.get('TICKET_KEY')
             ticket_project = os.environ.get('TICKET_PROJECT')
 
-            if ticket_server and ticket_key and ticket_project:
+            if ticket_server and ticket_account and ticket_key and ticket_project:
                 self.stdout.write('Adding Jira ticket configuration from environment variables')
                 org.ticket_server = ticket_server
+                org.ticket_account = ticket_account
                 org.ticket_project = ticket_project
                 org.store_ticket_key(ticket_key)
                 org.save()
-                self.stdout.write(self.style.SUCCESS(f'Successfully configured Jira: {ticket_server} (project: {ticket_project})'))
+                self.stdout.write(self.style.SUCCESS(f'Successfully configured Jira: {ticket_server} (account: {ticket_account}, project: {ticket_project})'))
             else:
-                self.stdout.write(self.style.WARNING('Skipping Jira configuration (TICKET_SERVER, TICKET_KEY, and TICKET_PROJECT not all set)'))
+                self.stdout.write(self.style.WARNING('Skipping Jira configuration (TICKET_SERVER, TICKET_ACCOUNT, TICKET_KEY, and TICKET_PROJECT not all set)'))
 
             other_org = Organization(name='Competitors Inc.')
             other_org.save()

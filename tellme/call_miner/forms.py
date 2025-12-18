@@ -89,7 +89,7 @@ class OrganizationAdminForm(forms.ModelForm):
         model = Organization
         fields = ['name', 'max_user_count', 'max_topic_count', 'transcription_method',
                   'enrichment_method', 'revenue_search_prefix', 'language',
-                  'ticket_server', 'ticket_project', 'ticket_api_key']
+                  'ticket_server', 'ticket_account', 'ticket_project', 'ticket_api_key']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

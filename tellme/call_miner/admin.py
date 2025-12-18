@@ -27,7 +27,7 @@ class OrganizationAdmin(admin.ModelAdmin):
             'fields': ('transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language')
         }),
         ('Jira Integration', {
-            'fields': ('ticket_server', 'ticket_project', 'ticket_api_key'),
+            'fields': ('ticket_server', 'ticket_account', 'ticket_project', 'ticket_api_key'),
             'description': 'Configure Jira integration for automatic ticket creation.'
         }),
     )
