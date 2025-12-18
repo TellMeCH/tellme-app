@@ -19,7 +19,11 @@ def create_ticket(
     ticket_title: str,
     customer_id: int,
     requester_email: str,
-    issue_type: str = "Task"
+    requester_name: str,
+    revenue_at_stake: float = None,
+    issue_type: str = "Task",
+    *args,
+    **kwargs
 ) -> Tuple[Optional[str], str]:
     """
     Create a Jira ticket using the Jira Python SDK.
@@ -33,6 +37,8 @@ def create_ticket(
         ticket_title: Title/summary of the ticket
         customer_id: Customer ID for generating the TellMe link
         requester_email: Email of the user who requested the ticket
+        requester_name: Full name of the user who requested the ticket
+        revenue_at_stake: Revenue at stake of the customer relationship
         issue_type: The issue type name (default: "Task")
 
     Returns:
@@ -46,8 +52,9 @@ def create_ticket(
         current_date = datetime.now().strftime('%d-%m-%Y')
         tellme_url = f"{settings.FRONTEND_PATH}/customer-experiences/{customer_id}"
         enhanced_description = (
+            f"REVENUE AT STAKE WITH CUSTOMER RELATION: CHF {revenue_at_stake:.2f}\n\n" if revenue_at_stake else ""
             f"{ticket_description}\n\n"
-            f"Created by {requester_email} on {current_date}\n\n"
+            f"Created by [{requester_name}|mailto:{requester_email}] on {current_date}\n\n"
             f"For more information, visit [tellme|{tellme_url}]"
         )
 
@@ -97,7 +104,8 @@ def main():
     parser.add_argument("--token", required=True, help="Jira API Token")
     parser.add_argument("--project", required=True, help="Project Key (e.g., KAN)")
     parser.add_argument("--customer-id", required=True, type=int, help="Customer ID")
-    parser.add_argument("--requester", required=True, help="Requester Email")
+    parser.add_argument("--requester-email", required=True, help="Requester Email")
+    parser.add_argument("--requester-name", required=True, help="Requester Full Name")
 
     # Optional arguments
     parser.add_argument("--title", default="Test Ticket from Script", help="Ticket Title")
@@ -116,7 +124,8 @@ def main():
         ticket_description=args.desc,
         ticket_title=args.title,
         customer_id=args.customer_id,
-        requester_email=args.requester,
+        requester_email=args.requester_email,
+        requester_name=args.requester_name,
         issue_type=args.type
     )
 
