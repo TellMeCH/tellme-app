@@ -192,6 +192,22 @@ class TestSmokeTestCloudRunWithLogs:
             "max_user_count": 10,
             "max_topic_count": 20,
         }
+
+        # Add Jira ticket configuration if environment variables are available
+        ticket_server = os.getenv('TICKET_SERVER')
+        ticket_account = os.getenv('TICKET_ACCOUNT')
+        ticket_project = os.getenv('TICKET_PROJECT')
+        ticket_key = os.getenv('TICKET_KEY')
+
+        if all([ticket_server, ticket_account, ticket_project, ticket_key]):
+            org_data.update({
+                "ticket_server": ticket_server,
+                "ticket_account": ticket_account,
+                "ticket_project": ticket_project,
+                "ticket_api_key": ticket_key
+            })
+            logger.info("Jira ticket configuration added to organization")
+
         resp = requests.post(
             f"{self.cloud_run_host}/api/v1/organizations/",
             json=org_data,
@@ -430,6 +446,89 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs()
+
+    def test_smoke_ticket_creation_with_logs(self):
+        """
+        Trigger ticket creation after creating a customer with conversations.
+        This test verifies the full ticket creation pipeline including Jira API calls.
+        Skipped if Jira configuration is not available in environment variables.
+        """
+        # Check if Jira configuration is available
+        if not all([os.getenv('TICKET_SERVER'), os.getenv('TICKET_ACCOUNT'),
+                    os.getenv('TICKET_PROJECT'), os.getenv('TICKET_KEY')]):
+            pytest.skip("Jira configuration not available in environment variables")
+
+        # First, create customer with conversations and summary
+        self.test_smoke_post_with_logs()
+
+        # Now trigger ticket creation
+        trigger_timestamp = timezone.now().isoformat()
+
+        # Get customer URL from the conversation
+        customer_url = self.conversation_url.rsplit('/conversations/', 1)[0]
+        create_ticket_url = f"{customer_url}/create_ticket/"
+
+        logger.info(f"Triggering ticket creation at {create_ticket_url}")
+
+        # Call create_ticket endpoint (as superuser)
+        response = requests.get(create_ticket_url, headers=self.superuser_headers)
+        assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
+        response_data = response.json()
+
+        # Response should indicate ticket is being created or already ready
+        assert response_data.get('status') in ['creating', 'ready'], \
+            f"Unexpected status: {response_data.get('status')}"
+        logger.info(f"Ticket creation initiated with status: {response_data.get('status')}")
+
+        # Build log queries for ticket creation
+        base_filter = self.generate_logs_filter(trigger_timestamp)
+
+        # Wait for ticket creation to complete - look for success log from views.py:339
+        waiting_query = base_filter + ' AND jsonPayload.message =~ "Ticket created successfully for customer.*"'
+        retrieval_query = base_filter + ' AND (jsonPayload.message =~ ".*[Tt]icket.*" OR jsonPayload.message =~ ".*Jira.*")'
+
+        # Retrieve logs with 60 second timeout (Jira API + Cloud Task processing)
+        logs = self.retrieve_logs_with_timeout(
+            retrieval_query=retrieval_query,
+            waiting_query=waiting_query,
+            timeout=60
+        )
+
+        # Extract log messages
+        log_messages = []
+        for log in logs:
+            if 'jsonPayload' in log and 'message' in log['jsonPayload']:
+                log_messages.append(log['jsonPayload']['message'])
+            elif 'textPayload' in log:
+                log_messages.append(log['textPayload'])
+
+        # Verify key log messages exist (exact patterns from call_processing/views.py)
+        # Line 314: Processing ticket creation for customer {customer_id}
+        assert any('Processing ticket creation for customer' in msg for msg in log_messages), \
+            "Expected log for ticket creation initiation not found"
+        logger.info("✓ Found log: Processing ticket creation for customer")
+
+        # Line 339: Ticket created successfully for customer {customer_id}: {ticket_link}
+        assert any('Ticket created successfully for customer' in msg for msg in log_messages), \
+            "Expected log for successful ticket creation not found"
+        logger.info("✓ Found log: Ticket created successfully for customer")
+
+        # From ticket_utils.py line 73: Successfully created Jira ticket: {ticket_link}
+        assert any('Successfully created Jira ticket' in msg for msg in log_messages), \
+            "Expected log for successful Jira API call not found"
+        logger.info("✓ Found log: Successfully created Jira ticket")
+
+        # Verify customer now has ticket_link set
+        customer_resp = requests.get(customer_url, headers=self.superuser_headers)
+        customer_resp.raise_for_status()
+        customer = customer_resp.json()
+
+        assert customer.get('ticket_link') is not None, "Customer should have ticket_link set"
+        assert customer.get('ticket_date') is not None, "Customer should have ticket_date set"
+        assert 'atlassian.net' in customer['ticket_link'], "Ticket link should be a Jira URL"
+
+        logger.info(f"✅ Ticket created successfully: {customer['ticket_link']}")
+        logger.info(f"   Ticket date: {customer['ticket_date']}")
 
     @pytest.mark.skip(reason="WebSocket connections not supported by Google Cloud API Gateway")
     def test_smoke_audiohook_with_logs(self):
