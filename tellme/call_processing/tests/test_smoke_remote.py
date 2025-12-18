@@ -355,8 +355,8 @@ class TestSmokeTestCloudRunWithLogs:
         assert conversations[0]['agent_email'] == self.agent_email
 
         # Check corresponding customer
-        customer_url = conversations[0]['customer']
-        resp = requests.get(customer_url, headers=self.superuser_headers)
+        self.customer_url = conversations[0]['customer']
+        resp = requests.get(self.customer_url, headers=self.superuser_headers)
         resp.raise_for_status()
         customer = resp.json()
 
@@ -366,7 +366,7 @@ class TestSmokeTestCloudRunWithLogs:
             assert customer['external_id'] == self.customer_id
 
         # Check customer summary
-        resp = requests.get(f"{customer_url}summary_data/", headers=self.superuser_headers)
+        resp = requests.get(f"{self.customer_url}summary_data/", headers=self.superuser_headers)
         resp.raise_for_status()
         summary = resp.json()
         assert summary.get('status') == 'ready'
@@ -465,8 +465,7 @@ class TestSmokeTestCloudRunWithLogs:
         trigger_timestamp = timezone.now().isoformat()
 
         # Get customer URL from the conversation
-        customer_url = self.conversation_url.rsplit('/conversations/', 1)[0]
-        create_ticket_url = f"{customer_url}/create_ticket/"
+        create_ticket_url = f"{self.customer_url}create_ticket/"
 
         logger.info(f"Triggering ticket creation at {create_ticket_url}")
 
@@ -484,8 +483,8 @@ class TestSmokeTestCloudRunWithLogs:
         base_filter = self.generate_logs_filter(trigger_timestamp)
 
         # Wait for ticket creation to complete - look for success log from views.py:339
-        waiting_query = base_filter + ' AND jsonPayload.message =~ "Ticket created successfully for customer.*"'
-        retrieval_query = base_filter + ' AND (jsonPayload.message =~ ".*[Tt]icket.*" OR jsonPayload.message =~ ".*Jira.*")'
+        waiting_query = base_filter + '\ntextPayload =~ "Ticket created successfully for customer.*"'
+        retrieval_query = base_filter + '\ntextPayload =~ ".*[Tt]icket.*|.*Jira.*"'
 
         # Retrieve logs with 60 second timeout (Jira API + Cloud Task processing)
         logs = self.retrieve_logs_with_timeout(
@@ -497,38 +496,32 @@ class TestSmokeTestCloudRunWithLogs:
         # Extract log messages
         log_messages = []
         for log in logs:
-            if 'jsonPayload' in log and 'message' in log['jsonPayload']:
-                log_messages.append(log['jsonPayload']['message'])
-            elif 'textPayload' in log:
+            if 'textPayload' in log:
                 log_messages.append(log['textPayload'])
+            elif 'jsonPayload' in log and 'message' in log['jsonPayload']:
+                log_messages.append(log['jsonPayload']['message'])
 
         # Verify key log messages exist (exact patterns from call_processing/views.py)
         # Line 314: Processing ticket creation for customer {customer_id}
         assert any('Processing ticket creation for customer' in msg for msg in log_messages), \
             "Expected log for ticket creation initiation not found"
-        logger.info("✓ Found log: Processing ticket creation for customer")
 
         # Line 339: Ticket created successfully for customer {customer_id}: {ticket_link}
         assert any('Ticket created successfully for customer' in msg for msg in log_messages), \
             "Expected log for successful ticket creation not found"
-        logger.info("✓ Found log: Ticket created successfully for customer")
 
         # From ticket_utils.py line 73: Successfully created Jira ticket: {ticket_link}
         assert any('Successfully created Jira ticket' in msg for msg in log_messages), \
             "Expected log for successful Jira API call not found"
-        logger.info("✓ Found log: Successfully created Jira ticket")
 
         # Verify customer now has ticket_link set
-        customer_resp = requests.get(customer_url, headers=self.superuser_headers)
+        customer_resp = requests.get(self.customer_url, headers=self.superuser_headers)
         customer_resp.raise_for_status()
         customer = customer_resp.json()
 
         assert customer.get('ticket_link') is not None, "Customer should have ticket_link set"
         assert customer.get('ticket_date') is not None, "Customer should have ticket_date set"
         assert 'atlassian.net' in customer['ticket_link'], "Ticket link should be a Jira URL"
-
-        logger.info(f"✅ Ticket created successfully: {customer['ticket_link']}")
-        logger.info(f"   Ticket date: {customer['ticket_date']}")
 
     @pytest.mark.skip(reason="WebSocket connections not supported by Google Cloud API Gateway")
     def test_smoke_audiohook_with_logs(self):
