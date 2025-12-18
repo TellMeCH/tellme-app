@@ -374,5 +374,9 @@ jobs:
           USE_CLOUD_SQL_AUTH_PROXY: 1
           CLOUD_RUN_HOST: ${{ needs.deploy.outputs.load_balancer_url }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TICKET_SERVER: ${{ secrets.TICKET_SERVER }}
+          TICKET_ACCOUNT: ${{ secrets.TICKET_ACCOUNT }}
+          TICKET_PROJECT: ${{ secrets.TICKET_PROJECT }}
+          TICKET_KEY: ${{ secrets.TICKET_KEY }}
         run: |
           uv run pytest -v ./tellme/call_processing/tests/test_smoke_remote.py
