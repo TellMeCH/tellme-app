@@ -1,7 +1,7 @@
 import datetime
 import logging
 from django.db import transaction
-from django.db.models import DateTimeField
+from django.db.models import DateTimeField, Sum
 from django.db.models.expressions import RawSQL
 from django.utils import timezone
 from django.conf import settings
@@ -524,7 +524,8 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: str):
         requester_id: UUID string of the user requesting the ticket
 
     Returns:
-        tuple: (customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key, requester_email)
+        dict: Wih fields customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key,
+        requester_email, requester_name, revenue_at_stake
             - customer: Customer instance
             - organization: Organization instance (access ticket_server and ticket_account from this)
             - ticket_title: Title for the Jira ticket
@@ -532,6 +533,8 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: str):
             - summary_date: Date of the latest call in the summary
             - ticket_api_key: Decrypted API key for Jira
             - requester_email: Email of the user requesting the ticket
+            - requester_name: Full name of the user requesting the ticket
+            - revenue_at_stake: Revenue at stake in the customer relationship
 
     Raises:
         Customer.DoesNotExist: If customer with the given ID is not found
@@ -553,6 +556,7 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: str):
     try:
         requester = User.objects.get(id=requester_id)
         requester_email = requester.email
+        requester_name = f"{requester.first_name} {requester.last_name}".strip()
     except User.DoesNotExist:
         raise ValueError(f"User with id {requester_id} not found")
 
@@ -579,4 +583,27 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: str):
     # Retrieve decrypted API key
     ticket_api_key = organization.retrieve_ticket_key()
 
-    return customer, organization, ticket_title, ticket_description, summary_date, ticket_api_key, requester_email
+    # Retrieve Customer Revenue at Stake
+    if hasattr(customer, 'total_revenue') and customer.total_revenue is not None:
+        revenue_at_stake = customer.total_revenue
+    else:
+        # Fallback to manual calculation if annotation not available
+        result = customer.conversations.aggregate(
+            total=Sum('revenue_at_stake')
+        )
+        revenue_at_stake = result['total'] or 0.0
+
+    return {
+        'customer': customer,
+        'customer_id': customer_id,
+        'ticket_server': organization.ticket_server,
+        'ticket_account': organization.ticket_account,
+        'ticket_project': organization.ticket_project,
+        'ticket_api_key': ticket_api_key,
+        'ticket_title': ticket_title,
+        'ticket_description': ticket_description,
+        'summary_date': summary_date,
+        'requester_email': requester_email,
+        'requester_name': requester_name,
+        'revenue_at_stake': revenue_at_stake,
+    }
