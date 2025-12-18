@@ -341,7 +341,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -368,7 +368,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -404,7 +404,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -466,7 +466,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -502,7 +502,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             # Mock API error when getting client
             mock_get_client.side_effect = Exception("Cloud Tasks API error")
 
