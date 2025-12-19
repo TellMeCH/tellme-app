@@ -1032,6 +1032,7 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
                 }
             else:
                 # Task likely failed - ticket creation is stale
+                self.ticket_date = None
                 return {
                     'link': None,
                     'date': None,
