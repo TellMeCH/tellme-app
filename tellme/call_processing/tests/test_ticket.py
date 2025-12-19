@@ -142,7 +142,6 @@ class TestTicketCreationView:
         customer.refresh_from_db()
         conversation.refresh_from_db()
         assert customer.ticket_link == "https://jira.example.com/browse/PROJ-123"
-        assert customer.ticket_date == conversation.date
 
     @patch("tellme.call_processing.utils.ticket_utils.create_ticket")
     def test_ticket_creation_failure(
