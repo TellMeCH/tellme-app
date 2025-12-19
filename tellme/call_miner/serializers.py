@@ -155,15 +155,23 @@ class ConversationTrendsSerializer(serializers.Serializer):
 class MetaSummarySerializer(serializers.Serializer):
     """
     Abstract Serializer class used to produce meta-summary data on the models that allow its creation via
-    get_or_create_summary()
+    get_summary() and create_summary()
     """
     class Meta:
         abstract = True
 
     def get_summary_data(self, obj):
         """
-        Summary of all conversation summaries (for a given period) of the object. Includes also the date of this
-        summarization and the number of calls that were taken into account for this summary.
+        Retrieve existing summary data without triggering task creation.
+
+        Returns summary of all conversation summaries for a given period, including the date of this
+        summarization and the number of calls that were taken into account.
+
+        Status codes:
+        - 'ready': Summary exists and is populated
+        - 'generating': Summary exists but data is still being generated
+        - 'does not exist': No summary found or summary creation timed out
+        - 'no conversations found': Object has no conversations in the specified period
         """
         period = self.context.get('period')
         rolling = self.context.get('rolling')
@@ -174,13 +182,45 @@ class MetaSummarySerializer(serializers.Serializer):
         if period == 'eternity':
             rolling = False
 
-        summary, summary_date, call_count, period_label, status = obj.get_or_create_summary(period, rolling)
+        summary, summary_date, call_count, period_label, status = obj.get_summary(period, rolling)
         return {
             'summary': summary,
             'summary_date': summary_date,
             'summary_call_count': call_count,
             'period_label': period_label,
             'status': status
+        }
+
+    def create_summary_data(self, obj):
+        """
+        Trigger creation of a summary task for the specified period.
+
+        Returns information about the task creation attempt including:
+        - task_id: ID of the created task (or None)
+        - status_code: HTTP-like status code (202, 200, 204)
+        - message: Description of what happened
+
+        Status codes:
+        - 202: Task created or already queued
+        - 200: Summary already exists, no task needed
+        - 204: No conversations to summarize
+        """
+        period = self.context.get('period')
+        rolling = self.context.get('rolling')
+        if isinstance(rolling, str):
+            rolling = rolling.lower() == 'true'
+
+        # Force rolling=False for 'eternity' period
+        if period == 'eternity':
+            rolling = False
+
+        task_id, status_code, message = obj.create_summary(period, rolling)
+        return {
+            'task_id': task_id,
+            'status_code': status_code,
+            'message': message,
+            'period': period,
+            'rolling': rolling
         }
 
 

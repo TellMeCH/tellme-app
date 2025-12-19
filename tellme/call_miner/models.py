@@ -95,14 +95,20 @@ class MetaSummaryAbstractModel(models.Model):
     class Meta:
         abstract = True
 
-    @transaction.atomic
-    def get_or_create_summary(self, period: str = 'month', rolling: bool = False):
+    def get_summary(self, period: str = 'month', rolling: bool = False):
         """
-        Extract all the object's related conversations, as well as their summaries, for the specified time period.
-        If no summary exists, triggers async task creation and returns placeholder data.
+        Retrieve existing summary data for the specified time period without triggering any task creation.
+
         Args:
-            period (str): Period of conversations to focus on. One of 'week', 'month', or 'quarter'
+            period (str): Period of conversations to focus on. One of 'week', 'month', 'quarter', or 'eternity'
             rolling (bool): Indicates whether to compute the summary on a rolling window basis or not
+
+        Returns:
+            tuple: (summary_data, summary_date, call_count, label, status) where status is one of:
+                - 'ready': Summary exists and is populated
+                - 'generating': Summary exists but data is still being generated (created recently)
+                - 'does not exist': No summary found or summary creation timed out
+                - 'no conversations found': Object has no conversations in the specified period
         """
         start, end, label = period_bounds(period, rolling)
 
@@ -112,44 +118,101 @@ class MetaSummaryAbstractModel(models.Model):
             status = 'no conversations found'
             return None, None, 0, label, status
 
-        # Fetch existing PeriodSummary (if it exists)
+        # Try to fetch existing PeriodSummary
         content_type = ContentType.objects.get_for_model(self.__class__)
-        summary, created = PeriodSummary.objects.select_for_update().get_or_create(
-            content_type=content_type,
-            object_id=self.pk,
-            period_type=period,
-            period_label=label,
-            defaults={
-                'summary': None,
-                'last_call_at': conversations.order_by('-date').first().date,
-                'call_count': conversations.count()
-            }
-        )
+        try:
+            summary = PeriodSummary.objects.get(
+                content_type=content_type,
+                object_id=self.pk,
+                period_type=period,
+                period_label=label
+            )
 
-        # If we just created a new summary, trigger async task to populate it
-        if created:
-            self.check_and_create_summarization_task(period=period, rolling=rolling, created=created)
-            status = 'generating'
-        elif summary.summary is None:
-            status = 'generating'
+            # Check the status of the summary
+            if summary.summary is not None:
+                status = 'ready'
+            else:
+                # Summary exists but data is None - check if it's still being generated
+                task_timeout_threshold = timezone.now() - datetime.timedelta(minutes=self.EXPECTED_SUMMARIZATION_TIME)
+                if summary.created >= task_timeout_threshold:
+                    status = 'generating'
+                else:
+                    # Task likely failed - summary is stale
+                    status = 'does not exist'
 
-            # Check if the task might have failed - if created more than EXPECTED_SUMMARIZATION_TIME ago and still None
-            task_timeout_threshold = timezone.now() - datetime.timedelta(minutes=self.EXPECTED_SUMMARIZATION_TIME)
-            if summary.created < task_timeout_threshold:
-                self.check_and_create_summarization_task(period=period, rolling=rolling, created=False)
+            return summary.summary, summary.last_call_at, summary.call_count, label, status
+
+        except PeriodSummary.DoesNotExist:
+            status = 'does not exist'
+            return None, None, 0, label, status
+
+    @transaction.atomic
+    def create_summary(self, period: str = 'month', rolling: bool = False):
+        """
+        Create a summarization task for the specified time period.
+
+        Args:
+            period (str): Period of conversations to focus on. One of 'week', 'month', 'quarter', or 'eternity'
+            rolling (bool): Indicates whether to compute the summary on a rolling window basis or not
+
+        Returns:
+            tuple: (task_id, status_code, status_message) where:
+                - task_id: ID of the created task (or None)
+                - status_code: HTTP-like status code (202, 200, 204)
+                - status_message: Description of what happened
+        """
+        start, end, label = period_bounds(period, rolling)
+
+        # Check if object has conversations in the period
+        conversations = self.conversations.filter(date__gte=start, date__lt=end)
+        if not conversations.exists():
+            return None, 204, 'no conversations to summarize'
+
+        # Check if a valid summary already exists
+        content_type = ContentType.objects.get_for_model(self.__class__)
+        try:
+            summary = PeriodSummary.objects.get(
+                content_type=content_type,
+                object_id=self.pk,
+                period_type=period,
+                period_label=label
+            )
+
+            # If summary is already populated, no need to create task
+            if summary.summary is not None:
+                # Check if refresh is needed
+                refresh_needed, _ = summary.check_if_refresh_needed(conversations, rolling, start)
+                if not refresh_needed:
+                    return None, 200, 'summary already exists'
+                
+        except PeriodSummary.DoesNotExist:
+            # Create empty PeriodSummary that will be populated by the task
+            summary = PeriodSummary.objects.create(
+                content_type=content_type,
+                object_id=self.pk,
+                period_type=period,
+                period_label=label,
+                summary=None,
+                last_call_at=conversations.order_by('-date').first().date,
+                call_count=conversations.count()
+            )
+
+        # Create or check for existing task
+        task_id = self.check_and_create_summarization_task(period=period, rolling=rolling)
+
+        if task_id:
+            return task_id, 202, 'task created'
         else:
-            status = 'ready'
+            # Task already exists or couldn't be created
+            return None, 202, 'task already exists or queued'
 
-        return summary.summary, summary.last_call_at, summary.call_count, label, status
-
-    def check_and_create_summarization_task(self, period, rolling, created: bool = False):
+    def check_and_create_summarization_task(self, period, rolling):
         """
         Check if an object needs summarization and create a task if needed.
 
         Args:
             period: Period to use for summarization
             rolling: Whether to use rolling period
-            created: Indicates whether an empty period summary was just created, and it should be populated regardless
 
         Returns:
             task_id if task was created, None otherwise
@@ -167,29 +230,28 @@ class MetaSummaryAbstractModel(models.Model):
             if not conversations.exists():
                 return None
 
-            # If the PeriodSummary object was not created in a get_or_create_summary call calling this method, check
+            # Check if summary exists and if refresh is needed
             content_type = ContentType.objects.get_for_model(self.__class__)
-            if not created:
-                try:
-                    summary_obj = PeriodSummary.objects.get(
-                        content_type=content_type,
-                        object_id=self.pk,
-                        period_type=period,
-                        period_label=label
-                    )
+            try:
+                summary_obj = PeriodSummary.objects.get(
+                    content_type=content_type,
+                    object_id=self.pk,
+                    period_type=period,
+                    period_label=label
+                )
 
-                    # Check if refresh is needed
-                    if summary_obj.summary is None:
-                        refresh_needed = True
-                    else:
-                        refresh_needed, call_count = summary_obj.check_if_refresh_needed(conversations, rolling, start)
+                # Check if refresh is needed
+                if summary_obj.summary is None:
+                    refresh_needed = True
+                else:
+                    refresh_needed, call_count = summary_obj.check_if_refresh_needed(conversations, rolling, start)
 
-                    if not refresh_needed:
-                        return None
+                if not refresh_needed:
+                    return None
 
-                except PeriodSummary.DoesNotExist:
-                    # No existing summary, create task
-                    pass
+            except PeriodSummary.DoesNotExist:
+                # No existing summary, create task
+                pass
 
             # Check if a similar task already exists in the queue
             task_exists = check_summarization_tasks(
@@ -889,6 +951,8 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     Customer: One of the many customers belonging to an organization. Customers have calls with one agent at a time.
     Calls act as a bridge between agents and customers
     """
+    EXPECTED_TICKET_CREATION_TIME = 3  # minutes
+
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='customers')
     external_id = models.CharField(max_length=128, null=False)
     created = models.DateTimeField(auto_now_add=True)
@@ -910,24 +974,17 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
     def __str__(self):
         return f"Customer [external_id={self.external_id} | org={self.organization_id}]"
 
-    @transaction.atomic
-    def get_or_create_ticket(self, requester_id: str):
+    def get_ticket(self):
         """
-        Get existing ticket or trigger ticket creation task.
-
-        Args:
-            requester_id: UUID string of the user requesting the ticket
+        Retrieve existing ticket information without triggering any task creation.
 
         Returns:
             dict: Dictionary with fields 'link', 'date', and 'status' where:
-                - link: URL to the Jira ticket (or None if creating/not found)
-                - date: Date of the ticket (or None if creating/not found)
-                - status: One of 'ready', 'creating', or error status
-
-        Raises:
-            ValueError: If customer has no conversations or no summary data
+                - link: URL to the Jira ticket (or None if not ready)
+                - date: Date of the ticket (or None if not ready)
+                - status: One of 'ready', 'creating', 'does not exist', 'no conversations found', 'no summary data'
         """
-        # If ticket already exists, return it
+        # If ticket already exists and is complete, return it
         if self.ticket_link and self.ticket_date:
             return {
                 'link': self.ticket_link,
@@ -943,27 +1000,97 @@ class Customer(MetaSummaryAbstractModel, ConversationStatsAbstractModel, Convers
                 'status': 'no conversations found'
             }
 
-        # Check if customer has summary data
-        summary_data, summary_date, call_count, label, status_msg = self.get_or_create_summary(
+        # Check if customer has summary data (read-only check)
+        summary_data, summary_date, call_count, label, status_msg = self.get_summary(
             **DEFAULT_SUMMARY_SETTINGS['customer']
         )
+
+        # If no summary or summary doesn't exist, return that status
         if summary_data is None:
-            return {
-                'link': None,
-                'date': None,
-                'status': f'no summary found (status={status_msg})'
-            }
+            if status_msg == 'no conversations found':
+                return {
+                    'link': None,
+                    'date': None,
+                    'status': 'no conversations found'
+                }
+            elif status_msg in ['does not exist', 'generating']:
+                return {
+                    'link': None,
+                    'date': None,
+                    'status': 'no summary data'
+                }
 
-        # Otherwise, create a ticket task (if needed) and return creating status
-        task_exists = check_ticket_tasks(self.id)
-        if not task_exists:
-            _ = create_ticket_task(self.id, requester_id)
+        # Check if ticket is being created (ticket_date exists but no link yet)
+        if self.ticket_date and not self.ticket_link:
+            # Check if the ticket creation might have timed out
+            task_timeout_threshold = timezone.now() - datetime.timedelta(minutes=self.EXPECTED_TICKET_CREATION_TIME)
+            if self.ticket_date >= task_timeout_threshold:
+                return {
+                    'link': None,
+                    'date': self.ticket_date,
+                    'status': 'creating'
+                }
+            else:
+                # Task likely failed - ticket creation is stale
+                return {
+                    'link': None,
+                    'date': None,
+                    'status': 'does not exist'
+                }
 
+        # No ticket exists
         return {
             'link': None,
             'date': None,
-            'status': 'creating'
+            'status': 'does not exist'
         }
+
+    @transaction.atomic
+    def create_ticket(self, requester_id: str):
+        """
+        Create a Jira ticket creation task for this customer.
+
+        Args:
+            requester_id: UUID string of the user requesting the ticket
+
+        Returns:
+            tuple: (task_id, status_code, status_message) where:
+                - task_id: ID of the created task (or None)
+                - status_code: HTTP-like status code (202, 200, 204)
+                - status_message: Description of what happened
+        """
+        # If ticket already exists, no need to create
+        if self.ticket_link and self.ticket_date:
+            return None, 200, 'ticket already exists'
+
+        # Check if customer has conversations
+        if not self.conversations.exists():
+            return None, 204, 'no conversations to create ticket from'
+
+        # Check if customer has summary data (read-only check)
+        summary_data, summary_date, call_count, label, status_msg = self.get_summary(
+            **DEFAULT_SUMMARY_SETTINGS['customer']
+        )
+
+        # If no summary data is available, cannot create ticket
+        if summary_data is None:
+            return None, 204, f'no summary data available (status={status_msg})'
+
+        # Check if a ticket task already exists
+        task_exists = check_ticket_tasks(self.id)
+        if task_exists:
+            return None, 202, 'task already exists or queued'
+
+        # Create the ticket task
+        task_id = create_ticket_task(self.id, requester_id)
+
+        # Mark that we've started ticket creation
+        if not self.ticket_date:
+            self.ticket_date = timezone.now()
+            self.save(update_fields=['ticket_date'])
+
+        return task_id, 202, 'task created'
+
 
 
 class Conversation(models.Model):
