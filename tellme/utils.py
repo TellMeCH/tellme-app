@@ -14,9 +14,6 @@ def spectacular_postprocess_schema(result, generator, request, public):
     # Apply the fix to the entire schema
     fix_schema_issues(result)
 
-    # Fix API Gateway path requirements (no trailing slashes)
-    fix_api_gateway_paths(result)
-
     # Add required Google Cloud extensions
     add_google_cloud_extensions(result)
 
@@ -33,9 +30,9 @@ def spectacular_postprocess_schema(result, generator, request, public):
     remove_internal_endpoints(result)
 
     # If request is None, we are running via CLI (generating spec.yaml for Gateway).
-    # We must convert the standard Bearer auth to GCP OAuth2 format.
     if request is None:
-        convert_auth_for_gcp_gateway(result)
+        fix_api_gateway_paths(result)  # We must remove trailing slashes
+        convert_auth_for_gcp_gateway(result)  # We must convert the standard Bearer auth to GCP OAuth2 format.
 
     return result
 
