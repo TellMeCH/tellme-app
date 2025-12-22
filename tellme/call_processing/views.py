@@ -317,7 +317,6 @@ class TicketCreationView(APIView):
             # Retrieve all necessary data for ticket creation
             ticket_data = retrieve_data_for_ticket(customer_id, requester_id)
             customer = ticket_data.get("customer")
-            summary_date = ticket_data.get("summary_date")
 
             # Create the Jira ticket
             ticket_link, ticket_status = ticket_utils.create_ticket(**ticket_data)
@@ -325,7 +324,6 @@ class TicketCreationView(APIView):
             # Update customer with ticket information
             if ticket_status == 'created':
                 customer.ticket_link = ticket_link
-                customer.ticket_date = summary_date
                 customer.save()
 
                 message = f"Ticket created successfully for customer {customer_id}: {ticket_link}"

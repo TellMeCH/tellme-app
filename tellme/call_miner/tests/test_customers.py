@@ -1359,13 +1359,13 @@ class TestCustomerActions:
         )
 
         client.force_authenticate(user=analyst_user)
-        url = reverse('customer-create-ticket', args=[customer.id])
-        response = client.get(url)
+        url = reverse('customer-ticket', args=[customer.id])
+        response = client.post(url)
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data['status'] == 'creating'
-        assert response.data['link'] is None
-        assert response.data['date'] is None
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data['task_id'] == 'task-id-123'
+        assert response.data['status_code'] == 202
+        assert response.data['message'] == 'task created'
         mock_create_ticket_task.assert_called_once_with(customer.id, analyst_user.id)
 
     def test_create_ticket_for_customer_without_conversations(
@@ -1373,11 +1373,12 @@ class TestCustomerActions:
     ):
         """Test that creating a ticket fails when customer has no conversations."""
         client.force_authenticate(user=analyst_user)
-        url = reverse('customer-create-ticket', args=[customer.id])
-        response = client.get(url)
+        url = reverse('customer-ticket', args=[customer.id])
+        response = client.post(url)
 
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data['status'] == 'no conversations found'
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert response.data['status_code'] == 204
+        assert response.data['message'] == 'no conversations to create ticket from'
 
     @patch('tellme.call_miner.models.create_ticket_task')
     @patch('tellme.call_miner.models.check_ticket_tasks')
@@ -1385,7 +1386,7 @@ class TestCustomerActions:
             self, mock_check_ticket_tasks, mock_create_ticket_task,
             client, analyst_user, customer, conversation_today
     ):
-        """Test getting existing ticket information for a customer."""
+        """Test getting existing ticket information for a customer using GET endpoint."""
         # Create summary for the customer
         content_type = ContentType.objects.get_for_model(customer.__class__)
         start, end, label = period_bounds('eternity', False)
@@ -1410,12 +1411,12 @@ class TestCustomerActions:
         customer.save()
 
         client.force_authenticate(user=analyst_user)
-        url = reverse('customer-create-ticket', args=[customer.id])
+        url = reverse('customer-ticket', args=[customer.id])
         response = client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] == 'ready'
         assert response.data['link'] == "https://jira.example.com/browse/PROJ-123"
         assert response.data['date'] == conversation_today.date
-        # Should not create a new task if ticket already exists
+        # Should not create a new task when using GET endpoint
         mock_create_ticket_task.assert_not_called()
