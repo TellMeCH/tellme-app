@@ -518,6 +518,6 @@ class TestCheckSummarizationTasks:
 
 # A brief summary of summarization testing
 # - test_queue: Tests create_summarization_task in call_miner/utils/summary_utils.py
-# - test_agents, test_customers, test_topics: Test the whole summary-data view, as well as get_or_create_summary
+# - test_agents, test_customers, test_topics: Test the whole summary-data view, as well as get_summary and create_summary
 # - test_db_handler: Tests call_processing/utils/db_handler.py's trigger_summarization_tasks
-# - test_models: Tests check_and_create_summarization_task, which gets a call from both get_or_create_summary and trigger_summarization_tasks
+# - test_models: Tests check_and_create_summarization_task, which gets a call from both create_summary and trigger_summarization_tasks

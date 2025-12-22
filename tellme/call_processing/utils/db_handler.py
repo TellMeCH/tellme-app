@@ -566,9 +566,9 @@ def retrieve_data_for_ticket(customer_id: int, requester_id: str):
     if not all([organization.ticket_server, organization.ticket_account, organization.ticket_key_encrypted, organization.ticket_project]):
         raise ValueError(f"Organization {organization.name} does not have Jira credentials configured")
 
-    # Get default customer summary data
+    # Get default customer summary data (read-only - should already exist)
     default_settings = get_default_summary_settings()
-    summary_data, summary_date, call_count, label, status_msg = customer.get_or_create_summary(
+    summary_data, summary_date, call_count, label, status_msg = customer.get_summary(
         **default_settings['customer']
     )
 

@@ -75,9 +75,9 @@ def another_conversation_same_organization(agent, customer, another_topic_same_o
 class TestMetaSummaryAbstractModel:
     """Test the async-aware MetaSummaryAbstractModel behavior."""
 
-    def test_get_or_create_summary_returns_existing_summary(self, topic, conversation_today):
+    def test_get_summary_returns_existing_summary(self, topic, conversation_today):
         """
-        Test that get_or_create_summary returns existing PeriodSummary when one exists.
+        Test that get_summary returns existing PeriodSummary when one exists.
         """
         # Create existing PeriodSummary
         start, end, label = period_bounds('month', False)
@@ -97,8 +97,8 @@ class TestMetaSummaryAbstractModel:
             call_count=1
         )
 
-        # Call get_or_create_summary
-        summary, date, count, period_label, status = topic.get_or_create_summary('month', False)
+        # Call get_summary
+        summary, date, count, period_label, status = topic.get_summary('month', False)
 
         # Verify existing summary is returned
         assert summary == existing_summary
@@ -107,9 +107,9 @@ class TestMetaSummaryAbstractModel:
         assert period_label == label
         assert status == 'ready'
 
-    def test_get_or_create_summary_creates_task_when_no_summary(self, topic, conversation_today):
+    def test_create_summary_triggers_task_when_needed(self, topic, conversation_today):
         """
-        Test that get_or_create_summary triggers async task creation when no PeriodSummary exists.
+        Test that create_summary triggers async task creation when no PeriodSummary exists.
         """
         # Ensure no existing PeriodSummary exists
         assert not PeriodSummary.objects.filter(
@@ -119,20 +119,20 @@ class TestMetaSummaryAbstractModel:
 
         # Mock the instance method
         with patch.object(topic, 'check_and_create_summarization_task') as mock_task_creation:
-            # Call get_or_create_summary
-            summary, date, count, period_label, status = topic.get_or_create_summary('month', False)
+            mock_task_creation.return_value = 'task-id-123'
 
-            # Verify task was triggered and placeholder returned
-            assert status == 'generating'
-            assert summary is None # placeholder summary
-            assert count == 1  # conversation count
-            assert date == conversation_today.date  # latest conversation date
+            # Call create_summary
+            task_id, status_code, message = topic.create_summary('month', False)
 
-            # Verify async task creation was called with updated signature
+            # Verify task was created
+            assert status_code == 202
+            assert message == 'task created'
+            assert task_id == 'task-id-123'
+
+            # Verify async task creation was called
             mock_task_creation.assert_called_once_with(
                 period='month',
-                rolling=False,
-                created=True,
+                rolling=False
             )
 
         # Verify PeriodSummary was created with placeholder data
@@ -144,15 +144,15 @@ class TestMetaSummaryAbstractModel:
         assert period_summary.summary == None
         assert period_summary.call_count == 1
 
-    def test_get_or_create_summary_no_conversations(self, topic):
+    def test_get_summary_no_conversations(self, topic):
         """
-        Test that get_or_create_summary returns None data when there are no conversations.
+        Test that get_summary returns None data when there are no conversations.
         """
         # Ensure no conversations exist
         assert topic.conversations.count() == 0
 
-        # Call get_or_create_summary
-        summary, date, count, period_label, status = topic.get_or_create_summary('month', False)
+        # Call get_summary
+        summary, date, count, period_label, status = topic.get_summary('month', False)
 
         # Verify None data is returned
         assert summary is None
@@ -160,7 +160,6 @@ class TestMetaSummaryAbstractModel:
         assert count == 0
         assert period_label is not None  # Label should still be generated
         assert status == 'no conversations found'
-        # No status since we exit early
 
     def test_different_object_types_use_correct_mapping(self, customer, agent, conversation_today):
         """
@@ -174,13 +173,15 @@ class TestMetaSummaryAbstractModel:
 
         # Test Customer
         with patch.object(customer, 'check_and_create_summarization_task') as mock_customer:
-            customer.get_or_create_summary('quarter', True)
-            mock_customer.assert_called_with(period='quarter', rolling=True, created=True)
+            mock_customer.return_value = 'task-id-customer'
+            task_id, status_code, message = customer.create_summary('quarter', True)
+            mock_customer.assert_called_with(period='quarter', rolling=True)
 
         # Test Agent
         with patch.object(agent, 'check_and_create_summarization_task') as mock_agent:
-            agent.get_or_create_summary('month', False)
-            mock_agent.assert_called_with(period='month', rolling=False, created=True)
+            mock_agent.return_value = 'task-id-agent'
+            task_id, status_code, message = agent.create_summary('month', False)
+            mock_agent.assert_called_with(period='month', rolling=False)
 
     @patch('tellme.call_miner.models.create_summarization_task')
     def test_does_not_create_task_when_summary_exists(self, mock_create_task, topic, conversation_today):
@@ -323,7 +324,7 @@ class TestMetaSummaryAbstractModel:
     @patch('tellme.call_miner.models.check_summarization_tasks')
     @patch('tellme.call_miner.models.create_summarization_task')
     def test_failed_task_detection_triggers_new_task(self, mock_create_task, mock_check_tasks, topic, conversation_today):
-        """Test that get_or_create_summary detects failed tasks and triggers new task creation."""
+        """Test that get_summary detects failed/stale tasks and create_summary can trigger new task creation."""
         # Link conversation to topic
         conversation_today.topics.add(topic)
 
@@ -349,12 +350,18 @@ class TestMetaSummaryAbstractModel:
         mock_check_tasks.return_value = False
         mock_create_task.return_value = "retry-task-id-456"
 
-        # Call get_or_create_summary - should detect failed task and create new one
-        summary, date, count, period_label, status = topic.get_or_create_summary('month', False)
+        # Call get_summary - should detect stale/failed task
+        summary, date, count, period_label, status = topic.get_summary('month', False)
 
-        # Verify failed task was detected and new task created
-        assert status == 'generating'  # Should trigger new task
-        mock_check_tasks.assert_called_once()
+        # Verify stale task was detected
+        assert status == 'does not exist'  # Stale summary treated as non-existent
+        assert summary is None
+
+        # Now create a new task to retry
+        task_id, status_code, message = topic.create_summary('month', False)
+
+        # Verify new task was created
+        assert status_code == 202
         mock_create_task.assert_called_once()
 
         # Verify the old summary still exists but status indicates retrying
@@ -814,7 +821,8 @@ class TestTopic:
         """
         Test that Topics have the functionalities inherited from MetaSummaryAbstractModel.
         """
-        assert hasattr(topic, 'get_or_create_summary')
+        assert hasattr(topic, 'get_summary')
+        assert hasattr(topic, 'create_summary')
         assert hasattr(topic, 'check_and_create_summarization_task')
 
     def test_topic_inherits_conversation_stats_model(self, topic):
@@ -876,7 +884,8 @@ class TestAgent:
         """
         Test that Agents have the functionalities inherited from MetaSummaryAbstractModel.
         """
-        assert hasattr(agent, 'get_or_create_summary')
+        assert hasattr(agent, 'get_summary')
+        assert hasattr(agent, 'create_summary')
         assert hasattr(agent, 'check_and_create_summarization_task')
 
     def test_agent_inherits_conversation_stats_model(self, agent):
@@ -921,8 +930,11 @@ class TestCustomer:
         """
         Test that Customers have the functionalities inherited from MetaSummaryAbstractModel.
         """
-        assert hasattr(customer, 'get_or_create_summary')
+        assert hasattr(customer, 'get_summary')
+        assert hasattr(customer, 'create_summary')
         assert hasattr(customer, 'check_and_create_summarization_task')
+        assert hasattr(customer, 'get_ticket')
+        assert hasattr(customer, 'create_ticket')
 
     def test_customer_inherits_conversation_stats_model(self, customer):
         """

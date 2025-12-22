@@ -465,19 +465,21 @@ class TestSmokeTestCloudRunWithLogs:
         trigger_timestamp = timezone.now().isoformat()
 
         # Get customer URL from the conversation
-        create_ticket_url = f"{self.customer_url}create_ticket/"
+        ticket_url = f"{self.customer_url}ticket/"
 
-        logger.info(f"Triggering ticket creation at {create_ticket_url}")
+        logger.info(f"Triggering ticket creation at {ticket_url}")
 
-        # Call create_ticket endpoint (as superuser)
-        response = requests.get(create_ticket_url, headers=self.superuser_headers)
-        assert response.status_code == 200, f"Unexpected status code: {response.status_code}"
+        # Call POST to ticket endpoint to trigger creation (as superuser)
+        response = requests.post(ticket_url, headers=self.superuser_headers)
+        assert response.status_code in [200, 202], f"Unexpected status code: {response.status_code}"
         response_data = response.json()
 
-        # Response should indicate ticket is being created or already ready
-        assert response_data.get('status') in ['creating', 'ready'], \
-            f"Unexpected status: {response_data.get('status')}"
-        logger.info(f"Ticket creation initiated with status: {response_data.get('status')}")
+        # Response should indicate task was created or ticket already exists
+        # POST returns: {task_id, status_code, message}
+        # Possible status_codes: 202 (task created), 200 (already exists), 204 (no data)
+        assert response_data.get('status_code') in [200, 202], \
+            f"Unexpected status_code: {response_data.get('status_code')}, message: {response_data.get('message')}"
+        logger.info(f"Ticket creation initiated with status_code: {response_data.get('status_code')}, message: {response_data.get('message')}")
 
         # Build log queries for ticket creation
         base_filter = self.generate_logs_filter(trigger_timestamp)
