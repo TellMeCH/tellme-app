@@ -3,13 +3,15 @@ import urllib
 import json
 import litellm
 import tiktoken
-from langfuse import Langfuse
-from langfuse.decorators import observe, langfuse_context
+from langfuse import Langfuse, observe, get_client
 from django.conf import settings
 from tellme.call_miner.utils.period_utils import period_bounds
-from tellme.call_processing.utils.llm_configs import SUMMARIZER_PROMPTS, SUMMARIZER_CONFIGS
-from tellme.call_processing.utils.litellm_config import setup_litellm, get_meta_summarization_config, get_provider_from_model
+from tellme.call_processing.utils.llm_configs import SUMMARIZER_PROMPTS, should_capture_langfuse_io
+from tellme.call_processing.utils.litellm_config import setup_litellm, get_meta_summarization_config
 from tellme.call_processing.utils.transcript_cleaner import clean_transcript
+
+# Determine capture settings based on environment (evaluated at module load time)
+_CAPTURE_IO = should_capture_langfuse_io()
 
 
 # Model-specific token limits (max context window for each model)
@@ -293,7 +295,7 @@ class MetaSummarizer:
 
         return f"mailto:{to_email}?subject={encoded_subject}&body={encoded_body}"
 
-    @observe(as_type="generation")
+    @observe(as_type="generation", capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     def _condense_items(self, enriched_summaries: list[str], enriched_transcripts: list[str], trace_data: dict):
         """
         Condenses a list of conversation summaries or transcripts into a meta-summary.
@@ -354,7 +356,7 @@ class MetaSummarizer:
 
         if len(selected_text) > 0:
             # Update trace with metadata from views.py
-            langfuse_context.update_current_trace(
+            get_client().update_current_trace(
                 name=trace_data.get('name', 'get_summary_data'),
                 tags=trace_data.get('tags', []),
                 metadata=metadata
@@ -372,13 +374,13 @@ class MetaSummarizer:
             # Update Langfuse observation with completion details
             model_used = completion.model
 
-            langfuse_context.update_current_observation(
+            get_client().update_current_generation(
                 model=model_used,
                 prompt=prompt,
-                usage={
-                    "promptTokens": completion.usage.prompt_tokens,
-                    "completionTokens": completion.usage.completion_tokens,
-                    "totalTokens": completion.usage.total_tokens
+                usage_details={
+                    "input": completion.usage.prompt_tokens,
+                    "output": completion.usage.completion_tokens,
+                    "total": completion.usage.total_tokens
                 },
                 **trace_data
             )
