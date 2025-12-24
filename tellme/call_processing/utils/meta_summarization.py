@@ -382,7 +382,8 @@ class MetaSummarizer:
                     "output": completion.usage.completion_tokens,
                     "total": completion.usage.total_tokens
                 },
-                **trace_data
+                name=trace_data.get('name', 'get_summary_data'),
+                metadata=metadata
             )
 
             response = completion.choices[0].message
