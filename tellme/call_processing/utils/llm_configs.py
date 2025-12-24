@@ -4,6 +4,17 @@ API_BASE_DELAY: float = 5.0
 API_BACKOFF_FACTOR: int = 2
 API_REQUEST_TIMEOUT: float = 300
 
+
+def should_capture_langfuse_io() -> bool:
+    """
+    Determine whether Langfuse should capture input/output based on environment.
+
+    Returns:
+        bool: False if TELLME_ENV is 'prod', True otherwise
+    """
+    from django.conf import settings
+    return not (hasattr(settings, 'TELLME_ENV') and settings.TELLME_ENV == 'prod')
+
 TRANSCRIPTION_METHOD_CHOICES = [('deepgram', 'Deepgram'), ('groq', 'Groq')]
 
 # Transcription Model Names

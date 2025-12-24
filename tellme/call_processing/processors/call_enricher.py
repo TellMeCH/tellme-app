@@ -10,13 +10,15 @@ This module contains all enrichment-related functionality including:
 import json
 import litellm
 from django.conf import settings
-from langfuse import Langfuse
-from langfuse.decorators import observe, langfuse_context
+from langfuse import Langfuse, observe, get_client
 
-from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE
+from tellme.call_processing.utils.llm_configs import ENRICHMENT_PIPELINE, should_capture_langfuse_io
 from tellme.call_processing.utils.litellm_config import setup_litellm, get_enrichment_config, get_provider_from_model
 from tellme.call_processing.utils import db_handler
 from .utils import create_customer_id
+
+# Determine capture settings based on environment (evaluated at module load time)
+_CAPTURE_IO = should_capture_langfuse_io()
 
 
 class CallEnricher:
@@ -52,7 +54,7 @@ class CallEnricher:
             )
             self.enrichment_prompts.append(prompt)
 
-    @observe()
+    @observe(capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     def enrich_recording(self, transcript: str, redacted_transcript: str,
                         enrichment_method: str, organization_id: int) -> tuple[dict, int, int]:
         """
@@ -131,7 +133,7 @@ class CallEnricher:
 
         return enriched_response, input_tokens, output_tokens
 
-    @observe(as_type="generation")
+    @observe(as_type="generation", capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     def _enrich_with_litellm(self, transcript: str, system_message: str,
                            litellm_config: dict, step: int) -> tuple[dict, int, int]:
         """
@@ -159,14 +161,14 @@ class CallEnricher:
         model_used = completion.model
         provider = get_provider_from_model(model_used, litellm_config)
 
-        langfuse_context.update_current_observation(
+        get_client().update_current_generation(
             name=f"enrichment_{provider}_{ENRICHMENT_PIPELINE[step]['name']}",
             prompt=self.enrichment_prompts[step],
             model=model_used,
-            usage={
-                "promptTokens": completion.usage.prompt_tokens,
-                "completionTokens": completion.usage.completion_tokens,
-                "totalTokens": completion.usage.total_tokens
+            usage_details={
+                "input": completion.usage.prompt_tokens,
+                "output": completion.usage.completion_tokens,
+                "total": completion.usage.total_tokens
             },
             metadata={
                 "step_name": ENRICHMENT_PIPELINE[step]['name'],

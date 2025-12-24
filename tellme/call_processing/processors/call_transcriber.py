@@ -12,12 +12,11 @@ from datetime import datetime
 from io import BytesIO
 from pydub import AudioSegment
 from django.conf import settings
-import deepgram
+from deepgram import DeepgramClient
+from deepgram.core import ApiError as DeepgramApiError, RequestOptions
 import groq
 import litellm
-from langfuse import Langfuse
-from langfuse.decorators import observe, langfuse_context
-from deepgram.clients.common.v1.errors import DeepgramApiError
+from langfuse import Langfuse, observe, get_client
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
 
 from tellme.call_processing.utils.llm_configs import (
@@ -26,12 +25,16 @@ from tellme.call_processing.utils.llm_configs import (
     API_BASE_DELAY,
     API_BACKOFF_FACTOR,
     TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
-    TRANSCRIPTION_MODEL_NAME_GROQ
+    TRANSCRIPTION_MODEL_NAME_GROQ,
+    should_capture_langfuse_io
 )
 from tellme.call_processing.utils.litellm_config import setup_litellm, get_diarization_config, get_provider_from_model
 from tellme.call_processing.utils import gcs_utils
 from tellme.call_processing.utils.transcript_cleaner import clean_transcript
 from .config import CHUNK_SIZE
+
+# Determine capture settings based on environment (evaluated at module load time)
+_CAPTURE_IO = should_capture_langfuse_io()
 
 
 # Transcription costs in dollars per second
@@ -65,7 +68,7 @@ class CallTranscriber:
         # Initialize clients
         if not hasattr(settings, 'DEEPGRAM_API_KEY') or not settings.DEEPGRAM_API_KEY:
             raise RuntimeError("Deepgram API key not found. Please set the DEEPGRAM_API_KEY setting value.")
-        self.deepgram = deepgram.DeepgramClient(settings.DEEPGRAM_API_KEY)
+        self.deepgram = DeepgramClient(api_key=settings.DEEPGRAM_API_KEY)
 
         if not hasattr(settings, 'GROQ_API_KEY') or not settings.GROQ_API_KEY:
             raise RuntimeError("Groq API key not found. Please set the GROQ_API_KEY setting value.")
@@ -74,15 +77,6 @@ class CallTranscriber:
         # Setup LiteLLM with Langfuse integration and retry settings
         setup_litellm()
 
-        # Initialize transcription options
-        self.transcription_options = deepgram.PrerecordedOptions(
-            model=TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
-            smart_format=True,
-            detect_language=True,
-            punctuate=True,
-            diarize=True,
-        )
-
         # Initialize diarization prompt
         self.diarization_prompt = Langfuse().get_prompt(
             'call_diarization',
@@ -90,7 +84,7 @@ class CallTranscriber:
             fallback=DIARIZATION_PROMPT
         )
 
-    @observe(capture_output=False)
+    @observe(capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     def transcribe(self, file_name: str, transcription_method: str) -> tuple[str, list[str], float]:
         """
         Handle the full transcription process for audio files.
@@ -119,8 +113,8 @@ class CallTranscriber:
             'groq': self.transcribe_chunk_with_groq
         }
         fallback_exceptions = {
-            'deepgram': (ValueError, httpx.HTTPError, DeepgramApiError),
-            'groq': (ValueError, httpx.HTTPError)
+            'deepgram': (ValueError, httpx.HTTPError, DeepgramApiError, httpx.HTTPStatusError),
+            'groq': (ValueError, httpx.HTTPError, httpx.HTTPStatusError)
         }
 
         if transcription_method not in methods:
@@ -201,7 +195,7 @@ class CallTranscriber:
         # Clean the transcript using regex-based corrections
         full_transcript = clean_transcript(full_transcript)
 
-        langfuse_context.update_current_trace(
+        get_client().update_current_trace(
             metadata={
                 'chunk_count': chunk_count,
                 'total_duration_minutes': round(total_duration / 60000, 2),
@@ -239,14 +233,13 @@ class CallTranscriber:
 
         return chunks, len(audio)
 
-    @observe(as_type="generation")
+    @observe(as_type="generation", capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
         stop=stop_after_attempt(API_MAX_RETRIES),
         retry=retry_if_exception(
-            lambda e: (isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429) or
-                      (isinstance(e, DeepgramApiError) and e.status == '429')
+            lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429
         )
     )
     def transcribe_chunk_with_deepgram(self, chunk_data: bytes) -> tuple[str, str]:
@@ -263,42 +256,44 @@ class CallTranscriber:
             httpx.HTTPError: If transcription fails after retries
             RuntimeError: If response cannot be parsed
         """
-        payload = {'buffer': chunk_data}
-
-        langfuse_context.update_current_observation(
-            name="transcription_deepgram",
-            start_time=datetime.now(),
-        )
-
         response = None
         try:
-            response = self.deepgram.listen.rest.v("1").transcribe_file(
-                payload, self.transcription_options,
-                timeout=httpx.Timeout(CHUNK_SIZE * 60, connect=10.0)
+            # In Deepgram SDK v5, use the transcribe_file method with direct parameters
+            response = self.deepgram.listen.v1.media.transcribe_file(
+                request=chunk_data,
+                model=TRANSCRIPTION_MODEL_NAME_DEEPGRAM,
+                smart_format=True,
+                detect_language=True,
+                punctuate=True,
+                diarize=True,
+                request_options=RequestOptions(
+                    timeout_in_seconds=CHUNK_SIZE * 60
+                )
             )
 
-            transcript = response['results']['channels'][0]['alternatives'][0]['paragraphs']['transcript']
+            transcript = response.results.channels[0].alternatives[0].paragraphs.transcript
             transcript = transcript.replace("\n\n", "\n").strip()
-            language = response['results']['channels'][0]['detected_language']
-            cost = DEEPGRAM_COSTS[TRANSCRIPTION_MODEL_NAME_DEEPGRAM] * response['metadata']['duration']
+            language = response.results.channels[0].detected_language
+            cost = DEEPGRAM_COSTS[TRANSCRIPTION_MODEL_NAME_DEEPGRAM] * response.metadata.duration
 
-            langfuse_context.update_current_observation(
-                end_time=datetime.now(),
-                input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response['metadata']['duration']},
+            get_client().update_current_generation(
+                name="transcription_deepgram",
+                input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response.metadata.duration},
                 output={"transcript_chunk_size": len(transcript), "language": language},
                 model=f'deepgram-{TRANSCRIPTION_MODEL_NAME_DEEPGRAM}',
-                usage={'total': response['metadata']['duration'], 'unit': 'SECONDS', 'totalCost': cost}
+                metadata={'duration_seconds': response.metadata.duration},
+                cost_details={'total': cost}
             )
             return transcript, language
 
         except IndexError as e:
-            langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
+            get_client().update_current_generation(name="transcription_deepgram", status_message=str(e), level="ERROR")
             raise RuntimeError(f'Could not parse transcription response: {response}') from e
         except httpx.HTTPStatusError as e:
-            langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
+            get_client().update_current_generation(name="transcription_deepgram", status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
 
-    @observe(as_type="generation")
+    @observe(as_type="generation", capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
@@ -318,11 +313,6 @@ class CallTranscriber:
         Raises:
             httpx.HTTPError: If transcription fails after retries
         """
-        langfuse_context.update_current_observation(
-            name="transcription_groq",
-            start_time=datetime.now(),
-        )
-
         try:
             response = self.groq.audio.transcriptions.create(
                 file=('recording_chunk.wav', chunk_data),
@@ -332,25 +322,22 @@ class CallTranscriber:
             transcript = '\n'.join([f"Speaker X: {phrase['text']}" for phrase in response.segments])
             language = response.language
 
-            langfuse_context.update_current_observation(
-                end_time=datetime.now(),
+            get_client().update_current_generation(
+                name="transcription_groq",
                 input={"chunk_size_bytes": len(chunk_data), "chunk_size_seconds": response.duration},
                 output={"transcript_chunk_size": len(transcript), "language": language},
                 model=f'groq-{TRANSCRIPTION_MODEL_NAME_GROQ}',
-                usage={
-                    'total': response.duration,
-                    'unit': 'SECONDS',
-                    'totalCost': GROQ_COSTS[TRANSCRIPTION_MODEL_NAME_GROQ] * response.duration
-                }
+                metadata={'duration_seconds': response.duration},
+                cost_details={'total': GROQ_COSTS[TRANSCRIPTION_MODEL_NAME_GROQ] * response.duration}
             )
 
             return transcript, language
 
         except httpx.HTTPStatusError as e:
-            langfuse_context.update_current_observation(status_message=str(e), level="ERROR")
+            get_client().update_current_generation(name="transcription_groq", status_message=str(e), level="ERROR")
             raise httpx.HTTPError("Failed to transcribe chunk after multiple retries.")
 
-    @observe(as_type="generation", capture_output=False, capture_input=False)
+    @observe(as_type="generation", capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     def diarize_transcript(self, transcript: str) -> str:
         """
         Apply speaker diarization to transcript using LiteLLM with fallback support.
@@ -380,14 +367,14 @@ class CallTranscriber:
         model_used = completion.model
         provider = get_provider_from_model(model_used, litellm_config)
 
-        langfuse_context.update_current_observation(
+        get_client().update_current_generation(
             name=f"diarization_{provider}",
             prompt=self.diarization_prompt,
             model=model_used,
-            usage={
-                "promptTokens": completion.usage.prompt_tokens,
-                "completionTokens": completion.usage.completion_tokens,
-                "totalTokens": completion.usage.total_tokens
+            usage_details={
+                "input": completion.usage.prompt_tokens,
+                "output": completion.usage.completion_tokens,
+                "total": completion.usage.total_tokens
             },
             metadata={"langfuse_prompt": self.diarization_prompt}
         )

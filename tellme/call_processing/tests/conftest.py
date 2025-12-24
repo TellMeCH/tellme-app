@@ -8,6 +8,53 @@ from tellme.call_miner.models import (
 )
 
 
+# Patch Langfuse BEFORE any modules import it
+# This happens at the module level, before any fixtures run
+def _no_op_decorator(*args, **kwargs):
+    """No-op decorator that returns the function unchanged"""
+    def decorator(func):
+        return func
+    return decorator
+
+
+# Create mock Langfuse client and instance
+_mock_langfuse_instance = MagicMock()
+_mock_prompt = MagicMock()
+_mock_prompt.is_fallback = True
+_mock_prompt.config = {}
+_mock_prompt.prompt = "Mock prompt text"
+_mock_prompt.compile = MagicMock(return_value="Compiled mock prompt")
+_mock_langfuse_instance.get_prompt.return_value = _mock_prompt
+
+_mock_client = MagicMock()
+_mock_client.update_current_span = MagicMock(return_value=None)
+_mock_client.update_current_generation = MagicMock(return_value=None)
+_mock_client.update_current_trace = MagicMock(return_value=None)
+
+# Apply patches at module import time
+_langfuse_patches = [
+    patch("langfuse.observe", new=_no_op_decorator),
+    patch("langfuse.get_client", return_value=_mock_client),
+    patch("langfuse.Langfuse", return_value=_mock_langfuse_instance),
+]
+
+for p in _langfuse_patches:
+    p.start()
+
+
+def pytest_configure(config):
+    """Called before test collection begins"""
+    # Patches are already started above, nothing more needed
+    pass
+
+
+def pytest_unconfigure(config):
+    """Called after all tests complete"""
+    # Stop all patches
+    for p in _langfuse_patches:
+        p.stop()
+
+
 @pytest.fixture(autouse=True)
 def mock_firebase_auth():
     """Mock firebase_admin.auth methods to prevent real Firebase interactions during tests."""
@@ -93,39 +140,27 @@ def mock_dlp():
 def mock_deepgram():
     """
     Mocks out the Deepgram transcription calls (DeepgramClient)
-    and the PrerecordedOptions class.
+    for v5 API.
     """
-    with patch("deepgram.DeepgramClient") as mock_deepgram_client_class:
+    with patch("tellme.call_processing.processors.call_transcriber.DeepgramClient") as mock_deepgram_client_class:
         # Mock the DeepgramClient instance
         mock_deepgram_instance = MagicMock()
         mock_deepgram_client_class.return_value = mock_deepgram_instance
 
-        # Mock the response from transcribe_file so we get a standard transcript
-        mock_response = {
-            "results": {
-                "channels": [
-                    {
-                        "alternatives": [
-                            {
-                                "paragraphs": {
-                                    "transcript": """
-                                        Speaker 0: My name is Sefano Giorgio and this is outrageous!
-                                        Speaker 1: What? My phone number is +34 634 333 222
-                                    """
-                                }
-                            }
-                        ],
-                        "detected_language": "en"
-                    }
-                ]
-            },
-            "metadata": {
-                "duration": 10.0
-            }
-        }
+        # Mock the response from transcribe_file using object-style access (Deepgram v5)
+        mock_response = MagicMock()
+        mock_response.results.channels = [MagicMock()]
+        mock_response.results.channels[0].alternatives = [MagicMock()]
+        mock_response.results.channels[0].alternatives[0].paragraphs.transcript = """
+            Speaker 0: My name is Sefano Giorgio and this is outrageous!
+            Speaker 1: What? My phone number is +34 634 333 222
+        """
+        mock_response.results.channels[0].detected_language = "en"
+        mock_response.metadata.duration = 10.0
 
+        # Set up v5 API path: listen.v1.media.transcribe_file
         listen_mock = MagicMock()
-        listen_mock.rest.v("1").transcribe_file.return_value = mock_response
+        listen_mock.v1.media.transcribe_file.return_value = mock_response
         mock_deepgram_instance.listen = listen_mock
 
         yield mock_deepgram_instance
@@ -332,42 +367,14 @@ def setup_db(db):
     return org, agent, topic, suggested_topic, customer, plain_key, conversation
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def mock_langfuse():
     """
-    Mocks out all Langfuse-related functionality:
-      - The @observe decorator becomes a no-op
-      - langfuse_context becomes a MagicMock
-      - Langfuse() constructor becomes a MagicMock
-    This prevents any real tracing from happening in your tests.
+    Fixture that returns the mock Langfuse instance for tests that need it.
+    The actual patching happens at module-level (see top of file) to ensure
+    the mocks are in place BEFORE any modules import langfuse.
     """
-
-    def no_op_decorator(*args, **kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
-
-    with patch("langfuse.decorators.observe", new=no_op_decorator), \
-            patch("langfuse.decorators.langfuse_context", new=MagicMock()), \
-            patch("langfuse.Langfuse") as mock_lf_class, \
-            patch("tellme.call_processing.processors.call_transcriber.Langfuse", mock_lf_class), \
-            patch("tellme.call_processing.processors.call_enricher.Langfuse", mock_lf_class):
-
-        # Mock Langfuse instance
-        mock_lf_instance = MagicMock()
-        mock_lf_class.return_value = mock_lf_instance
-
-        # Mock prompts - always use fallback to ensure hardcoded configs are used
-        mock_prompt = MagicMock()
-        mock_prompt.is_fallback = True  # Force use of hardcoded configs from llm_configs.py
-        mock_prompt.config = {}  # Not used when is_fallback=True
-        mock_prompt.prompt = "Mock prompt text"
-        mock_prompt.compile = MagicMock(return_value="Compiled mock prompt")
-
-        mock_lf_instance.get_prompt.return_value = mock_prompt
-
-        yield mock_lf_instance
+    return _mock_langfuse_instance
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ This module contains all redaction-related functionality including:
 import re
 from collections import defaultdict
 from datetime import datetime
-from langfuse.decorators import observe, langfuse_context
+from langfuse import observe, get_client
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
 import httpx
 import dateparser
@@ -18,7 +18,10 @@ import google.cloud.dlp
 
 from .utils import create_customer_id
 from .config import MINIMUM_CALLER_AGE
-from tellme.call_processing.utils.llm_configs import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR
+from tellme.call_processing.utils.llm_configs import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, should_capture_langfuse_io
+
+# Determine capture settings based on environment (evaluated at module load time)
+_CAPTURE_IO = should_capture_langfuse_io()
 
 class CallRedactor:
     """
@@ -57,7 +60,7 @@ class CallRedactor:
             "inspect_config": {"info_types": [{"name": info_type} for info_type in dlp_entity_types]}
         }
 
-    @observe(as_type="generation")
+    @observe(as_type="generation", capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     @retry(
         reraise=True,
         wait=wait_exponential(multiplier=API_BACKOFF_FACTOR, exp_base=2, min=API_BASE_DELAY),
@@ -76,20 +79,15 @@ class CallRedactor:
             tuple[str, str | None, str | None, str | None, str | None]:
                 Redacted transcript, optional customer ID, first name, last name, and birth date
         """
-        langfuse_context.update_current_observation(
-            name="redaction_google_dlp",
-            start_time=datetime.now(),
-        )
-
         current_request = self.dlp_config.copy()
         current_request["item"] = {"value": transcript}
         response = self.dlp_client.deidentify_content(request=current_request)
         redacted_transcript = response.item.value
 
-        langfuse_context.update_current_observation(
-            end_time=datetime.now(),
+        get_client().update_current_generation(
+            name="redaction_google_dlp",
             input={"transcript_size": len(transcript)},
-            output={"redacted_transcript": redacted_transcript},
+            output={"redacted_transcript_size": len(redacted_transcript)},
             model="dlp-service-client"
         )
 

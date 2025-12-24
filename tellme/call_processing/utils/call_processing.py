@@ -2,12 +2,15 @@ import time
 import hashlib
 from datetime import datetime
 from django.conf import settings
-from langfuse.decorators import observe, langfuse_context
+from langfuse import observe, get_client
 
 from tellme.call_processing.utils.llm_configs import (
-    TRANSCRIPTION_METHOD_CHOICES, CUSTOMER_IDENTIFICATION_METHOD_CHOICES
+    TRANSCRIPTION_METHOD_CHOICES, CUSTOMER_IDENTIFICATION_METHOD_CHOICES, should_capture_langfuse_io
 )
 from tellme.call_processing.processors import CallTranscriber, CallRedactor, CallEnricher, CallValuer
+
+# Determine capture settings based on environment (evaluated at module load time)
+_CAPTURE_IO = should_capture_langfuse_io()
 
 
 
@@ -54,7 +57,7 @@ class CallProcessingPipeline:
 
         self.valuer = CallValuer()
 
-    @observe()
+    @observe(capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     def __call__(
         self,
         file_name: str,
@@ -130,7 +133,7 @@ class CallProcessingPipeline:
         if not extract_customer_id:
             file_metadata['customer_id'] = customer_id
 
-        langfuse_context.update_current_trace(
+        get_client().update_current_trace(
             name="Call Processing",
             user_id='Cloud Task Manager',
             session_id=self.define_session_id(file_metadata),
