@@ -155,13 +155,13 @@ class TestCallTranscriber:
         def deepgram_failure_side_effect(*args, **kwargs):
             raise httpx.TimeoutException("Simulated Deepgram failure")
 
-        mock_deepgram.listen.rest.v("1").transcribe_file.side_effect = deepgram_failure_side_effect
+        mock_deepgram.listen.v1.media.transcribe_file.side_effect = deepgram_failure_side_effect
 
         # Run the transcriber
         transcript, language, duration = transcriber.transcribe("test_fallback.wav", "deepgram")
 
         # Deepgram was called at least once, but it failed
-        assert mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert mock_deepgram.listen.v1.media.transcribe_file.called
 
         # Groq was called (fallback should have triggered)
         assert mock_groq.audio.transcriptions.create.called
@@ -178,7 +178,7 @@ class TestCallTranscriber:
         """
         transcript, language, duration = transcriber.transcribe("test.wav", "deepgram")
 
-        assert mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert mock_deepgram.listen.v1.media.transcribe_file.called
         assert not mock_groq.audio.transcriptions.create.called
         assert not mock_litellm.called
         assert transcript
@@ -194,7 +194,7 @@ class TestCallTranscriber:
         transcript, language, duration = transcriber.transcribe("test.wav", "groq")
 
         assert mock_groq.audio.transcriptions.create.called
-        assert not mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert not mock_deepgram.listen.v1.media.transcribe_file.called
         assert mock_litellm.called  # Diarization uses litellm.completion
         assert transcript
         assert language
@@ -229,7 +229,7 @@ class TestCallTranscriber:
         """
         transcript, language, duration = transcriber.transcribe("test.mp3", "deepgram")
 
-        assert mock_deepgram.listen.rest.v("1").transcribe_file.called
+        assert mock_deepgram.listen.v1.media.transcribe_file.called
         assert not mock_groq.audio.transcriptions.create.called
         assert transcript
         assert language
@@ -263,24 +263,18 @@ class TestCallTranscriber:
         """
         # Override the mock to return a transcript with words that need cleaning
         def deepgram_with_errors(*args, **kwargs):
-            return {
-                'results': {
-                    'channels': [{
-                        'alternatives': [{
-                            'paragraphs': {
-                                'transcript': "Customer has a Gucci available and earned some Bohnen rewards.\n"
-                                             "The GUCCI expires soon. More bohnen coming next month."
-                            }
-                        }],
-                        'detected_language': 'de'
-                    }]
-                },
-                'metadata': {
-                    'duration': 30.0
-                }
-            }
+            mock_resp = MagicMock()
+            mock_resp.results.channels = [MagicMock()]
+            mock_resp.results.channels[0].alternatives = [MagicMock()]
+            mock_resp.results.channels[0].alternatives[0].paragraphs.transcript = (
+                "Customer has a Gucci available and earned some Bohnen rewards.\n"
+                "The GUCCI expires soon. More bohnen coming next month."
+            )
+            mock_resp.results.channels[0].detected_language = 'de'
+            mock_resp.metadata.duration = 30.0
+            return mock_resp
 
-        mock_deepgram.listen.rest.v("1").transcribe_file.return_value = deepgram_with_errors()
+        mock_deepgram.listen.v1.media.transcribe_file.return_value = deepgram_with_errors()
 
         transcript, language, duration = transcriber.transcribe("test.wav", "deepgram")
 

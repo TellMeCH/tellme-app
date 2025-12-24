@@ -4,13 +4,16 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from langfuse.decorators import observe
+from langfuse import observe
 from googleapiclient.discovery import build
 from django.conf import settings
 
 from tellme.call_processing.utils import db_handler
 from .config import MINIMUM_EXPECTED_PRICE, MAXIMUM_EXPECTED_PRICE
-from tellme.call_processing.utils.llm_configs import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR
+from tellme.call_processing.utils.llm_configs import API_MAX_RETRIES, API_BASE_DELAY, API_BACKOFF_FACTOR, should_capture_langfuse_io
+
+# Determine capture settings based on environment (evaluated at module load time)
+_CAPTURE_IO = should_capture_langfuse_io()
 
 
 class CallValuer:
@@ -76,7 +79,7 @@ class CallValuer:
                 print(f"Failed to initialize Google Custom Search API: {e}")
                 self.search_service = None
 
-    @observe()
+    @observe(capture_input=_CAPTURE_IO, capture_output=_CAPTURE_IO)
     def infer_revenue(self, search_query: str, organization_id: int) -> tuple[float, str, str]:
         """
         Estimate revenue at stake by searching for products and analyzing prices.

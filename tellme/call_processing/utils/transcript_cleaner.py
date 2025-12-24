@@ -19,6 +19,18 @@ TRANSCRIPT_CLEANING = [
         'filter': r'\bBohnen\b',
         'correction': 'Bonus'
     },
+    {
+        'filter': r'\bVodouas\b',
+        'correction': 'Vaudoise'
+    },
+    {
+        'filter': r'\bVadwaz\b',
+        'correction': 'Vaudoise'
+    },
+    {
+        'filter': r'\bVoduas\b',
+        'correction': 'Vaudoise'
+    }
 ]
 
 
