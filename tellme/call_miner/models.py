@@ -903,7 +903,8 @@ class Employee(models.Model):
     updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.email} - {self.organization.name} - {self.get_role_display()}"
+        user_email = self.user.email if self.user else "No User"
+        return f"{user_email} - {self.organization.name} - {self.get_role_display()}"
 
     class Meta:
         unique_together = ('user', 'organization')
