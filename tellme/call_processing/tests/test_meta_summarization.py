@@ -98,7 +98,7 @@ class TestMetaSummarizer:
         assert conversations.count() >= 0
         assert isinstance(call_count, int)
         assert isinstance(label, str)
-        assert "2025" in label  # Should contain current year
+        assert str(datetime.today().year) in label  # Should contain current year
 
     def test_enrich_items(self, setup_db):
         """
