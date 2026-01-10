@@ -218,3 +218,186 @@ resource "google_project_iam_member" "apigateway_admin" {
   role    = "roles/apigateway.admin"
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
+
+# Drata GRC Integration
+# Get organization data for Drata
+data "google_organization" "drata" {
+  domain = "tell-me.ch"
+}
+
+# Create project-level custom role for Drata
+resource "google_project_iam_custom_role" "drata_project_role" {
+  project     = module.project["infra"].project_id
+  role_id     = "DrataReadOnlyProjectRole"
+  title       = "Drata Read-Only Project Role"
+  description = "Service Account for Drata Autopilot with read access to project resources"
+  permissions = [
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy"
+  ]
+}
+
+# Create organization-level custom role for Drata
+resource "google_organization_iam_custom_role" "drata_org_role" {
+  org_id      = data.google_organization.drata.org_id
+  role_id     = "DrataReadOnlyOrganizationalRole"
+  title       = "Drata Read-Only Organizational Role"
+  description = "Service Account with read-only access for Drata to scan organizational resources"
+  permissions = [
+    "resourcemanager.organizations.getIamPolicy",
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy",
+    "resourcemanager.folders.get",
+    "resourcemanager.organizations.get",
+    "cloudasset.assets.searchAllResources"
+  ]
+}
+
+# Create the Drata service account
+resource "google_service_account" "drata" {
+  project      = module.project["infra"].project_id
+  account_id   = "dratareadonly"
+  display_name = "Drata Read-Only Scanner"
+  description  = "Service account for Drata GRC platform to scan organization resources"
+}
+
+# Create JSON key for the Drata service account
+resource "google_service_account_key" "drata_key" {
+  service_account_id = google_service_account.drata.id
+}
+
+# Grant project custom role to Drata
+resource "google_project_iam_member" "drata_project_custom" {
+  project = module.project["infra"].project_id
+  role    = google_project_iam_custom_role.drata_project_role.name
+  member  = "serviceAccount:${google_service_account.drata.email}"
+}
+
+# Grant organization custom role to Drata
+resource "google_organization_iam_member" "drata_org_custom" {
+  org_id = data.google_organization.drata.org_id
+  role   = google_organization_iam_custom_role.drata_org_role.name
+  member = "serviceAccount:${google_service_account.drata.email}"
+}
+
+# Grant project viewer role to Drata
+resource "google_project_iam_member" "drata_project_viewer" {
+  project = module.project["infra"].project_id
+  role    = "roles/viewer"
+  member  = "serviceAccount:${google_service_account.drata.email}"
+}
+
+# Grant organization viewer role to Drata (for multi-project scanning)
+resource "google_organization_iam_member" "drata_org_viewer" {
+  org_id = data.google_organization.drata.org_id
+  role   = "roles/viewer"
+  member = "serviceAccount:${google_service_account.drata.email}"
+}
+
+# Vanta GRC Integration
+# Create custom organization role for Vanta
+resource "google_organization_iam_custom_role" "vanta_scanner" {
+  org_id      = data.google_organization.drata.org_id
+  role_id     = "VantaExtensiveOrganizationScanner"
+  title       = "Vanta Extensive Organization Scanner"
+  description = "Role for Vanta to scan organization resources and IAM policies"
+  permissions = [
+    "essentialcontacts.contacts.list",
+    "iam.roles.list",
+    "resourcemanager.organizations.getIamPolicy",
+    "resourcemanager.folders.getIamPolicy",
+    "resourcemanager.projects.get",
+    "resourcemanager.projects.list",
+    "resourcemanager.folders.list",
+    "bigquery.datasets.get",
+    "compute.instances.get",
+    "compute.instances.getEffectiveFirewalls",
+    "compute.subnetworks.get",
+    "pubsub.topics.get",
+    "storage.buckets.get",
+    "cloudasset.assets.searchAllResources"
+  ]
+}
+
+# Workload Identity Federation configuration for Vanta
+locals {
+  vanta_aws_account_id   = "850507053895"
+  vanta_aws_role_name    = "scanner"
+  vanta_identity_pool_id = "vanta-3723b513304f983"
+  vanta_provider_id      = "vanta-aws"
+  vanta_subject_name     = "vanta-scanner"
+  # Subject URI references the infra project
+  vanta_subject_uri      = "principal://iam.googleapis.com/projects/${module.project["infra"].project_number}/locations/global/workloadIdentityPools/${local.vanta_identity_pool_id}/subject/${local.vanta_subject_name}"
+}
+
+# Create Workload Identity Pool in infra project for Vanta
+resource "google_iam_workload_identity_pool" "vanta" {
+  project                   = module.project["infra"].project_id
+  workload_identity_pool_id = local.vanta_identity_pool_id
+  display_name              = "Vanta GRC Scanner"
+  description               = "Workload Identity Pool for Vanta to scan organization"
+}
+
+resource "time_sleep" "wait_vanta_pool" {
+  create_duration = "30s"
+  depends_on      = [google_iam_workload_identity_pool.vanta]
+
+  lifecycle {
+    replace_triggered_by = [
+      google_iam_workload_identity_pool.vanta
+    ]
+  }
+}
+
+# Create Workload Identity Provider (AWS federation) for Vanta
+resource "google_iam_workload_identity_pool_provider" "vanta_aws" {
+  depends_on                         = [time_sleep.wait_vanta_pool]
+  project                            = module.project["infra"].project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.vanta.workload_identity_pool_id
+  workload_identity_pool_provider_id = local.vanta_provider_id
+  display_name                       = "Vanta AWS"
+  description                        = "Allows Vanta's AWS infrastructure to authenticate to GCP"
+
+  attribute_mapping = {
+    "google.subject"  = "'${local.vanta_subject_name}'"
+    "attribute.arn"   = "assertion.arn"
+  }
+
+  attribute_condition = "attribute.arn.extract('assumed-role/{role}/') == '${local.vanta_aws_role_name}'"
+
+  aws {
+    account_id = local.vanta_aws_account_id
+  }
+}
+
+# Grant custom scanner role at organization level to Vanta
+resource "google_organization_iam_member" "vanta_custom_role" {
+  depends_on = [google_iam_workload_identity_pool_provider.vanta_aws]
+  org_id     = data.google_organization.drata.org_id
+  role       = google_organization_iam_custom_role.vanta_scanner.name
+  member     = local.vanta_subject_uri
+}
+
+# Grant security reviewer role at organization level to Vanta
+resource "google_organization_iam_member" "vanta_security_reviewer" {
+  depends_on = [google_iam_workload_identity_pool_provider.vanta_aws]
+  org_id     = data.google_organization.drata.org_id
+  role       = "roles/iam.securityReviewer"
+  member     = local.vanta_subject_uri
+}
+
+# Wait for IAM propagation for Vanta
+resource "time_sleep" "wait_vanta_iam" {
+  create_duration = "60s"
+  depends_on = [
+    google_organization_iam_member.vanta_custom_role,
+    google_organization_iam_member.vanta_security_reviewer,
+  ]
+
+  lifecycle {
+    replace_triggered_by = [
+      google_organization_iam_member.vanta_custom_role,
+      google_organization_iam_member.vanta_security_reviewer,
+    ]
+  }
+}
