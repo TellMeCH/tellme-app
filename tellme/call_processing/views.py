@@ -8,15 +8,16 @@ from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from tellme.call_processing.serializers import (WebhookProcessingSerializer, QueueRecordingSerializer,
-                                         ProcessRecordingSerializer, SummarizationSerializer)
+                                         ProcessRecordingSerializer, SummarizationSerializer,
+                                         TicketCreationSerializer)
 from tellme.call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
 from tellme.call_processing.permissions import IsAuthenticatedOrganization
-from tellme.call_processing.utils import queue_utils
+from tellme.call_processing.utils import processing_utils, ticket_utils
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
 from tellme.call_processing.utils.meta_summarization import MetaSummarizer
 from tellme.call_processing.utils.db_handler import (
     check_same_path_conversations, create_conversation, create_suggested_topics, trigger_summarization_tasks,
-    get_object_by_class_string_and_id, create_periodsummary
+    get_object_by_class_string_and_id, create_periodsummary, retrieve_data_for_ticket
 )
 from tellme.call_processing.utils.webhook_processing import process_webhook_recordings
 
@@ -71,7 +72,7 @@ class WebhookProcessingView(APIView):
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Queue processing with the downloaded data
-        message, status_code = queue_utils.upload_file_and_create_processing_task(
+        message, status_code = processing_utils.upload_file_and_create_processing_task(
             recordings_folder,
             agent_id,
             customer_id,
@@ -106,14 +107,14 @@ class QueueRecordingView(APIView):
             file_obj = data.get('file')
             duration = data.get('duration')
             file_format = '.' + file_obj.name.split('.')[-1].lower() if '.' in file_obj.name else None
-            file_name = queue_utils.create_storage_path(organization_id, customer_id, agent_id, timestamp, file_format)
+            file_name = processing_utils.create_storage_path(organization_id, customer_id, agent_id, timestamp, file_format)
 
             logger.info(f'Execution Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
             logger.info(f"Created: {timestamp}")
             logger.info(f"Organization: {organization_id}")
             logger.info(f"File: {file_name}")
 
-            message, status_code = queue_utils.upload_file_and_create_processing_task(
+            message, status_code = processing_utils.upload_file_and_create_processing_task(
                 file_name, agent_id, customer_id, organization_id, timestamp, logger, duration=duration, file_obj=file_obj
             )
             return Response(message, status=status_code)
@@ -289,4 +290,67 @@ class SummarizationView(APIView):
 
         except Exception as exc:
             logger.error(f"Summarization failed for {object_type} {object_id}: {str(exc)}")
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TicketCreationView(APIView):
+    """
+    Create a Jira ticket for a specific customer based on their summary data.
+
+    This view retrieves a customer's summary data and creates a Jira ticket
+    using the organization's configured Jira credentials.
+    """
+    serializer_class = TicketCreationSerializer
+    authentication_classes = [ProcessingKeyAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Extract validated data
+        customer_id = serializer.validated_data.get("customer_id")
+        requester_id = serializer.validated_data.get("requester_id")
+        logger.info(f"Processing ticket creation for customer {customer_id}")
+
+        try:
+            # Retrieve all necessary data for ticket creation
+            ticket_data = retrieve_data_for_ticket(customer_id, requester_id)
+            customer = ticket_data.get("customer")
+
+            # Create the Jira ticket
+            ticket_link, ticket_status = ticket_utils.create_ticket(**ticket_data)
+
+            # Update customer with ticket information
+            if ticket_status == 'created':
+                customer.ticket_link = ticket_link
+                customer.save()
+
+                message = f"Ticket created successfully for customer {customer_id}: {ticket_link}"
+                logger.info(message)
+
+                return Response({
+                    "message": message,
+                    "customer_id": customer_id,
+                    "ticket_link": ticket_link,
+                    "ticket_status": ticket_status
+                }, status=status.HTTP_200_OK)
+            else:
+                message = f"Failed to create ticket for customer {customer_id}"
+                logger.error(message)
+                return Response({
+                    "error": message,
+                    "customer_id": customer_id,
+                    "ticket_status": ticket_status
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except ValueError as exc:
+            logger.error(str(exc))
+            if 'not found' in str(exc):
+                status_code = status.HTTP_404_NOT_FOUND
+            else:
+                status_code = status.HTTP_400_BAD_REQUEST
+            return Response({"error": str(exc)}, status=status_code)
+        except Exception as exc:
+            logger.error(f"Ticket creation failed for customer {customer_id}: {str(exc)}")
             return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

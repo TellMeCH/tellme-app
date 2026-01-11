@@ -17,3 +17,13 @@ output "summarization_queue_id" {
   value       = google_cloud_tasks_queue.summarization_queue.id
   description = "ID of the summarization Cloud Tasks queue"
 }
+
+output "tickets_queue_name" {
+  value       = google_cloud_tasks_queue.tickets_queue.name
+  description = "Name of the tickets Cloud Tasks queue"
+}
+
+output "tickets_queue_id" {
+  value       = google_cloud_tasks_queue.tickets_queue.id
+  description = "ID of the tickets Cloud Tasks queue"
+}

@@ -30,7 +30,8 @@ from tellme.call_miner.schemas import (
     REGENERATE_API_KEY_RESPONSE_SCHEMA, SEARCH_RESPONSE_SCHEMA, TRANSCRIPT_RESPONSE_SCHEMA,
     LIST_ACTIVE_TOPICS_RESPONSE_SCHEMA, MANAGED_AGENTS_RESPONSE_SCHEMA, ERROR_RESPONSE_SCHEMA,
     NOT_FOUND_RESPONSE_SCHEMA, FORBIDDEN_RESPONSE_SCHEMA, TOPIC_DATA_RESPONSE_SCHEMA,
-    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA, get_search_parameters_schema
+    CONVERSATION_ORDERING_PARAMETER_SCHEMA, CUSTOMER_ORDERING_PARAMETER_SCHEMA, CREATE_TICKET_RESPONSE_SCHEMA,
+    get_search_parameters_schema
 )
 
 
@@ -57,17 +58,28 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         return getattr(obj, "name", None)
 
     @extend_schema(
-        description=MetaSummarySerializer.get_summary_data.__doc__,
+        description='Get or create summary data. GET retrieves existing summary, POST triggers generation.',
         parameters=[ID_PARAMETER_SCHEMA, SUMMARY_PERIOD_PARAMETER_SCHEMA, SUMMARY_ROLLING_PARAMETER_SCHEMA],
         responses={
             200: SUMMARY_DATA_RESPONSE_SCHEMA,
+            202: {'description': 'Task created or already queued'},
+            204: {'description': 'No conversations to summarize'},
             400: ERROR_RESPONSE_SCHEMA,
             403: FORBIDDEN_RESPONSE_SCHEMA,
             404: NOT_FOUND_RESPONSE_SCHEMA
         }
     )
-    @decorators.action(detail=True, methods=['get'])
+    @decorators.action(detail=True, methods=['get', 'post'])
     def summary_data(self, request, pk=None):
+        """
+        Combined endpoint for summary operations.
+
+        GET: Retrieve existing summary data without triggering task creation.
+        Returns summary with status: 'ready', 'generating', 'does not exist', or 'no conversations found'.
+
+        POST: Trigger summary generation task.
+        Returns task_id, status_code (202/200/204), and message.
+        """
         obj = self.get_object()
         context = self.get_serializer_context()
 
@@ -77,8 +89,13 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
         context['period'] = period
         context['rolling'] = rolling
         serializer = self.get_serializer(obj, context=context)
+
         try:
-            return response.Response(serializer.get_summary_data(obj))
+            if request.method == 'GET':
+                return response.Response(serializer.get_summary_data(obj))
+            elif request.method == 'POST':
+                result = serializer.create_summary_data(obj)
+                return response.Response(result, status=result['status_code'])
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -749,6 +766,51 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
     @decorators.action(detail=False, methods=['get'], url_path='search')
     def search(self, request):
         return super().search(request)
+
+    @extend_schema(
+        description='Get or create a Jira ticket for a customer. GET retrieves existing ticket info, POST triggers creation.',
+        parameters=[ID_PARAMETER_SCHEMA],
+        responses={
+            200: CREATE_TICKET_RESPONSE_SCHEMA,
+            202: {'description': 'Task created or already queued'},
+            204: {'description': 'No data available to create ticket'},
+            400: ERROR_RESPONSE_SCHEMA,
+            403: FORBIDDEN_RESPONSE_SCHEMA,
+            404: NOT_FOUND_RESPONSE_SCHEMA
+        }
+    )
+    @decorators.action(detail=True, methods=['get', 'post'], url_path='ticket')
+    def ticket(self, request, pk=None):
+        """
+        Combined endpoint for ticket operations.
+
+        GET: Retrieve existing ticket information without triggering task creation.
+        Returns:
+            - link: URL to the Jira ticket (or None if not ready)
+            - date: Date of the ticket (or None if not ready)
+            - status: 'ready', 'creating', 'does not exist', 'no conversations found', or 'no summary data'
+
+        POST: Trigger Jira ticket creation task.
+        Returns:
+            - task_id: ID of the created task (or None)
+            - status_code: HTTP-like status code (202, 200, 204)
+            - message: Description of what happened
+        """
+        customer = self.get_object()
+
+        try:
+            if request.method == 'GET':
+                ticket_data = customer.get_ticket()
+                return response.Response(ticket_data, status=status.HTTP_200_OK)
+            elif request.method == 'POST':
+                task_id, status_code, message = customer.create_ticket(requester_id=request.user.id)
+                return response.Response({
+                    'task_id': task_id,
+                    'status_code': status_code,
+                    'message': message
+                }, status=status_code)
+        except ValueError as e:
+            return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve', 'search']:

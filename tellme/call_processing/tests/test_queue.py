@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework import status
 from tellme.call_miner.models import Conversation
 from django.core.files.uploadedfile import SimpleUploadedFile
-from tellme.call_miner.utils.summary_utils import create_summarization_task, check_summarization_tasks
+from tellme.call_miner.utils.queue_utils import create_summarization_task, check_summarization_tasks
 
 
 @pytest.mark.django_db
@@ -341,7 +341,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -368,7 +368,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -404,7 +404,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -466,7 +466,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             mock_client = MagicMock()
             mock_parent = "projects/test/locations/us-central1/queues/test-queue"
             mock_get_client.return_value = (mock_client, mock_parent)
@@ -502,7 +502,7 @@ class TestCheckSummarizationTasks:
 
         org, agent, topic, suggested_topic, customer, plain_key, conversation = setup_db
 
-        with patch('tellme.call_miner.utils.summary_utils.get_tasks_client_and_parent') as mock_get_client:
+        with patch('tellme.call_miner.utils.queue_utils.get_tasks_client_and_parent') as mock_get_client:
             # Mock API error when getting client
             mock_get_client.side_effect = Exception("Cloud Tasks API error")
 
@@ -518,6 +518,6 @@ class TestCheckSummarizationTasks:
 
 # A brief summary of summarization testing
 # - test_queue: Tests create_summarization_task in call_miner/utils/summary_utils.py
-# - test_agents, test_customers, test_topics: Test the whole summary-data view, as well as get_or_create_summary
+# - test_agents, test_customers, test_topics: Test the whole summary-data view, as well as get_summary and create_summary
 # - test_db_handler: Tests call_processing/utils/db_handler.py's trigger_summarization_tasks
-# - test_models: Tests check_and_create_summarization_task, which gets a call from both get_or_create_summary and trigger_summarization_tasks
+# - test_models: Tests check_and_create_summarization_task, which gets a call from both create_summary and trigger_summarization_tasks

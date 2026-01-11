@@ -46,3 +46,12 @@ class SummarizationSerializer(serializers.Serializer):
     summary_period = serializers.CharField(required=True)
     rolling_period = serializers.BooleanField(required=True)
     task_id = serializers.CharField(required=False, allow_null=True)
+
+
+class TicketCreationSerializer(serializers.Serializer):
+    """
+    A serializer for requests from the Cloud Task Manager to create Jira tickets
+    """
+    customer_id = serializers.IntegerField(required=True)
+    requester_id = serializers.CharField(required=True)
+    task_id = serializers.CharField(required=False, allow_null=True)

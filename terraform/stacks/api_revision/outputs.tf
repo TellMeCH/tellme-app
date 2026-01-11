@@ -38,6 +38,11 @@ output "summarization_queue_name" {
   description = "Name of the summarization Cloud Tasks queue"
 }
 
+output "tickets_queue_name" {
+  value       = module.tasks.tickets_queue_name
+  description = "Name of the tickets Cloud Tasks queue"
+}
+
 output "service_account_email" {
   description = "Email of the app service account"
   value       = google_service_account.app.email

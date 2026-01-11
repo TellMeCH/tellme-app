@@ -85,12 +85,18 @@ class TopicPermission(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         """
-        Modification is only allowed to analysts and superusers, listing is possible for Employees
+        Modification is only allowed to analysts and superusers, listing is possible for Employees.
+        POST is also allowed for the 'summary_data' action.
         """
         if not request.user.is_authenticated:
             return False
         if request.user.is_superuser or hasattr(request.user.employee, 'analyst'):
             return True
+
+        # Allow POST for summary_data action (non-modifying action)
+        if request.method == 'POST' and view.action == 'summary_data':
+            return hasattr(request.user, 'employee')
+
         if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
             return hasattr(request.user, 'employee')
         return False
@@ -115,12 +121,18 @@ class AgentPermission(permissions.BasePermission):
         """
         Only superusers can modify an agent (although the AgentViewSet is not meant for it), and organization employees
         can list.
+        POST is also allowed for the 'summary_data' action.
         """
         if not request.user.is_authenticated:
             return False
         if request.user.is_superuser:
             return True
+
         if hasattr(request.user, 'employee'):
+            # Allow POST for summary_data action (non-modifying action)
+            if request.method == 'POST' and view.action == 'summary_data':
+                return True
+
             return request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']
         return False
 
@@ -147,11 +159,17 @@ class CustomerPermission(permissions.BasePermission):
     def has_permission(self, request, view):
         """
         Only superusers can modify a customer, and organization employees can list them all.
+        POST is also allowed for the 'ticket' and 'summary_data' actions.
         """
         if not request.user.is_authenticated:
             return False
         if request.user.is_superuser:
             return True
+
+        # Allow POST for ticket and summary_data actions (non-modifying actions)
+        if request.method == 'POST' and view.action in ['ticket', 'summary_data']:
+            return hasattr(request.user, 'employee')
+
         if request.method not in ['POST', 'PATCH', 'PUT', 'DELETE']:
             return hasattr(request.user, 'employee')
         return False
