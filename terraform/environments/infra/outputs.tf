@@ -65,19 +65,3 @@ output "drata_service_account_email" {
   description = "Drata service account email address"
   value       = google_service_account.drata.email
 }
-
-# Vanta GRC Integration Outputs
-# Vanta uses Workload Identity Federation (keyless authentication via AWS)
-# No service account keys to manage or rotate
-
-# Vanta GCP project number (provide to Vanta during setup)
-output "vanta_gcp_project_number" {
-  description = "GCP project number for Vanta scanner (provide to Vanta during setup)"
-  value       = module.project["infra"].project_number
-}
-
-# Vanta workload identity pool
-output "vanta_workload_identity_pool" {
-  description = "Workload Identity Pool for Vanta"
-  value       = google_iam_workload_identity_pool.vanta.name
-}
