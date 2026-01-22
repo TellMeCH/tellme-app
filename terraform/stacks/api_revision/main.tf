@@ -11,6 +11,26 @@ resource "google_storage_bucket" "media_bucket" {
   uniform_bucket_level_access = false
   public_access_prevention    = "inherited"
   force_destroy               = false
+
+  retention_policy {
+    retention_period = 2678400
+  }
+  labels = {
+    environment = var.tellme_env
+  }
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    condition {
+      num_newer_versions       = 3
+      days_since_noncurrent_time = 31
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 resource "google_storage_bucket" "call_processing_bucket" {
@@ -20,6 +40,26 @@ resource "google_storage_bucket" "call_processing_bucket" {
   uniform_bucket_level_access = false
   public_access_prevention    = "inherited"
   force_destroy               = false
+
+  retention_policy {
+    retention_period = 2678400
+  }
+  labels = {
+    environment = var.tellme_env
+  }
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    condition {
+      num_newer_versions       = 3
+      days_since_noncurrent_time = 31
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 # Search API Key
