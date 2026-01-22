@@ -75,3 +75,9 @@ variable "alert_email_addresses" {
   default     = []
 }
 
+variable "enable_automated_backups" {
+  type        = bool
+  description = "Enable automated daily backups for Cloud SQL instance"
+  default     = false
+}
+

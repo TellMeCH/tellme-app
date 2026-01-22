@@ -54,4 +54,5 @@ module "api_revision" {
   availability_type        = "ZONAL"  # Single zone for staging (cost-effective)
   activate_alerts          = false    # Alerts disabled for staging
   alert_email_addresses    = []       # No alert emails for staging
+  enable_automated_backups = false    # No automated backups for staging (cost savings)
 }

@@ -156,3 +156,9 @@ variable "alert_email_addresses" {
   description = "List of email addresses to receive database storage alerts"
   default     = []
 }
+
+variable "enable_automated_backups" {
+  type        = bool
+  description = "Enable automated daily backups for Cloud SQL instance"
+  default     = false
+}

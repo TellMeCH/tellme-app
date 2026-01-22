@@ -37,4 +37,5 @@ module "api_revision" {
   availability_type        = "REGIONAL"  # High availability with automatic failover for production
   activate_alerts          = true        # Enable storage monitoring alerts for production
   alert_email_addresses    = var.alert_email_addresses  # Email addresses from deploy.yml
+  enable_automated_backups = true        # Enable daily automated backups for production (Drata compliance)
 }

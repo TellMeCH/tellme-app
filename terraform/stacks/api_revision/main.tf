@@ -77,18 +77,19 @@ resource "google_apikeys_key" "custom_search_key" {
 
 # CloudSQL module
 module "cloudsql" {
-  source                = "../../modules/cloudsql"
-  project_id            = var.project_id
-  region                = var.region
-  instance_name         = var.sql_instance_name
-  database_name         = var.database_name
-  admin_username        = var.admin_username
-  admin_password        = var.admin_password
-  app_username          = var.app_username
-  app_password          = var.app_password
-  availability_type     = var.availability_type
-  activate_alerts       = var.activate_alerts
-  alert_email_addresses = var.alert_email_addresses
+  source                   = "../../modules/cloudsql"
+  project_id               = var.project_id
+  region                   = var.region
+  instance_name            = var.sql_instance_name
+  database_name            = var.database_name
+  admin_username           = var.admin_username
+  admin_password           = var.admin_password
+  app_username             = var.app_username
+  app_password             = var.app_password
+  availability_type        = var.availability_type
+  activate_alerts          = var.activate_alerts
+  alert_email_addresses    = var.alert_email_addresses
+  enable_automated_backups = var.enable_automated_backups
 }
 
 # Cloud Tasks module
