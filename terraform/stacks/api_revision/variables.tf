@@ -133,3 +133,32 @@ variable "api_domain" {
   type        = string
   description = "Custom domain for the API Load Balancer (e.g., api.yourdomain.com)"
 }
+
+variable "availability_type" {
+  type        = string
+  description = "CloudSQL availability type: ZONAL (single zone) or REGIONAL (high availability)"
+  default     = "ZONAL"
+
+  validation {
+    condition     = contains(["ZONAL", "REGIONAL"], var.availability_type)
+    error_message = "availability_type must be either ZONAL or REGIONAL"
+  }
+}
+
+variable "activate_alerts" {
+  type        = bool
+  description = "Enable Cloud SQL storage monitoring alerts"
+  default     = false
+}
+
+variable "alert_email_addresses" {
+  type        = list(string)
+  description = "List of email addresses to receive database storage alerts"
+  default     = []
+}
+
+variable "enable_automated_backups" {
+  type        = bool
+  description = "Enable automated daily backups for Cloud SQL instance"
+  default     = false
+}

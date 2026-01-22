@@ -218,3 +218,78 @@ resource "google_project_iam_member" "apigateway_admin" {
   role    = "roles/apigateway.admin"
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
+
+# Drata GRC Integration
+# Get organization data for Drata
+data "google_organization" "drata" {
+  domain = "tell-me.ch"
+}
+
+# Create project-level custom role for Drata
+resource "google_project_iam_custom_role" "drata_project_role" {
+  project     = module.project["infra"].project_id
+  role_id     = "DrataReadOnlyProjectRole"
+  title       = "Drata Read-Only Project Role"
+  description = "Service Account for Drata Autopilot with read access to project resources"
+  permissions = [
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy"
+  ]
+}
+
+# Create organization-level custom role for Drata
+resource "google_organization_iam_custom_role" "drata_org_role" {
+  org_id      = data.google_organization.drata.org_id
+  role_id     = "DrataReadOnlyOrganizationalRole"
+  title       = "Drata Read-Only Organizational Role"
+  description = "Service Account with read-only access for Drata to scan organizational resources"
+  permissions = [
+    "resourcemanager.organizations.getIamPolicy",
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy",
+    "resourcemanager.folders.get",
+    "resourcemanager.organizations.get",
+    "cloudasset.assets.searchAllResources"
+  ]
+}
+
+# Create the Drata service account
+resource "google_service_account" "drata" {
+  project      = module.project["infra"].project_id
+  account_id   = "dratareadonly"
+  display_name = "Drata Read-Only Scanner"
+  description  = "Service account for Drata GRC platform to scan organization resources"
+}
+
+# Create JSON key for the Drata service account
+resource "google_service_account_key" "drata_key" {
+  service_account_id = google_service_account.drata.id
+}
+
+# Grant project custom role to Drata
+resource "google_project_iam_member" "drata_project_custom" {
+  project = module.project["infra"].project_id
+  role    = google_project_iam_custom_role.drata_project_role.name
+  member  = "serviceAccount:${google_service_account.drata.email}"
+}
+
+# Grant organization custom role to Drata
+resource "google_organization_iam_member" "drata_org_custom" {
+  org_id = data.google_organization.drata.org_id
+  role   = google_organization_iam_custom_role.drata_org_role.name
+  member = "serviceAccount:${google_service_account.drata.email}"
+}
+
+# Grant project viewer role to Drata
+resource "google_project_iam_member" "drata_project_viewer" {
+  project = module.project["infra"].project_id
+  role    = "roles/viewer"
+  member  = "serviceAccount:${google_service_account.drata.email}"
+}
+
+# Grant organization viewer role to Drata (for multi-project scanning)
+resource "google_organization_iam_member" "drata_org_viewer" {
+  org_id = data.google_organization.drata.org_id
+  role   = "roles/viewer"
+  member = "serviceAccount:${google_service_account.drata.email}"
+}

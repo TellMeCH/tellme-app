@@ -44,6 +44,20 @@ resource "google_storage_bucket" "tfstate" {
   versioning {
     enabled = true
   }
+
+  labels = {
+    environment = "infra"
+  }
+
+  lifecycle_rule {
+    condition {
+      num_newer_versions       = 5
+      days_since_noncurrent_time = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 # Create Workload Identity Federation so GitHub can use GCP for us.
