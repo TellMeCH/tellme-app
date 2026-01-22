@@ -219,6 +219,22 @@ resource "google_project_iam_member" "apigateway_admin" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
+# Monitoring Notification Channel Editor (for database alerts)
+resource "google_project_iam_member" "monitoring_notification_channel_editor" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/monitoring.notificationChannelEditor"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
+# Monitoring Alert Policy Editor (for database alerts)
+resource "google_project_iam_member" "monitoring_alert_policy_editor" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/monitoring.alertPolicyEditor"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
 # Drata GRC Integration
 # Get organization data for Drata
 data "google_organization" "drata" {
