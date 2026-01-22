@@ -26,11 +26,15 @@ resource "google_sql_database_instance" "postgres_instance" {
     backup_configuration {
       enabled                        = var.enable_automated_backups
       start_time                     = "03:00"  # 3 AM UTC
-      point_in_time_recovery_enabled = true
-      transaction_log_retention_days = 7
-      backup_retention_settings {
-        retained_backups = 30  # Keep 30 daily backups
-        retention_unit   = "COUNT"
+      point_in_time_recovery_enabled = var.enable_automated_backups  # PITR requires backups to be enabled
+      transaction_log_retention_days = var.enable_automated_backups ? 7 : null
+
+      dynamic "backup_retention_settings" {
+        for_each = var.enable_automated_backups ? [1] : []
+        content {
+          retained_backups = 30  # Keep 30 daily backups
+          retention_unit   = "COUNT"
+        }
       }
     }
 
