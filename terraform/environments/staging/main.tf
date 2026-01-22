@@ -22,6 +22,7 @@ module "monitoring_function" {
   settings_name            = var.settings_name
   schedule                 = "0 0 * * *"
   time_zone                = "Etc/UTC"
+  tellme_env               = "staging"
 }
 
 module "api_revision" {
