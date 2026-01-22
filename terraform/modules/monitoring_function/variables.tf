@@ -80,3 +80,8 @@ variable "time_zone" {
   description = "Time zone for the scheduler"
   default     = "UTC"
 }
+
+variable "tellme_env" {
+  type        = string
+  description = "Environment (staging/prod/infra)"
+}

@@ -40,3 +40,4 @@ MANIFEST
 # Cache directories
 .cache/
 *.cache/
+/terraform/environments/infra/drata-gcp-private-key.json

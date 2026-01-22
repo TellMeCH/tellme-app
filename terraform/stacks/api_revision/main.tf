@@ -11,6 +11,26 @@ resource "google_storage_bucket" "media_bucket" {
   uniform_bucket_level_access = false
   public_access_prevention    = "inherited"
   force_destroy               = false
+
+  retention_policy {
+    retention_period = 2678400
+  }
+  labels = {
+    environment = var.tellme_env
+  }
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    condition {
+      num_newer_versions       = 3
+      days_since_noncurrent_time = 31
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 resource "google_storage_bucket" "call_processing_bucket" {
@@ -20,6 +40,26 @@ resource "google_storage_bucket" "call_processing_bucket" {
   uniform_bucket_level_access = false
   public_access_prevention    = "inherited"
   force_destroy               = false
+
+  retention_policy {
+    retention_period = 2678400
+  }
+  labels = {
+    environment = var.tellme_env
+  }
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    condition {
+      num_newer_versions       = 3
+      days_since_noncurrent_time = 31
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 # Search API Key
@@ -37,15 +77,19 @@ resource "google_apikeys_key" "custom_search_key" {
 
 # CloudSQL module
 module "cloudsql" {
-  source          = "../../modules/cloudsql"
-  project_id      = var.project_id
-  region          = var.region
-  instance_name   = var.sql_instance_name
-  database_name   = var.database_name
-  admin_username  = var.admin_username
-  admin_password  = var.admin_password
-  app_username    = var.app_username
-  app_password    = var.app_password
+  source                   = "../../modules/cloudsql"
+  project_id               = var.project_id
+  region                   = var.region
+  instance_name            = var.sql_instance_name
+  database_name            = var.database_name
+  admin_username           = var.admin_username
+  admin_password           = var.admin_password
+  app_username             = var.app_username
+  app_password             = var.app_password
+  availability_type        = var.availability_type
+  activate_alerts          = var.activate_alerts
+  alert_email_addresses    = var.alert_email_addresses
+  enable_automated_backups = var.enable_automated_backups
 }
 
 # Cloud Tasks module
