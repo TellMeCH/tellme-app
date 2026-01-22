@@ -52,4 +52,6 @@ module "api_revision" {
   app_password             = var.app_password
   api_domain               = var.api_domain
   availability_type        = "ZONAL"  # Single zone for staging (cost-effective)
+  activate_alerts          = false    # Alerts disabled for staging
+  alert_email_addresses    = []       # No alert emails for staging
 }

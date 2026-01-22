@@ -144,3 +144,15 @@ variable "availability_type" {
     error_message = "availability_type must be either ZONAL or REGIONAL"
   }
 }
+
+variable "activate_alerts" {
+  type        = bool
+  description = "Enable Cloud SQL storage monitoring alerts"
+  default     = false
+}
+
+variable "alert_email_addresses" {
+  type        = list(string)
+  description = "List of email addresses to receive database storage alerts"
+  default     = []
+}

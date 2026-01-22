@@ -145,3 +145,52 @@ resource "postgresql_default_privileges" "app_user_future_sequences" {
 
   depends_on = [postgresql_role.app_user]
 }
+
+# Notification channels for database alerts
+resource "google_monitoring_notification_channel" "db_alert_email" {
+  for_each     = var.activate_alerts ? toset(var.alert_email_addresses) : []
+  project      = var.project_id
+  display_name = "DB Admin - ${each.value}"
+  type         = "email"
+
+  labels = {
+    email_address = each.value
+  }
+}
+
+# Alert policy for disk utilization
+resource "google_monitoring_alert_policy" "disk_utilization" {
+  count        = var.activate_alerts ? 1 : 0
+  project      = var.project_id
+  display_name = "Cloud SQL Disk Utilization - ${var.instance_name}"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Disk utilization above 80%"
+
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.labels.database_id = \"${var.project_id}:${var.instance_name}\" AND metric.type = \"cloudsql.googleapis.com/database/disk/utilization\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.80  # 80% utilization
+
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = [
+    for channel in google_monitoring_notification_channel.db_alert_email : channel.id
+  ]
+
+  alert_strategy {
+    auto_close = "604800s"  # 7 days
+  }
+
+  documentation {
+    content   = "Cloud SQL instance ${var.instance_name} disk utilization has exceeded 80%. Consider increasing disk size or cleaning up old data."
+    mime_type = "text/markdown"
+  }
+}

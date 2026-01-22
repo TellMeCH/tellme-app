@@ -35,4 +35,6 @@ module "api_revision" {
   app_password             = var.app_password
   api_domain               = var.api_domain
   availability_type        = "REGIONAL"  # High availability with automatic failover for production
+  activate_alerts          = true        # Enable storage monitoring alerts for production
+  alert_email_addresses    = var.alert_email_addresses  # Email addresses from deploy.yml
 }

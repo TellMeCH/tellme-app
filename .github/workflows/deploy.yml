@@ -167,28 +167,37 @@ jobs:
       - name: Terraform Plan
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
         run: |
-          terraform plan \
-            -no-color \
-            -input=false \
-            -out=tfplan.bin \
-            -var "project_id=${{ secrets.GCP_PROJECT_ID }}" \
-            -var "region=${{ secrets.GCP_PROJECT_REGION }}" \
-            -var "service_name=${{ vars.SERVICE_NAME }}" \
-            -var "sql_instance=${{ vars.SQL_INSTANCE_NAME }}" \
-            -var "github_repo=${GITHUB_REPOSITORY}" \
-            -var "media_bucket=${{ vars.MEDIA_BUCKET }}" \
-            -var "call_processing_bucket=${{ vars.CALL_PROCESSING_BUCKET }}" \
-            -var "image_url=${{ steps.imgref.outputs.image_ref }}" \
-            -var "settings_name=${{ vars.SETTINGS_NAME }}" \
-            -var "database_name=${{ vars.DATABASE_NAME }}" \
-            -var "processing_queue_name=${{ vars.PROCESSING_QUEUE_NAME }}" \
-            -var "summarization_queue_name=${{ vars.SUMMARIZATION_QUEUE_NAME }}" \
-            -var "tickets_queue_name=${{ vars.TICKETS_QUEUE_NAME }}" \
-            -var "frontend_path=${{ secrets.FRONTEND_PATH }}" \
-            -var "admin_username=${{ steps.db_admin_creds.outputs.admin_username }}" \
-            -var "admin_password=${{ steps.db_admin_creds.outputs.admin_password }}" \
-            -var "app_username=${{ steps.django_db_creds.outputs.app_username }}" \
+          # Base terraform plan command
+          PLAN_ARGS=(
+            -no-color
+            -input=false
+            -out=tfplan.bin
+            -var "project_id=${{ secrets.GCP_PROJECT_ID }}"
+            -var "region=${{ secrets.GCP_PROJECT_REGION }}"
+            -var "service_name=${{ vars.SERVICE_NAME }}"
+            -var "sql_instance=${{ vars.SQL_INSTANCE_NAME }}"
+            -var "github_repo=${GITHUB_REPOSITORY}"
+            -var "media_bucket=${{ vars.MEDIA_BUCKET }}"
+            -var "call_processing_bucket=${{ vars.CALL_PROCESSING_BUCKET }}"
+            -var "image_url=${{ steps.imgref.outputs.image_ref }}"
+            -var "settings_name=${{ vars.SETTINGS_NAME }}"
+            -var "database_name=${{ vars.DATABASE_NAME }}"
+            -var "processing_queue_name=${{ vars.PROCESSING_QUEUE_NAME }}"
+            -var "summarization_queue_name=${{ vars.SUMMARIZATION_QUEUE_NAME }}"
+            -var "tickets_queue_name=${{ vars.TICKETS_QUEUE_NAME }}"
+            -var "frontend_path=${{ secrets.FRONTEND_PATH }}"
+            -var "admin_username=${{ steps.db_admin_creds.outputs.admin_username }}"
+            -var "admin_password=${{ steps.db_admin_creds.outputs.admin_password }}"
+            -var "app_username=${{ steps.django_db_creds.outputs.app_username }}"
             -var "app_password=${{ steps.django_db_creds.outputs.app_password }}"
+          )
+
+          # Add alert email addresses for production only
+          if [ "${{ env.TELLME_ENV }}" = "prod" ]; then
+            PLAN_ARGS+=(-var 'alert_email_addresses=${{ secrets.DB_ALERT_EMAILS }}')
+          fi
+
+          terraform plan "${PLAN_ARGS[@]}"
 
       - name: Terraform Apply
         working-directory: terraform/environments/${{ env.TELLME_ENV }}

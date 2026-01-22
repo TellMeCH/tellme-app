@@ -97,3 +97,9 @@ variable "api_domain" {
   description = "Custom domain for the API Load Balancer"
   default     = "api.tell-me.ch"
 }
+
+# Database monitoring alerts
+variable "alert_email_addresses" {
+  type        = list(string)
+  description = "List of email addresses to receive database storage alerts"
+}

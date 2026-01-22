@@ -63,3 +63,15 @@ variable "availability_type" {
   }
 }
 
+variable "activate_alerts" {
+  type        = bool
+  description = "Enable Cloud SQL storage monitoring alerts"
+  default     = false
+}
+
+variable "alert_email_addresses" {
+  type        = list(string)
+  description = "List of email addresses to receive database storage alerts"
+  default     = []
+}
+
