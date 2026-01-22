@@ -52,3 +52,32 @@ variable "deletion_protection" {
   default     = true
 }
 
+variable "availability_type" {
+  type        = string
+  description = "Availability type for Cloud SQL instance. ZONAL (single zone) or REGIONAL (high availability with automatic failover)"
+  default     = "ZONAL"
+
+  validation {
+    condition     = contains(["ZONAL", "REGIONAL"], var.availability_type)
+    error_message = "availability_type must be either ZONAL or REGIONAL"
+  }
+}
+
+variable "activate_alerts" {
+  type        = bool
+  description = "Enable Cloud SQL storage monitoring alerts"
+  default     = false
+}
+
+variable "alert_email_addresses" {
+  type        = list(string)
+  description = "List of email addresses to receive database storage alerts"
+  default     = []
+}
+
+variable "enable_automated_backups" {
+  type        = bool
+  description = "Enable automated daily backups for Cloud SQL instance"
+  default     = false
+}
+

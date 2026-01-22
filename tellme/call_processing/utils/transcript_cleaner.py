@@ -30,7 +30,11 @@ TRANSCRIPT_CLEANING = [
     {
         'filter': r'\bVoduas\b',
         'correction': 'Vaudoise'
-    }
+    },
+    {
+        'filter': r'\bHausratspolizei\b',
+        'correction': 'Hausratpolice'
+    },
 ]
 
 

@@ -46,6 +46,7 @@ variable "envs" {
     redirect_uris              = optional(list(string))
     google_oauth_client_id     = optional(string)
     google_oauth_client_secret = optional(string)
+    labels                     = optional(map(string))
   }))
 }
 

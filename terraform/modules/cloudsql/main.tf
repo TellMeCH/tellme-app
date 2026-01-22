@@ -20,10 +20,23 @@ resource "google_sql_database_instance" "postgres_instance" {
   settings {
     tier              = var.tier
     edition           = "ENTERPRISE"
-    availability_type = "ZONAL"
+    availability_type = var.availability_type
+
+    # Automated daily backups (Drata compliance)
+    backup_configuration {
+      enabled                        = var.enable_automated_backups
+      start_time                     = "03:00"  # 3 AM UTC
+      point_in_time_recovery_enabled = true
+      transaction_log_retention_days = 7
+      backup_retention_settings {
+        retained_backups = 30  # Keep 30 daily backups
+        retention_unit   = "COUNT"
+      }
+    }
 
     ip_configuration {
-      ssl_mode = "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"
+      ssl_mode    = "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"
+      require_ssl = true
     }
 
     password_validation_policy {
@@ -143,4 +156,151 @@ resource "postgresql_default_privileges" "app_user_future_sequences" {
   privileges  = ["USAGE", "SELECT", "UPDATE"]
 
   depends_on = [postgresql_role.app_user]
+}
+
+# ==============================================================================
+# Database Monitoring and Alerting (Drata Compliance)
+# ==============================================================================
+# When activate_alerts = true, creates email notification channels and 3 alert
+# policies to monitor Cloud SQL database health and notify DB administrators:
+#
+# 1. Disk Utilization Alert (80% threshold)
+#    - Monitors: cloudsql.googleapis.com/database/disk/utilization
+#    - Triggers when storage exceeds 80% for 5 minutes
+#    - Drata Test: "Database Free Storage Space Monitored"
+#
+# 2. Disk Read I/O Alert (10,000 ops/sec threshold)
+#    - Monitors: cloudsql.googleapis.com/database/disk/read_ops_count
+#    - Triggers when read operations exceed 10K/sec for 5 minutes
+#    - Drata Test: "Database I/O Utilization Monitored"
+#
+# 3. CPU Utilization Alert (70% threshold)
+#    - Monitors: cloudsql.googleapis.com/database/cpu/utilization
+#    - Triggers when CPU usage exceeds 70% for 5 minutes
+#    - Drata Test: "Database CPU Monitored"
+#
+# All alerts auto-close after 7 days and include actionable documentation.
+# ==============================================================================
+
+# Notification channels for database alerts
+resource "google_monitoring_notification_channel" "db_alert_email" {
+  for_each     = var.activate_alerts ? toset(var.alert_email_addresses) : []
+  project      = var.project_id
+  display_name = "DB Admin - ${each.value}"
+  type         = "email"
+
+  labels = {
+    email_address = each.value
+  }
+}
+
+# Alert policy for disk utilization
+resource "google_monitoring_alert_policy" "disk_utilization" {
+  count        = var.activate_alerts ? 1 : 0
+  project      = var.project_id
+  display_name = "Cloud SQL Disk Utilization - ${var.instance_name}"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Disk utilization above 80%"
+
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.labels.database_id = \"${var.project_id}:${var.instance_name}\" AND metric.type = \"cloudsql.googleapis.com/database/disk/utilization\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.80  # 80% utilization
+
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = [
+    for channel in google_monitoring_notification_channel.db_alert_email : channel.id
+  ]
+
+  alert_strategy {
+    auto_close = "604800s"  # 7 days
+  }
+
+  documentation {
+    content   = "Cloud SQL instance ${var.instance_name} disk utilization has exceeded 80%. Consider increasing disk size or cleaning up old data."
+    mime_type = "text/markdown"
+  }
+}
+
+# Alert policy for disk read I/O
+resource "google_monitoring_alert_policy" "disk_read_io" {
+  count        = var.activate_alerts ? 1 : 0
+  project      = var.project_id
+  display_name = "Cloud SQL Disk Read I/O - ${var.instance_name}"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Disk read I/O above 10000 ops/sec"
+
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.labels.database_id = \"${var.project_id}:${var.instance_name}\" AND metric.type = \"cloudsql.googleapis.com/database/disk/read_ops_count\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 10000  # 10000 operations per second
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_RATE"
+      }
+    }
+  }
+
+  notification_channels = [
+    for channel in google_monitoring_notification_channel.db_alert_email : channel.id
+  ]
+
+  alert_strategy {
+    auto_close = "604800s"  # 7 days
+  }
+
+  documentation {
+    content   = "Cloud SQL instance ${var.instance_name} disk read I/O has exceeded 10000 operations per second. This may indicate high database load or inefficient queries."
+    mime_type = "text/markdown"
+  }
+}
+
+# Alert policy for CPU utilization
+resource "google_monitoring_alert_policy" "cpu_utilization" {
+  count        = var.activate_alerts ? 1 : 0
+  project      = var.project_id
+  display_name = "Cloud SQL CPU Utilization - ${var.instance_name}"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "CPU utilization above 70%"
+
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.labels.database_id = \"${var.project_id}:${var.instance_name}\" AND metric.type = \"cloudsql.googleapis.com/database/cpu/utilization\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0.70  # 70% CPU utilization
+
+      aggregations {
+        alignment_period   = "300s"
+        per_series_aligner = "ALIGN_MEAN"
+      }
+    }
+  }
+
+  notification_channels = [
+    for channel in google_monitoring_notification_channel.db_alert_email : channel.id
+  ]
+
+  alert_strategy {
+    auto_close = "604800s"  # 7 days
+  }
+
+  documentation {
+    content   = "Cloud SQL instance ${var.instance_name} CPU utilization has exceeded 70%. Consider scaling up the instance tier, optimizing queries, or adding read replicas."
+    mime_type = "text/markdown"
+  }
 }

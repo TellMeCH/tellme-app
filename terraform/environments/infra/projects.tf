@@ -45,5 +45,7 @@ module "project" {
   name            = each.value.name
   billing_account = each.value.billing_account
   environment     = each.value.environment
-  services        = each.value.services != null ? each.value.services : local.default_services
+  # Merge default services with environment-specific services (if provided)
+  services        = each.value.services != null ? tolist(toset(concat(local.default_services, tolist(each.value.services)))) : local.default_services
+  labels          = each.value.labels != null ? each.value.labels : {}
 }
