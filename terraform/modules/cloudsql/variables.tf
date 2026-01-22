@@ -52,3 +52,14 @@ variable "deletion_protection" {
   default     = true
 }
 
+variable "availability_type" {
+  type        = string
+  description = "Availability type for Cloud SQL instance. ZONAL (single zone) or REGIONAL (high availability with automatic failover)"
+  default     = "ZONAL"
+
+  validation {
+    condition     = contains(["ZONAL", "REGIONAL"], var.availability_type)
+    error_message = "availability_type must be either ZONAL or REGIONAL"
+  }
+}
+

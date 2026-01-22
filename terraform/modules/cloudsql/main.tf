@@ -20,10 +20,11 @@ resource "google_sql_database_instance" "postgres_instance" {
   settings {
     tier              = var.tier
     edition           = "ENTERPRISE"
-    availability_type = "ZONAL"
+    availability_type = var.availability_type
 
     ip_configuration {
-      ssl_mode = "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"
+      ssl_mode    = "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"
+      require_ssl = true
     }
 
     password_validation_policy {
