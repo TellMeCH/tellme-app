@@ -35,8 +35,7 @@ resource "google_sql_database_instance" "postgres_instance" {
     }
 
     ip_configuration {
-      ssl_mode    = "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"
-      require_ssl = true
+      ssl_mode = "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"
     }
 
     password_validation_policy {
