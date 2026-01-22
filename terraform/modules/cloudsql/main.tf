@@ -194,3 +194,40 @@ resource "google_monitoring_alert_policy" "disk_utilization" {
     mime_type = "text/markdown"
   }
 }
+
+# Alert policy for disk read I/O
+resource "google_monitoring_alert_policy" "disk_read_io" {
+  count        = var.activate_alerts ? 1 : 0
+  project      = var.project_id
+  display_name = "Cloud SQL Disk Read I/O - ${var.instance_name}"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Disk read I/O above 10000 ops/sec"
+
+    condition_threshold {
+      filter          = "resource.type = \"cloudsql_database\" AND resource.labels.database_id = \"${var.project_id}:${var.instance_name}\" AND metric.type = \"cloudsql.googleapis.com/database/disk/read_ops_count\""
+      duration        = "300s"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 10000  # 10000 operations per second
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_RATE"
+      }
+    }
+  }
+
+  notification_channels = [
+    for channel in google_monitoring_notification_channel.db_alert_email : channel.id
+  ]
+
+  alert_strategy {
+    auto_close = "604800s"  # 7 days
+  }
+
+  documentation {
+    content   = "Cloud SQL instance ${var.instance_name} disk read I/O has exceeded 10000 operations per second. This may indicate high database load or inefficient queries."
+    mime_type = "text/markdown"
+  }
+}
