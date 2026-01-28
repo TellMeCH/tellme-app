@@ -26,4 +26,8 @@ resource "google_compute_firewall" "deny_public_ssh" {
   source_ranges = ["0.0.0.0/0"]
 
   description = "Explicitly deny SSH from public internet for Drata compliance (overrides default-allow-ssh)"
+
+  log_config {
+    metadata = "INCLUDE_ALL_METADATA"
+  }
 }
