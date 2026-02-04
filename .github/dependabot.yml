@@ -1,0 +1,163 @@
+# GitHub Dependabot configuration for automated dependency updates
+# Documentation: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Python dependencies (main application using uv/pip)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Python dependencies (Langfuse exporter job)
+  - package-ecosystem: "pip"
+    directory: "/tellme/jobs/langfuse_exporter"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "python"
+      - "langfuse-exporter"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Docker dependencies (Firebase emulator)
+  - package-ecosystem: "docker"
+    directory: "/tellme/emulators/firebase"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "emulator"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Docker dependencies (Genesys AudioHook emulator)
+  - package-ecosystem: "docker"
+    directory: "/tellme/emulators/genesys_audiohook"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "emulator"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Terraform dependencies (infrastructure environment)
+  - package-ecosystem: "terraform"
+    directory: "/terraform/environments/infra"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "terraform"
+      - "infrastructure"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Terraform dependencies (staging environment)
+  - package-ecosystem: "terraform"
+    directory: "/terraform/environments/staging"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "terraform"
+      - "staging"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Terraform dependencies (production environment)
+  - package-ecosystem: "terraform"
+    directory: "/terraform/environments/prod"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "terraform"
+      - "production"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # GitHub Actions workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "altogi-tellme"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
