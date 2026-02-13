@@ -95,6 +95,9 @@ class SummaryActionsViewSet(viewsets.ReadOnlyModelViewSet):
                 return response.Response(serializer.get_summary_data(obj))
             elif request.method == 'POST':
                 result = serializer.create_summary_data(obj)
+                # HTTP 204 must not have a response body
+                if result['status_code'] == 204:
+                    return response.Response(status=status.HTTP_204_NO_CONTENT)
                 return response.Response(result, status=result['status_code'])
         except ValueError as e:
             return response.Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -804,6 +807,9 @@ class CustomerViewSet(viewsets.ModelViewSet, SearchViewSet, TrendsActionsViewSet
                 return response.Response(ticket_data, status=status.HTTP_200_OK)
             elif request.method == 'POST':
                 task_id, status_code, message = customer.create_ticket(requester_id=request.user.id)
+                # HTTP 204 must not have a response body
+                if status_code == 204:
+                    return response.Response(status=status.HTTP_204_NO_CONTENT)
                 return response.Response({
                     'task_id': task_id,
                     'status_code': status_code,
