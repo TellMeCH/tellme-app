@@ -255,20 +255,14 @@ resource "google_compute_backend_service" "api_backend" {
 }
 
 # IAP Configuration for /admin endpoints
-# OAuth Brand (required for IAP)
-resource "google_iap_brand" "admin_brand" {
-  provider          = google-beta
-  project           = var.project_id
-  support_email     = var.iap_support_email
-  application_title = "TellMe Admin Access"
-}
-
-# OAuth Client for IAP
-resource "google_iap_client" "admin_client" {
-  provider     = google-beta
-  display_name = "TellMe Admin IAP Client"
-  brand        = google_iap_brand.admin_brand.name
-}
+# Note: OAuth client must be created manually once in GCP Console
+# 1. Go to: APIs & Services > Credentials
+# 2. Create OAuth 2.0 Client ID
+# 3. Application type: Web application
+# 4. Name: "TellMe Admin IAP Client"
+# 5. No redirect URIs needed for IAP
+# 6. Copy the Client ID and Client Secret
+# 7. Store them as GitHub secrets: IAP_CLIENT_ID and IAP_CLIENT_SECRET
 
 # Serverless NEG for Cloud Run (IAP Backend)
 resource "google_compute_region_network_endpoint_group" "cloud_run_neg" {
@@ -278,9 +272,8 @@ resource "google_compute_region_network_endpoint_group" "cloud_run_neg" {
   region                = var.region
   network_endpoint_type = "SERVERLESS"
 
-  serverless_deployment {
-    platform = "run.googleapis.com"
-    resource = var.service_name
+  cloud_run {
+    service = var.service_name
   }
 
   lifecycle {
@@ -308,8 +301,8 @@ resource "google_compute_backend_service" "admin_backend" {
   # Enable IAP
   iap {
     enabled              = true
-    oauth2_client_id     = google_iap_client.admin_client.client_id
-    oauth2_client_secret = google_iap_client.admin_client.secret
+    oauth2_client_id     = var.iap_client_id
+    oauth2_client_secret = var.iap_client_secret
   }
 
   log_config {
