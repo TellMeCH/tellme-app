@@ -9,18 +9,6 @@ resource "google_compute_security_policy" "api_security_policy" {
   project     = var.project_id
   description = "Security policy for TellMe API with DDoS protection and WAF rules"
 
-  # ALLOW DJANGO ADMIN ACCESS (bypass WAF rules)
-  # Note: Admin traffic goes through IAP, not API Gateway
-  rule {
-    action   = "allow"
-    priority = "100"
-    match {
-      expr {
-        expression = "request.path.matches('/admin.*')"
-      }
-    }
-    description = "Allow access to Django admin interface (IAP-protected)"
-  }
 
   # Block known malicious IPs
   rule {
