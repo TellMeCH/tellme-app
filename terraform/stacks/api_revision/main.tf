@@ -114,7 +114,7 @@ module "cloud_run_v2" {
   service_account        = google_service_account.app.email
   execution_environment  = "EXECUTION_ENVIRONMENT_GEN2"
 
-  # Ensure IAM permissions are granted before deploying Cloud Run
+  # Ensure IAM permissions and IAP service account are created before deploying Cloud Run
   depends_on = [
     google_secret_manager_secret_iam_member.runtime_django_settings,
     google_project_iam_member.runtime_cloudsql_client,
@@ -122,7 +122,8 @@ module "cloud_run_v2" {
     google_project_iam_member.runtime_cloudtasks_enqueuer,
     google_project_iam_member.runtime_cloudtasks_viewer,
     google_storage_bucket_iam_member.runtime_media_bucket,
-    google_storage_bucket_iam_member.runtime_call_processing_bucket
+    google_storage_bucket_iam_member.runtime_call_processing_bucket,
+    google_project_service_identity.iap_sa
   ]
 
   template_scaling = {
