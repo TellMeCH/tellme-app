@@ -73,16 +73,31 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-  # SQL Injection
+  # SQL Injection with IAP OAuth token exclusion
   rule {
     action   = "deny(403)"
     priority = "1200"
     match {
       expr {
-        expression = "evaluatePreconfiguredExpr('sqli-stable')"
+        expression = "evaluatePreconfiguredExpr('sqli-v33-stable')"
       }
     }
-    description = "Block SQL injection attempts"
+    description = "Block SQL injection attempts (with IAP token exclusion)"
+
+    # Exclude IAP OAuth redirect token from SQL injection checks
+    # This prevents false positives on legitimate IAP authentication callbacks
+    # while maintaining SQL injection protection for all other parameters
+    preconfigured_waf_config {
+      exclusion {
+        target_rule_set = "sqli-v33-stable"
+        target_rule_ids = ["owasp-crs-v030301-id942430-sqli"]
+
+        request_query_param {
+          operator = "EQUALS"
+          value    = "redirect_token_v2"
+        }
+      }
+    }
   }
 
   # XSS Protection
