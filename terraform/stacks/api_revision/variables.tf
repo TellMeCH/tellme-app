@@ -162,3 +162,14 @@ variable "enable_automated_backups" {
   description = "Enable automated daily backups for Cloud SQL instance"
   default     = false
 }
+
+# IAP Configuration
+variable "iap_support_email" {
+  type        = string
+  description = "Support email for IAP OAuth brand (must be a valid email address in the project)"
+}
+
+variable "iap_allowed_members" {
+  type        = list(string)
+  description = "List of members allowed to access /admin through IAP (format: user:email@domain.com or group:group@domain.com)"
+}

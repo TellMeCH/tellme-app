@@ -103,3 +103,14 @@ variable "alert_email_addresses" {
   type        = list(string)
   description = "List of email addresses to receive database storage alerts"
 }
+
+# IAP Configuration
+variable "iap_support_email" {
+  type        = string
+  description = "Support email for IAP OAuth brand"
+}
+
+variable "iap_allowed_members" {
+  type        = list(string)
+  description = "List of members allowed to access /admin through IAP"
+}
