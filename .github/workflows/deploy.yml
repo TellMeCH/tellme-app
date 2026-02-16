@@ -191,7 +191,7 @@ jobs:
             -var "app_username=${{ steps.django_db_creds.outputs.app_username }}"
             -var "app_password=${{ steps.django_db_creds.outputs.app_password }}"
             -var "iap_support_email=${{ secrets.IAP_SUPPORT_EMAIL }}"
-            -var "iap_allowed_members=${{ secrets.IAP_ALLOWED_MEMBERS }}"
+            -var 'iap_allowed_members=${{ secrets.IAP_ALLOWED_MEMBERS }}'
           )
 
           # Add alert email addresses for production only
