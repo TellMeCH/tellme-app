@@ -79,7 +79,7 @@ resource "google_compute_security_policy" "api_security_policy" {
     priority = "1200"
     match {
       expr {
-        expression = "evaluatePreconfiguredExpr('sqli-v33-stable')"
+        expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
       }
     }
     description = "Block SQL injection attempts (with IAP token exclusion)"
