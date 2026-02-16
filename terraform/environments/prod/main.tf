@@ -38,4 +38,6 @@ module "api_revision" {
   activate_alerts          = true        # Enable storage monitoring alerts for production
   alert_email_addresses    = var.alert_email_addresses  # Email addresses from deploy.yml
   enable_automated_backups = true        # Enable daily automated backups for production (Drata compliance)
+  iap_support_email        = var.iap_support_email
+  iap_allowed_members      = var.iap_allowed_members
 }
