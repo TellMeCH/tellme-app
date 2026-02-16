@@ -90,7 +90,11 @@ resource "google_compute_security_policy" "api_security_policy" {
     preconfigured_waf_config {
       exclusion {
         target_rule_set = "sqli-v33-stable"
-        target_rule_ids = ["owasp-crs-v030301-id942430-sqli"]
+        # Exclude multiple SQL injection rules that trigger on the base64 IAP token
+        target_rule_ids = [
+          "owasp-crs-v030301-id942430-sqli",
+          "owasp-crs-v030301-id942431-sqli"
+        ]
 
         request_query_param {
           operator = "EQUALS"
