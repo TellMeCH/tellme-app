@@ -135,7 +135,8 @@ module "cloud_run_v2" {
   ingress = "INGRESS_TRAFFIC_ALL"
   members = [
    "serviceAccount:${google_service_account.app.email}",  # API Gateway can invoke
-   "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com"  # Cloud Tasks can invoke
+   "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com",  # Cloud Tasks can invoke
+   "serviceAccount:service-${data.google_project.current.number}@gcp-sa-iap.iam.gserviceaccount.com"  # IAP can invoke
   ]
 
   containers = [
