@@ -55,4 +55,6 @@ module "api_revision" {
   activate_alerts          = false    # Alerts disabled for staging
   alert_email_addresses    = []       # No alert emails for staging
   enable_automated_backups = false    # No automated backups for staging (cost savings)
+  iap_support_email        = var.iap_support_email
+  iap_allowed_members      = var.iap_allowed_members
 }
