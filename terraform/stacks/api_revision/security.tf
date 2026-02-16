@@ -90,11 +90,9 @@ resource "google_compute_security_policy" "api_security_policy" {
     preconfigured_waf_config {
       exclusion {
         target_rule_set = "sqli-v33-stable"
-        # Exclude multiple SQL injection rules that trigger on the base64 IAP token
-        target_rule_ids = [
-          "owasp-crs-v030301-id942430-sqli",
-          "owasp-crs-v030301-id942431-sqli"
-        ]
+        # Omitting target_rule_ids excludes ALL SQL injection rules for this parameter only
+        # This prevents false positives on the base64-encoded IAP OAuth token
+        # All other query parameters still get full SQL injection protection
 
         request_query_param {
           operator = "EQUALS"
