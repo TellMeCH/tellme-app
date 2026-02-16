@@ -99,9 +99,15 @@ variable "api_domain" {
 }
 
 # IAP Configuration
-variable "iap_support_email" {
+variable "iap_client_id" {
   type        = string
-  description = "Support email for IAP OAuth brand"
+  description = "OAuth 2.0 Client ID for IAP"
+}
+
+variable "iap_client_secret" {
+  type        = string
+  description = "OAuth 2.0 Client Secret for IAP"
+  sensitive   = true
 }
 
 variable "iap_allowed_members" {
