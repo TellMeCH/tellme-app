@@ -90,13 +90,23 @@ resource "google_compute_security_policy" "api_security_policy" {
     preconfigured_waf_config {
       exclusion {
         target_rule_set = "sqli-v33-stable"
-        # Omitting target_rule_ids excludes ALL SQL injection rules for this parameter only
-        # This prevents false positives on the base64-encoded IAP OAuth token
-        # All other query parameters still get full SQL injection protection
 
+        # FIX 1: Omitting target_rule_ids here is correct—it excludes ALL SQLi rules
+        # for this specific parameter, which covers 942432, 942430, etc.
+
+        # FIX 2: Explicitly naming the parameter in the query
         request_query_param {
           operator = "EQUALS"
           value    = "redirect_token_v2"
+        }
+      }
+
+      # IAP also sends gcp-iap-mode
+      exclusion {
+        target_rule_set = "sqli-v33-stable"
+        request_query_param {
+          operator = "EQUALS"
+          value    = "gcp-iap-mode"
         }
       }
     }
