@@ -73,40 +73,36 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-  # SQL Injection with IAP OAuth token exclusion
+# SQL Injection with IAP OAuth token exclusion
   rule {
     action   = "deny(403)"
     priority = "1200"
     match {
       expr {
-        expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
+        # Pinned to the version shown in logs for absolute certainty
+        expression = "evaluatePreconfiguredWaf('sqli-v030301')"
       }
     }
     description = "Block SQL injection attempts (with IAP token exclusion)"
 
-    # Exclude IAP OAuth redirect token from SQL injection checks
-    # This prevents false positives on legitimate IAP authentication callbacks
-    # while maintaining SQL injection protection for all other parameters
     preconfigured_waf_config {
       exclusion {
-        target_rule_set = "sqli-v33-stable"
+        # This must match the expression version above
+        target_rule_set = "sqli-v030301"
 
-        # FIX 1: Omitting target_rule_ids here is correct—it excludes ALL SQLi rules
-        # for this specific parameter, which covers 942432, 942430, etc.
-
-        # FIX 2: Explicitly naming the parameter in the query
-        request_query_param {
+        # Target the parameter name specifically
+        request_query_to_scan {
           operator = "EQUALS"
-          value    = "redirect_token_v2"
+          target   = "redirect_token_v2"
         }
       }
 
       # IAP also sends gcp-iap-mode
       exclusion {
-        target_rule_set = "sqli-v33-stable"
-        request_query_param {
+        target_rule_set = "sqli-v030301"
+        request_query_to_scan {
           operator = "EQUALS"
-          value    = "gcp-iap-mode"
+          target   = "gcp-iap-mode"
         }
       }
     }
