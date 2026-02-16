@@ -164,9 +164,15 @@ variable "enable_automated_backups" {
 }
 
 # IAP Configuration
-variable "iap_support_email" {
+variable "iap_client_id" {
   type        = string
-  description = "Support email for IAP OAuth brand (must be a valid email address in the project)"
+  description = "OAuth 2.0 Client ID for IAP (created manually in GCP Console)"
+}
+
+variable "iap_client_secret" {
+  type        = string
+  description = "OAuth 2.0 Client Secret for IAP (created manually in GCP Console)"
+  sensitive   = true
 }
 
 variable "iap_allowed_members" {
