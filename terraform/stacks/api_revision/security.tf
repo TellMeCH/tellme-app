@@ -260,9 +260,17 @@ resource "google_compute_backend_service" "api_backend" {
 # 2. Create OAuth 2.0 Client ID
 # 3. Application type: Web application
 # 4. Name: "TellMe Admin IAP Client"
-# 5. No redirect URIs needed for IAP
+# 5. Add redirect URI: https://iap.googleapis.com/v1/oauth/clientIds/YOUR_CLIENT_ID:handleRedirect
 # 6. Copy the Client ID and Client Secret
 # 7. Store them as GitHub secrets: IAP_CLIENT_ID and IAP_CLIENT_SECRET
+
+# Provision the IAP service account
+# This creates: service-PROJECT_NUMBER@gcp-sa-iap.iam.gserviceaccount.com
+resource "google_project_service_identity" "iap_sa" {
+  provider = google-beta
+  project  = var.project_id
+  service  = "iap.googleapis.com"
+}
 
 # Serverless NEG for Cloud Run (IAP Backend)
 resource "google_compute_region_network_endpoint_group" "cloud_run_neg" {
