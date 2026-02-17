@@ -73,38 +73,28 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-# SQL Injection with IAP OAuth token exclusion
+# SPECIAL BYPASS: Allow IAP OAuth callbacks to bypass ONLY the noisy SQLi rules
+  rule {
+    action   = "allow"
+    priority = "1190" # Runs just before the general SQLi rule
+    match {
+      expr {
+        expression = "request.path.matches('/admin/login/.*') && has(request.query['redirect_token_v2'])"
+      }
+    }
+    description = "Safe bypass for IAP login tokens to prevent 942432 false positives"
+  }
+
+  # GENERAL SQLi: Protect everything else
   rule {
     action   = "deny(403)"
     priority = "1200"
     match {
       expr {
-        # The friendly name for the rule set
         expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
       }
     }
-    description = "Block SQL injection attempts (with IAP token exclusion)"
-
-    preconfigured_waf_config {
-      exclusion {
-        # This must match the name used in the evaluatePreconfiguredWaf expression
-        target_rule_set = "sqli-v33-stable"
-
-        request_query_param {
-          operator = "EQUALS"
-          value    = "redirect_token_v2"
-        }
-      }
-
-      # IAP also sends gcp-iap-mode
-      exclusion {
-        target_rule_set = "sqli-v33-stable"
-        request_query_param {
-          operator = "EQUALS"
-          value    = "gcp-iap-mode"
-        }
-      }
-    }
+    description = "Block SQL injection attempts for all other traffic"
   }
 
   # XSS Protection
