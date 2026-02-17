@@ -79,7 +79,7 @@ resource "google_compute_security_policy" "api_security_policy" {
     priority = "1200"
     match {
       expr {
-        # The parser likes '-stable' here
+        # The friendly name for the rule set
         expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
       }
     }
@@ -87,8 +87,8 @@ resource "google_compute_security_policy" "api_security_policy" {
 
     preconfigured_waf_config {
       exclusion {
-        # The exclusion logic requires the exact version ID from your logs
-        target_rule_set = "sqli-v030301"
+        # This must match the name used in the evaluatePreconfiguredWaf expression
+        target_rule_set = "sqli-v33-stable"
 
         request_query_param {
           operator = "EQUALS"
@@ -98,7 +98,7 @@ resource "google_compute_security_policy" "api_security_policy" {
 
       # IAP also sends gcp-iap-mode
       exclusion {
-        target_rule_set = "sqli-v030301"
+        target_rule_set = "sqli-v33-stable"
         request_query_param {
           operator = "EQUALS"
           value    = "gcp-iap-mode"
