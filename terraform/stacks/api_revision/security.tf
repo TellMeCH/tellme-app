@@ -73,16 +73,20 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-# SPECIAL BYPASS: Allow IAP OAuth callbacks to bypass ONLY the noisy SQLi rules
+# SPECIAL BYPASS: Allow IAP login flow to bypass SQLi false positives
+  # Covers both initial request and OAuth callback:
+  # 1. Initial: /admin/login/?next=/admin/ (next param triggers SQLi 942420)
+  # 2. Callback: /admin/login/...?redirect_token_v2=... (token triggers SQLi 942432)
+  # Safe because IAP authenticates users before reaching application
   rule {
     action   = "allow"
     priority = "1190" # Runs just before the general SQLi rule
     match {
       expr {
-        expression = "request.path.matches('/admin/login/.*') && request.query.contains('redirect_token_v2=')"
+        expression = "request.path.matches('/admin/login.*') && (request.query.contains('next=/admin') || request.query.contains('redirect_token_v2='))"
       }
     }
-    description = "Safe bypass for IAP login tokens to prevent 942432 false positives"
+    description = "Bypass WAF for IAP login flow (initial request with next param + OAuth callback with redirect_token_v2)"
   }
 
   # GENERAL SQLi: Protect everything else
