@@ -79,7 +79,7 @@ resource "google_compute_security_policy" "api_security_policy" {
     priority = "1190" # Runs just before the general SQLi rule
     match {
       expr {
-        expression = "request.path.matches('/admin/login/.*') && has(request.query['redirect_token_v2'])"
+        expression = "request.path.matches('/admin/login/.*') && has(request.query.redirect_token_v2)"
       }
     }
     description = "Safe bypass for IAP login tokens to prevent 942432 false positives"
