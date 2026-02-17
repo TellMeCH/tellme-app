@@ -90,19 +90,19 @@ resource "google_compute_security_policy" "api_security_policy" {
         # This must match the expression version above
         target_rule_set = "sqli-v030301"
 
-        # Target the parameter name specifically
-        request_query_to_scan {
+        # This is the correct block for targeting the parameter KEY
+        request_query_param {
           operator = "EQUALS"
-          target   = "redirect_token_v2"
+          arg_name = "redirect_token_v2"
         }
       }
 
       # IAP also sends gcp-iap-mode
       exclusion {
         target_rule_set = "sqli-v030301"
-        request_query_to_scan {
+        request_query_param {
           operator = "EQUALS"
-          target   = "gcp-iap-mode"
+          arg_name = "gcp-iap-mode"
         }
       }
     }
