@@ -73,34 +73,6 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-# SPECIAL BYPASS: Allow entire /admin backend to bypass WAF
-  # Safe because IAP (Identity-Aware Proxy) authenticates ALL /admin traffic:
-  # - Only users in iap_allowed_members can access ANY /admin path
-  # - IAP validates OAuth tokens cryptographically before reaching application
-  # - WAF false positives (SQLi rules) were blocking legitimate IAP login flow
-  # - Defense in depth: IAP authentication + Django's built-in security
-  rule {
-    action   = "allow"
-    priority = "1190"
-    match {
-      expr {
-        expression = "request.path.matches('/admin/.*') || request.path.matches('/admin')"
-      }
-    }
-    description = "Bypass WAF for IAP-protected admin backend"
-  }
-
-  # GENERAL SQLi: Protect everything else
-  rule {
-    action   = "deny(403)"
-    priority = "1200"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
-      }
-    }
-    description = "Block SQL injection attempts for all other traffic"
-  }
 
   # XSS Protection
   rule {
@@ -194,6 +166,33 @@ resource "google_compute_security_policy" "api_security_policy" {
       }
     }
     description = "Require proper Content-Type for API requests"
+  }
+
+  # SPECIAL BYPASS: Allow /admin to bypass ONLY SQLi checks (after all other WAF rules)
+  # Admin traffic still gets protected by XSS, LFI, RCE, rate limiting, etc.
+  # Only SQLi is bypassed due to false positives on IAP OAuth flow
+  # This provides better defense in depth than bypassing all WAF rules
+  rule {
+    action   = "allow"
+    priority = "1800"
+    match {
+      expr {
+        expression = "request.path.matches('/admin/.*') || request.path.matches('/admin')"
+      }
+    }
+    description = "Bypass SQLi checks for IAP-protected admin (after other WAF checks applied)"
+  }
+
+  # GENERAL SQLi: Block SQL injection for all traffic (admin already bypassed above)
+  rule {
+    action   = "deny(403)"
+    priority = "1900"
+    match {
+      expr {
+        expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
+      }
+    }
+    description = "Block SQL injection attempts (admin traffic already allowed above)"
   }
 
   # DEFAULT ALLOW
