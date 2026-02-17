@@ -87,7 +87,7 @@ resource "google_compute_security_policy" "api_security_policy" {
     priority = "1190" # Runs just before the general SQLi rule
     match {
       expr {
-        expression = "request.path == '/admin/login/' && (request.query.contains('next=/admin/') || request.query.contains('next=/admin&') || request.query.contains('redirect_token_v2='))"
+        expression = "request.path == '/admin/login/' && (request.query.contains('next=/admin/') || request.query.contains('next=/admin&') || request.query == 'next=/admin' || request.query.contains('redirect_token_v2='))"
       }
     }
     description = "Bypass WAF for IAP login flow (allows next=/admin or next=/admin/ only)"
