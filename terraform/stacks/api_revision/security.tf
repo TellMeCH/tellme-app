@@ -77,16 +77,20 @@ resource "google_compute_security_policy" "api_security_policy" {
   # Covers both initial request and OAuth callback:
   # 1. Initial: /admin/login/?next=/admin/ (next param triggers SQLi 942420)
   # 2. Callback: /admin/login/...?redirect_token_v2=... (token triggers SQLi 942432)
-  # Safe because IAP authenticates users before reaching application
+  # Restricts next parameter to /admin/ only (no path traversal like next=/admin/../etc/passwd)
+  # Safe because:
+  # - IAP authenticates users before reaching application
+  # - Only allows specific next=/admin/ destination (not arbitrary paths)
+  # - Django validates redirect destinations (open redirect protection)
   rule {
     action   = "allow"
     priority = "1190" # Runs just before the general SQLi rule
     match {
       expr {
-        expression = "request.path.matches('/admin/login.*') && (request.query.contains('next=/admin') || request.query.contains('redirect_token_v2='))"
+        expression = "request.path == '/admin/login/' && (request.query.matches('.*next=/admin/?(&.*)?') || request.query.contains('redirect_token_v2='))"
       }
     }
-    description = "Bypass WAF for IAP login flow (initial request with next param + OAuth callback with redirect_token_v2)"
+    description = "Bypass WAF for IAP login flow (restricts next param to /admin/ only)"
   }
 
   # GENERAL SQLi: Protect everything else
