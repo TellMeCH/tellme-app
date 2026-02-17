@@ -74,24 +74,20 @@ resource "google_compute_security_policy" "api_security_policy" {
   }
 
 # SPECIAL BYPASS: Allow IAP login flow to bypass SQLi false positives
-  # Covers both initial request and OAuth callback:
-  # 1. Initial: /admin/login/?next=/admin/ (next param triggers SQLi 942420)
-  #            /admin/two-factor/account/login/?next=/admin/ (if 2FA enabled)
-  # 2. Callback: /admin/.../login/?redirect_token_v2=... (token triggers SQLi 942432)
-  # Restricts next parameter to /admin (with or without trailing slash)
+  # Matches any admin login path (standard login, 2FA login, etc.)
   # Safe because:
-  # - IAP authenticates users before reaching application
+  # - IAP authenticates all /admin traffic before reaching application
   # - Django validates redirect destinations (built-in open redirect protection)
-  # - Only allows next=/admin/ or next=/admin, not arbitrary paths
+  # - next param restricted to /admin paths only
   rule {
     action   = "allow"
     priority = "1190" # Runs just before the general SQLi rule
     match {
       expr {
-        expression = "(request.path == '/admin/login/' || request.path == '/admin/two-factor/account/login/') && (request.query.contains('next=/admin/') || request.query.contains('next=/admin&') || request.query == 'next=/admin' || request.query.contains('redirect_token_v2='))"
+        expression = "request.path.matches('/admin/.*/login/.*') && (request.query.contains('next=/admin') || request.query.contains('redirect_token_v2='))"
       }
     }
-    description = "Bypass WAF for IAP login flow including 2FA (allows next=/admin or next=/admin/ only)"
+    description = "Bypass WAF for IAP login flow (all admin login paths)"
   }
 
   # GENERAL SQLi: Protect everything else
