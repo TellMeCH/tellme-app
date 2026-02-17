@@ -93,7 +93,7 @@ resource "google_compute_security_policy" "api_security_policy" {
         # 'target' is the correct argument name for the parameter key
         request_query_param {
           operator = "EQUALS"
-          target   = "redirect_token_v2"
+          value   = "redirect_token_v2"
         }
       }
 
@@ -102,7 +102,7 @@ resource "google_compute_security_policy" "api_security_policy" {
         target_rule_set = "sqli-v030301"
         request_query_param {
           operator = "EQUALS"
-          target   = "gcp-iap-mode"
+          value   = "gcp-iap-mode"
         }
       }
     }
