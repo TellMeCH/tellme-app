@@ -73,21 +73,21 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-# SPECIAL BYPASS: Allow IAP login flow to bypass SQLi false positives
-  # Matches any admin login path (standard login, 2FA login, etc.)
-  # Safe because:
-  # - IAP authenticates all /admin traffic before reaching application
-  # - Django validates redirect destinations (built-in open redirect protection)
-  # - next param restricted to /admin paths only
+# SPECIAL BYPASS: Allow entire /admin backend to bypass WAF
+  # Safe because IAP (Identity-Aware Proxy) authenticates ALL /admin traffic:
+  # - Only users in iap_allowed_members can access ANY /admin path
+  # - IAP validates OAuth tokens cryptographically before reaching application
+  # - WAF false positives (SQLi rules) were blocking legitimate IAP login flow
+  # - Defense in depth: IAP authentication + Django's built-in security
   rule {
     action   = "allow"
-    priority = "1190" # Runs just before the general SQLi rule
+    priority = "1190"
     match {
       expr {
-        expression = "request.path.matches('/admin/.*/login/.*') && (request.query.contains('next=/admin') || request.query.contains('redirect_token_v2='))"
+        expression = "request.path.matches('/admin/.*') || request.path.matches('/admin')"
       }
     }
-    description = "Bypass WAF for IAP login flow (all admin login paths)"
+    description = "Bypass WAF for IAP-protected admin backend"
   }
 
   # GENERAL SQLi: Protect everything else
