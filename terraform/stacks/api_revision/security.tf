@@ -90,10 +90,10 @@ resource "google_compute_security_policy" "api_security_policy" {
         # This must match the expression version above
         target_rule_set = "sqli-v030301"
 
-        # This is the correct block for targeting the parameter KEY
+        # 'target' is the correct argument name for the parameter key
         request_query_param {
           operator = "EQUALS"
-          arg_name = "redirect_token_v2"
+          target   = "redirect_token_v2"
         }
       }
 
@@ -102,7 +102,7 @@ resource "google_compute_security_policy" "api_security_policy" {
         target_rule_set = "sqli-v030301"
         request_query_param {
           operator = "EQUALS"
-          arg_name = "gcp-iap-mode"
+          target   = "gcp-iap-mode"
         }
       }
     }
