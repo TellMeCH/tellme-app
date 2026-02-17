@@ -79,21 +79,20 @@ resource "google_compute_security_policy" "api_security_policy" {
     priority = "1200"
     match {
       expr {
-        # Pinned to the version shown in logs for absolute certainty
-        expression = "evaluatePreconfiguredWaf('sqli-v030301')"
+        # The parser likes '-stable' here
+        expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
       }
     }
     description = "Block SQL injection attempts (with IAP token exclusion)"
 
     preconfigured_waf_config {
       exclusion {
-        # This must match the expression version above
+        # The exclusion logic requires the exact version ID from your logs
         target_rule_set = "sqli-v030301"
 
-        # 'target' is the correct argument name for the parameter key
         request_query_param {
           operator = "EQUALS"
-          value   = "redirect_token_v2"
+          value    = "redirect_token_v2"
         }
       }
 
@@ -102,7 +101,7 @@ resource "google_compute_security_policy" "api_security_policy" {
         target_rule_set = "sqli-v030301"
         request_query_param {
           operator = "EQUALS"
-          value   = "gcp-iap-mode"
+          value    = "gcp-iap-mode"
         }
       }
     }
