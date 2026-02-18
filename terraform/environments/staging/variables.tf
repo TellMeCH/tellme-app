@@ -97,3 +97,20 @@ variable "api_domain" {
   description = "Custom domain for the API Load Balancer"
   default     = "test-api.tell-me.ch"
 }
+
+# IAP Configuration
+variable "iap_client_id" {
+  type        = string
+  description = "OAuth 2.0 Client ID for IAP"
+}
+
+variable "iap_client_secret" {
+  type        = string
+  description = "OAuth 2.0 Client Secret for IAP"
+  sensitive   = true
+}
+
+variable "iap_allowed_members" {
+  type        = list(string)
+  description = "List of members allowed to access /admin through IAP"
+}

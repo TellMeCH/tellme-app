@@ -162,3 +162,20 @@ variable "enable_automated_backups" {
   description = "Enable automated daily backups for Cloud SQL instance"
   default     = false
 }
+
+# IAP Configuration
+variable "iap_client_id" {
+  type        = string
+  description = "OAuth 2.0 Client ID for IAP (created manually in GCP Console)"
+}
+
+variable "iap_client_secret" {
+  type        = string
+  description = "OAuth 2.0 Client Secret for IAP (created manually in GCP Console)"
+  sensitive   = true
+}
+
+variable "iap_allowed_members" {
+  type        = list(string)
+  description = "List of members allowed to access /admin through IAP (format: user:email@domain.com or group:group@domain.com)"
+}

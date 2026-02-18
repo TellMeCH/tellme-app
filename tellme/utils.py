@@ -169,6 +169,9 @@ def add_google_cloud_extensions(schema):
 def add_missing_endpoints(schema):
     """
     Add endpoints that aren't auto-discovered by drf-spectacular.
+
+    Note: /admin endpoints are NOT added here as they are served directly
+    through IAP-protected Cloud Run backend, bypassing the API Gateway.
     """
     if 'paths' not in schema:
         schema['paths'] = {}
@@ -239,43 +242,6 @@ def add_missing_endpoints(schema):
                     }
                 }
             }
-        }
-    }
-
-    # Common configuration for all Admin paths
-    # security: [] is critical to bypass API Gateway Auth
-    admin_config = {
-        'tags': ['admin'],
-        'security': [],
-        'x-google-backend': 'cloud-run-backend',
-        'responses': {
-            '200': {'description': 'Django Admin Interface'},
-            '302': {'description': 'Redirect'}
-        }
-    }
-
-    # Path 1: Root Admin (/admin)
-    schema['paths']['/admin'] = {
-        'get': {
-            'operationId': 'django_admin_root',
-            'summary': 'Django Admin Root',
-            **admin_config
-        }
-    }
-
-    # Path 2: Recursive Wildcard (/admin/**)
-    # The '/**' suffix is a Google API Gateway specific wildcard that matches
-    # everything recursively (e.g., /admin/login/, /admin/auth/user/add/).
-    schema['paths']['/admin/**'] = {
-        'get': {
-            'operationId': 'django_admin_wildcard_get',
-            'summary': 'Django Admin Wildcard GET',
-            **admin_config
-        },
-        'post': {
-            'operationId': 'django_admin_wildcard_post',
-            'summary': 'Django Admin Wildcard POST',
-            **admin_config
         }
     }
 

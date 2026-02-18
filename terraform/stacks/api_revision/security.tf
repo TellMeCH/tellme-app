@@ -9,17 +9,6 @@ resource "google_compute_security_policy" "api_security_policy" {
   project     = var.project_id
   description = "Security policy for TellMe API with DDoS protection and WAF rules"
 
-  # ALLOW DJANGO ADMIN ACCESS (bypass WAF rules)
-  rule {
-    action   = "allow"
-    priority = "100"
-    match {
-      expr {
-        expression = "request.path.matches('/admin.*')"
-      }
-    }
-    description = "Allow access to Django admin interface"
-  }
 
   # Block known malicious IPs
   rule {
@@ -84,17 +73,6 @@ resource "google_compute_security_policy" "api_security_policy" {
     }
   }
 
-  # SQL Injection
-  rule {
-    action   = "deny(403)"
-    priority = "1200"
-    match {
-      expr {
-        expression = "evaluatePreconfiguredExpr('sqli-stable')"
-      }
-    }
-    description = "Block SQL injection attempts"
-  }
 
   # XSS Protection
   rule {
@@ -190,6 +168,33 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Require proper Content-Type for API requests"
   }
 
+  # SPECIAL BYPASS: Allow /admin to bypass ONLY SQLi checks (after all other WAF rules)
+  # Admin traffic still gets protected by XSS, LFI, RCE, rate limiting, etc.
+  # Only SQLi is bypassed due to false positives on IAP OAuth flow
+  # This provides better defense in depth than bypassing all WAF rules
+  rule {
+    action   = "allow"
+    priority = "1800"
+    match {
+      expr {
+        expression = "request.path.matches('/admin/.*') || request.path.matches('/admin')"
+      }
+    }
+    description = "Bypass SQLi checks for IAP-protected admin (after other WAF checks applied)"
+  }
+
+  # GENERAL SQLi: Block SQL injection for all traffic (admin already bypassed above)
+  rule {
+    action   = "deny(403)"
+    priority = "1900"
+    match {
+      expr {
+        expression = "evaluatePreconfiguredWaf('sqli-v33-stable')"
+      }
+    }
+    description = "Block SQL injection attempts (admin traffic already allowed above)"
+  }
+
   # DEFAULT ALLOW
   rule {
     action   = "allow"
@@ -253,6 +258,83 @@ resource "google_compute_backend_service" "api_backend" {
   ]
 }
 
+# IAP Configuration for /admin endpoints
+# Note: OAuth client must be created manually once in GCP Console
+# 1. Go to: APIs & Services > Credentials
+# 2. Create OAuth 2.0 Client ID
+# 3. Application type: Web application
+# 4. Name: "TellMe Admin IAP Client"
+# 5. Add redirect URI: https://iap.googleapis.com/v1/oauth/clientIds/YOUR_CLIENT_ID:handleRedirect
+# 6. Copy the Client ID and Client Secret
+# 7. Store them as GitHub secrets: IAP_CLIENT_ID and IAP_CLIENT_SECRET
+
+# Provision the IAP service account
+# This creates: service-PROJECT_NUMBER@gcp-sa-iap.iam.gserviceaccount.com
+resource "google_project_service_identity" "iap_sa" {
+  provider = google-beta
+  project  = var.project_id
+  service  = "iap.googleapis.com"
+}
+
+# Serverless NEG for Cloud Run (IAP Backend)
+resource "google_compute_region_network_endpoint_group" "cloud_run_neg" {
+  provider              = google-beta
+  name                  = "tellme-cloud-run-neg"
+  project               = var.project_id
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+
+  cloud_run {
+    service = var.service_name
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Backend service for Cloud Run with IAP enabled
+resource "google_compute_backend_service" "admin_backend" {
+  name                            = "tellme-admin-backend"
+  project                         = var.project_id
+  description                     = "Backend service for TellMe Admin with IAP"
+  connection_draining_timeout_sec = 300
+  enable_cdn                      = false
+  load_balancing_scheme           = "EXTERNAL_MANAGED"
+  protocol                        = "HTTPS"
+
+  security_policy = google_compute_security_policy.api_security_policy.id
+
+  # Pointing to Cloud Run via Serverless NEG
+  backend {
+    group = google_compute_region_network_endpoint_group.cloud_run_neg.id
+  }
+
+  # Enable IAP
+  iap {
+    enabled              = true
+    oauth2_client_id     = var.iap_client_id
+    oauth2_client_secret = var.iap_client_secret
+  }
+
+  log_config {
+    enable      = true
+    sample_rate = 1.0
+  }
+
+  custom_request_headers = [
+    "X-Forwarded-Proto: https"
+  ]
+}
+
+# Grant IAP access to specified members
+resource "google_iap_web_backend_service_iam_binding" "admin_iap_access" {
+  project             = var.project_id
+  web_backend_service = google_compute_backend_service.admin_backend.name
+  role                = "roles/iap.httpsResourceAccessor"
+  members             = var.iap_allowed_members
+}
+
 # Serverless Network Endpoint Group for API Gateway
 resource "google_compute_region_network_endpoint_group" "api_gateway_neg" {
   provider              = google-beta
@@ -285,6 +367,7 @@ resource "google_compute_url_map" "api_url_map" {
   path_matcher {
     name = "allpaths"
 
+    # Default route to API Gateway
     default_route_action {
       weighted_backend_services {
         backend_service = google_compute_backend_service.api_backend.id
@@ -292,6 +375,18 @@ resource "google_compute_url_map" "api_url_map" {
       }
     }
 
+    # Route /admin traffic to IAP-protected Cloud Run backend
+    path_rule {
+      paths = ["/admin", "/admin/*"]
+      route_action {
+        weighted_backend_services {
+          backend_service = google_compute_backend_service.admin_backend.id
+          weight          = 100
+        }
+      }
+    }
+
+    # Route all other traffic to API Gateway backend
     path_rule {
       paths = ["/*"]
       route_action {
@@ -406,7 +501,10 @@ resource "google_compute_global_forwarding_rule" "api_http_forwarding_rule" {
 # 1. Customer arrives at api.tell-me.ch (thanks to Cloudflare DNS)
 # 2. Neon sign (Forwarding Rule) directs them to IP address
 # 3. Fancy doorman (HTTPS Proxy) checks their SSL credentials
-# 4. Seating chart (URL Map) decides which kitchen (Backend Service)
+# 4. Seating chart (URL Map) decides which kitchen (Backend Service):
+#    - /admin requests → IAP-protected Cloud Run backend
+#    - All other requests → API Gateway backend
 # 5. Kitchen manager (Backend Service) picks a chef from the list (NEG)
-# 6. Chef (API Gateway) actually makes the food
+# 6. For /admin: IAP checks authentication, then Cloud Run serves directly
+#    For /api: API Gateway validates and routes to Cloud Run
 # 7. Bouncer (Cloud Armour) kicks out troublemakers throughout

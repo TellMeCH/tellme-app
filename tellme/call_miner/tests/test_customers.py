@@ -1376,9 +1376,9 @@ class TestCustomerActions:
         url = reverse('customer-ticket', args=[customer.id])
         response = client.post(url)
 
+        # HTTP 204 response must not contain a body
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert response.data['status_code'] == 204
-        assert response.data['message'] == 'no conversations to create ticket from'
+        assert not response.content
 
     @patch('tellme.call_miner.models.create_ticket_task')
     @patch('tellme.call_miner.models.check_ticket_tasks')
