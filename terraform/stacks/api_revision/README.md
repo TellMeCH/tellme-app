@@ -9,86 +9,86 @@ This document provides a detailed network diagram and description of the TellMe 
 The following diagram illustrates the boundary definitions, network zones, security controls, and data flows within the environment.
 
 ```mermaid
-graph TD
-    subgraph User_Zone [External Zone: Public Internet]
+graph TB
+    subgraph User_Zone [Public Internet]
         EndUser[End Users]
-        AdminUser[Admin Users]
-        Devs[Developers - BYOD w/ Kandji MDM]
-    end
-
-    subgraph Identity_Layer [Identity & Access Layer]
-        Firebase[Firebase Authentication]
-        GoogleIAP[Google IAP - OAuth2]
-        IAM[GCP IAM & Workload Identity Federation]
+        AdminUser[App Superusers]
+        Devs[Developers - BYOD w/ MDM]
     end
 
     subgraph Edge_Zone [Edge Layer: Cloudflare]
-        CFW[Cloudflare Worker - Frontend]
+        CFW[Cloudflare Worker<br/>Static Frontend]
     end
 
-    subgraph GCP_Boundary [GCP Security Boundary]
-        LB[Global External HTTPs Load Balancer<br/>URL Map - Path-based Routing]
-        CA[Cloud Armour WAF - DDoS & Threat Protection]
-        SSL[Managed SSL Certificate - TLS 1.2+]
+    subgraph Identity_Layer [ID & Access Management]
+        Firebase[Firebase Auth<br/>API Users]
+        GoogleIAP[Google IAP<br/>App Superusers]
+        IAM[GCP IAM & WIF<br/>CI/CD]
     end
 
-    subgraph GCP_API_Mgmt [API Management Layer]
-        AGW[API Gateway<br/>Handles: /api/**, /health, /schema]
+    subgraph GCP_Boundary [GCP Security Perimeter]
+        SSL[Managed SSL Cert<br/>TLS 1.2+]
+        LB[Global HTTPS Load Balancer<br/>Path-Based URL Routing]
+        CA[Cloud Armour WAF<br/>Multi-Layer Protection]
     end
 
-    subgraph GCP_IAP_Layer [IAP Layer]
-        IAPBackend[IAP Backend Service<br/>Handles: /admin, /admin/**]
+    subgraph Routing_Layer [Request Routing Layer]
+        AGW[API Gateway Backend<br/>/api/**, /health, /schema]
+        IAPBackend[IAP Backend Service<br/>/admin, /admin/**]
     end
 
-    subgraph GCP_Compute [Application Layer - Region: europe-west6]
-        CloudRun[Cloud Run Service - Backend API<br/>Django Application]
-        FW[Firewall - Deny Public SSH]
+    subgraph GCP_Compute [App Layer - europe-west6]
+        CloudRun[Cloud Run Service<br/>Django Application]
     end
 
-    subgraph GCP_Data_Storage [Data & Services Layer]
-        SQL[(Cloud SQL - PostgreSQL 17)]
-        GCS[Cloud Storage - Media & Call Buckets]
-        Tasks[Cloud Tasks - Call/Summary/Ticket Queues]
-        Secrets[Secret Manager - App Settings]
+    subgraph GCP_Data [Data & Services Layer]
+        SQL[(Cloud SQL<br/>PostgreSQL 17)]
+        GCS[Cloud Storage<br/>Media & Calls]
+        Tasks[Cloud Tasks<br/>Processing Queues]
+        Secrets[Secret Manager<br/>Config & Creds]
     end
 
-    %% API Data Flows
-    EndUser -- "1. Auth Request" --> Firebase
-    EndUser -- "2. HTTPS / Firebase Token" --> CFW
-    CFW -- "3. API Call (TLS 1.2+)" --> LB
-    LB -- "4. WAF Inspection" --> CA
-    LB -- "5a. /api/** → API Gateway" --> AGW
-    AGW -- "6a. Firebase JWT Validation" --> CloudRun
+    %% User flows
+    EndUser --> Firebase
+    EndUser --> CFW
+    AdminUser --> GoogleIAP
+    Devs --> IAM
 
-    %% Admin Data Flows
-    AdminUser -- "1. Google Login" --> GoogleIAP
-    AdminUser -- "2. /admin Request (TLS 1.2+)" --> LB
-    LB -- "4. WAF Inspection" --> CA
-    LB -- "5b. /admin/** → IAP Backend" --> IAPBackend
-    IAPBackend -- "6b. IAP Auth Check" --> GoogleIAP
-    IAPBackend -- "7b. Direct Invoke" --> CloudRun
+    %% API path
+    CFW --> SSL
+    SSL --> LB
+    LB --> CA
+    CA -."/api/** traffic".-> AGW
+    AGW --> CloudRun
 
-    %% Internal Connections
-    CloudRun -- "8. Internal Connection" --> SQL
-    CloudRun -- "8. IAM Access" --> GCS
-    CloudRun -- "8. IAM Access" --> Tasks
-    CloudRun -- "8. IAM Access" --> Secrets
+    %% Admin path
+    AdminUser --> SSL
+    CA -."/admin/** traffic".-> IAPBackend
+    IAPBackend --> GoogleIAP
+    IAPBackend --> CloudRun
 
-    %% CI/CD Flow
-    Devs -- "CI/CD & Management" --> IAM
-    IAM -- "OIDC / WIF" --> CloudRun
+    %% CI/CD path
+    IAM -.WIF OIDC.-> CloudRun
+
+    %% Data access
+    CloudRun --> SQL
+    CloudRun --> GCS
+    CloudRun --> Tasks
+    CloudRun --> Secrets
 
     %% Styling
-    style LB fill:#e1f5ff
-    style IAPBackend fill:#fff3e0
+    style CA fill:#ffebee
     style AGW fill:#f3e5f5
+    style IAPBackend fill:#fff3e0
+    style LB fill:#e1f5ff
+    style CloudRun fill:#e8f5e9
 ```
 
 ## Architectural Components & Security Controls
 
 ### 1. Network Zones & Boundaries
 
-* **External Zone**: Includes end-users and company developers. Developers operate under a "lightweight" BYOD scheme, with security compliance enforced by the **Kandji MDM** platform.
+* **External Zone**: Includes end-users and company developers. Developers operate under a "lightweight" BYOD scheme, with security compliance enforced by a **Mobile Device Management (MDM)** platform.
 * **Edge Layer**: The application frontend is hosted on **Cloudflare Workers**, providing a globally distributed entry point that minimizes latency.
 * **GCP Security Boundary**: All backend traffic is funneled through a **Global External HTTP(S) Load Balancer**. Entry is protected by **Cloud Armour**, which serves as a Web Application Firewall (WAF) to block SQL injection, Cross-Site Scripting (XSS), and malicious IP ranges.
 * **Application Layer**: The backend logic is fully containerized and hosted on **Cloud Run (Gen2)** within the `europe-west6` region.
@@ -100,12 +100,16 @@ graph TD
   * **API Access**: User identity for API endpoints is managed via **Firebase Authentication**. The API Gateway validates Firebase JWTs before routing requests to Cloud Run.
   * **Admin Access**: The Django admin interface (`/admin`) is protected by **Google Identity-Aware Proxy (IAP)**, which requires Google account authentication and IAM role membership (`roles/iap.httpsResourceAccessor`). This provides enterprise-grade access control with centralized identity management.
   * **Service Access**: Internal service access is strictly governed by **GCP IAM roles**, ensuring that the backend service account has the minimum necessary permissions to access databases, buckets, and secrets.
-* **Web Application Firewall**: **Cloud Armour** protects both API and admin traffic against common threats including:
-  * SQL injection and XSS attacks
-  * Local file inclusion (LFI) and remote code execution (RCE)
-  * DDoS attacks with adaptive protection
-  * Rate limiting per endpoint type
-  * Malicious IP blocking and suspicious user agent detection
+* **Web Application Firewall**: **Cloud Armour** provides layered protection with distinct security policies for API and admin traffic:
+  * **API Traffic Protection** (`/api/**`): Full WAF rule enforcement including SQLi, XSS, LFI, RCE, rate limiting, malicious IP blocking, and suspicious user agent detection
+  * **Admin Traffic Protection** (`/admin/**`): Applies all WAF rules **except** SQL injection detection, which is bypassed to prevent false positives on Google IAP's OAuth callback tokens. Admin traffic is still protected by:
+    - IP blocking and rate limiting (Priority 200-1150)
+    - XSS protection (Priority 1300)
+    - LFI protection (Priority 1350)
+    - RCE protection (Priority 1360)
+    - Large body checks, user agent filtering, HTTP method validation (Priority 1400-1700)
+    - **Defense in depth**: IAP authentication + WAF (minus SQLi) + Django security
+  * **Adaptive DDoS Protection**: Layer 7 DDoS defense enabled with automatic threat detection and mitigation
 * **Network Hardening**: To comply with audit requirements, a high-priority firewall rule explicitly **denies public SSH access** (Port 22) across the project.
 * **Data Availability & Redundancy**:
   * **Cloud SQL (PostgreSQL 17)**: Configured for high availability (REGIONAL) with automatic failover. Automated daily backups are retained for 30 days, and Point-in-Time Recovery (PITR) is enabled.
@@ -124,9 +128,15 @@ The architecture implements two distinct routing paths based on the request type
 #### Admin Request Pipeline (/admin, /admin/**)
 * **Authentication**: Admin users authenticate via **Google IAP (Identity-Aware Proxy)** using their Google accounts.
 * **Request Flow**: Admin requests reach the GCP Load Balancer at the `/admin` path.
-* **Security Inspection**: After WAF inspection by Cloud Armour, the **Load Balancer** routes `/admin/**` traffic to the **IAP Backend Service**.
+* **Layered Security Inspection**: Cloud Armour applies multiple WAF protection layers:
+  1. IP blocking and rate limiting checks
+  2. XSS, LFI, and RCE attack detection
+  3. Large body, user agent, and HTTP method validation
+  4. **SQLi checks bypassed** (Priority 1800) to prevent false positives on IAP OAuth tokens
+* **Routing**: The **Load Balancer** routes `/admin/**` traffic to the **IAP Backend Service**.
 * **IAP Verification**: IAP validates the user's Google identity and checks IAM permissions (`roles/iap.httpsResourceAccessor`) before allowing direct access to Cloud Run.
 * **Bypass API Gateway**: Admin traffic bypasses the API Gateway entirely, going directly from IAP to Cloud Run.
+* **Security Model**: Multi-layer defense combining IAP authentication, selective WAF protection, and Django's built-in security controls.
 
 #### Resource Integration
 The Cloud Run service communicates internally with:
