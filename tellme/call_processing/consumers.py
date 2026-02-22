@@ -8,7 +8,7 @@ from channels.generic.websocket import WebsocketConsumer
 from rest_framework import exceptions
 from django.utils import timezone
 from django.conf import settings
-from tellme.call_miner.models import OrganizationAPIKey
+from tellme.call_miner.models import EphemeralProcessingToken
 from tellme.call_processing.utils import audio_utils, processing_utils
 
 logger = logging.getLogger('django')
@@ -47,37 +47,40 @@ class AudioHookConsumer(WebsocketConsumer):
         return self.server_seq
 
     @staticmethod
-    def authenticate_api_key_from_scope_headers(headers):
+    def authenticate_ephemeral_token_from_scope_headers(headers):
         """
-        Replicate OrganizationAPIKeyAuthentication with synchronous logic:
-        read from scope headers, find X-Tellme-Api-Key header with X-API-KEY prefix, check DB, etc.
+        Validate the ephemeral session token from WebSocket upgrade headers.
+        Reads the X-Tellme-Session-Token header with 'Bearer <token>' format,
+        hashes it, and checks against EphemeralProcessingToken in the DB.
         """
         auth_header = None
         for (name, value) in headers:
-            if name == b'x-tellme-api-key':
+            if name == b'x-tellme-session-token':
                 auth_header = value.decode('utf-8')
                 break
 
         if not auth_header:
-            raise exceptions.AuthenticationFailed("No X-Tellme-Api-Key header found.")
+            raise exceptions.AuthenticationFailed("No X-Tellme-Session-Token header found.")
 
-        # Check if the header starts with the expected keyword (X-API-KEY <key>)
         parts = auth_header.split()
-        if len(parts) != 2 or parts[0] != 'X-API-KEY':
-            raise exceptions.AuthenticationFailed("Invalid X-Tellme-Api-Key header format.")
+        if len(parts) != 2 or parts[0] != 'Bearer':
+            raise exceptions.AuthenticationFailed("Invalid X-Tellme-Session-Token header format.")
 
-        api_key = parts[1]
-        logger.debug("Got API key from scope headers.")
-        hashed_key = hashlib.sha256((settings.HASH_KEY + api_key + settings.HASH_KEY).encode('utf-8')).hexdigest()
+        plain_token = parts[1]
+        logger.debug("Got session token from scope headers.")
+        token_hash = hashlib.sha256(
+            (settings.HASH_KEY + plain_token + settings.HASH_KEY).encode('utf-8')
+        ).hexdigest()
+
         try:
-            org_api_key = OrganizationAPIKey.objects.get(hashed_api_key=hashed_key)
-        except OrganizationAPIKey.DoesNotExist:
-            raise exceptions.AuthenticationFailed("Invalid API key.")
+            ephemeral_token = EphemeralProcessingToken.objects.get(token_hash=token_hash)
+        except EphemeralProcessingToken.DoesNotExist:
+            raise exceptions.AuthenticationFailed("Invalid session token.")
 
-        if org_api_key.expires < timezone.now():
-            raise exceptions.AuthenticationFailed("API key expired.")
+        if ephemeral_token.expires_at < timezone.now():
+            raise exceptions.AuthenticationFailed("Session token expired.")
 
-        return org_api_key.organization
+        return ephemeral_token.organization
 
     def connect(self):
         """
@@ -86,7 +89,7 @@ class AudioHookConsumer(WebsocketConsumer):
         """
         self.accept()
         try:
-            self.org = self.authenticate_api_key_from_scope_headers(self.scope["headers"])
+            self.org = self.authenticate_ephemeral_token_from_scope_headers(self.scope["headers"])
             logger.info(f"Authenticated Organization: {self.org.id}")
         except exceptions.AuthenticationFailed as e:
             logger.warning(f"Authentication failed: {e}")
