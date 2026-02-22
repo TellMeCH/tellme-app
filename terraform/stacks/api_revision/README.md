@@ -35,6 +35,7 @@ graph TB
     subgraph Routing_Layer [Request Routing Layer]
         AGW[API Gateway Backend<br/>/api/**, /health, /schema]
         IAPBackend[IAP Backend Service<br/>/admin, /admin/**]
+        ProcBackend[Processing Direct Backend<br/>/processing/v1/queue, /ws/audiohook]
     end
 
     subgraph GCP_Compute [App Layer - europe-west6]
@@ -67,6 +68,11 @@ graph TB
     IAPBackend --> GoogleIAP
     IAPBackend --> CloudRun
 
+    %% Processing direct path (bypasses API Gateway)
+    CA -."/processing/v1/queue
+    /ws/audiohook traffic".-> ProcBackend
+    ProcBackend --> CloudRun
+
     %% CI/CD path
     IAM -.WIF OIDC.-> CloudRun
 
@@ -80,6 +86,7 @@ graph TB
     style CA fill:#ffebee
     style AGW fill:#f3e5f5
     style IAPBackend fill:#fff3e0
+    style ProcBackend fill:#e8eaf6
     style LB fill:#e1f5ff
     style CloudRun fill:#e8f5e9
 ```
@@ -102,6 +109,7 @@ graph TB
   * **Service Access**: Internal service access is strictly governed by **GCP IAM roles**, ensuring that the backend service account has the minimum necessary permissions to access databases, buckets, and secrets.
 * **Web Application Firewall**: **Cloud Armour** provides layered protection with distinct security policies for API and admin traffic:
   * **API Traffic Protection** (`/api/**`): Full WAF rule enforcement including SQLi, XSS, LFI, RCE, rate limiting, malicious IP blocking, and suspicious user agent detection
+  * **Processing Traffic Protection** (`/processing/v1/queue`, `/ws/audiohook`): Same Cloud Armour security policy applies via the `processing_direct_backend` Backend Service. `/processing/v1/start` has an additional dedicated rate-limit rule (10 req/min per IP, priority 1050) to prevent ephemeral token generation abuse.
   * **Admin Traffic Protection** (`/admin/**`): Applies all WAF rules **except** SQL injection detection, which is bypassed to prevent false positives on Google IAP's OAuth callback tokens. Admin traffic is still protected by:
     - IP blocking and rate limiting (Priority 200-1150)
     - XSS protection (Priority 1300)
@@ -117,7 +125,7 @@ graph TB
 
 ### 3. Data Flows
 
-The architecture implements two distinct routing paths based on the request type:
+The architecture implements three distinct routing paths based on the request type:
 
 #### API Request Pipeline (/api/**)
 * **Authentication**: Users authenticate via **Firebase Authentication** and obtain a Firebase token.
@@ -137,6 +145,13 @@ The architecture implements two distinct routing paths based on the request type
 * **IAP Verification**: IAP validates the user's Google identity and checks IAM permissions (`roles/iap.httpsResourceAccessor`) before allowing direct access to Cloud Run.
 * **Bypass API Gateway**: Admin traffic bypasses the API Gateway entirely, going directly from IAP to Cloud Run.
 * **Security Model**: Multi-layer defense combining IAP authentication, selective WAF protection, and Django's built-in security controls.
+
+#### Processing Request Pipeline (/processing/v1/queue, /ws/audiohook)
+* **Token Exchange**: Customer servers first call `GET /processing/v1/start` with their long-lived **Organization API Key** to receive a short-lived **ephemeral session token** (15-minute TTL).
+* **Request Flow**: The customer server uses the ephemeral token (`X-TellMe-Session-Token: Bearer <token>`) to authenticate audio upload (`POST /processing/v1/queue`) or WebSocket streaming (`/ws/audiohook`) requests.
+* **Security Inspection**: Cloud Armour applies the same WAF policy via the `processing_direct_backend` Backend Service (no API Gateway involvement — required for WebSocket support and to keep long-lived API keys off hot paths).
+* **Routing**: The Load Balancer routes these paths directly to Cloud Run, bypassing the API Gateway entirely. Cloud Run validates the ephemeral token against Cloud SQL and processes the audio.
+* **Cloud Run Ingress**: Set to `INGRESS_TRAFFIC_LOAD_BALANCER` to prevent direct Cloud Run URL bypass.
 
 #### Resource Integration
 The Cloud Run service communicates internally with:
