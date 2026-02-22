@@ -10,7 +10,10 @@ from django.core.exceptions import ObjectDoesNotExist
 from tellme.call_processing.serializers import (WebhookProcessingSerializer, QueueRecordingSerializer,
                                          ProcessRecordingSerializer, SummarizationSerializer,
                                          TicketCreationSerializer)
-from tellme.call_processing.authentication import OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication
+from tellme.call_processing.authentication import (
+    OrganizationAPIKeyAuthentication, ProcessingKeyAuthentication, EphemeralTokenAuthentication
+)
+from tellme.call_miner.models import EphemeralProcessingToken
 from tellme.call_processing.permissions import IsAuthenticatedOrganization
 from tellme.call_processing.utils import processing_utils, ticket_utils
 from tellme.call_processing.utils.call_processing import CallProcessingPipeline
@@ -84,16 +87,47 @@ class WebhookProcessingView(APIView):
         return Response(message, status=status_code)
 
 
+class StartProcessingSessionView(APIView):
+    """
+    Issue a short-lived ephemeral session token for direct Cloud Run data transfer.
+
+    The caller authenticates once with their long-lived Organization API Key (via the API Gateway).
+    In return they receive a token valid for EphemeralProcessingToken.TOKEN_TTL_MINUTES minutes,
+    which can then be used to:
+      - POST large recordings directly to /processing/v1/queue/ (bypasses API Gateway size limit)
+      - Open a WebSocket to /ws/audiohook/ (bypasses API Gateway WebSocket limitation)
+    """
+    authentication_classes = [OrganizationAPIKeyAuthentication]
+    permission_classes = [IsAuthenticatedOrganization]
+
+    def get(self, request):
+        organization = request.user
+        plain_token = EphemeralProcessingToken.create_for_organization(organization)
+        expires_at = (
+            datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(minutes=EphemeralProcessingToken.TOKEN_TTL_MINUTES)
+        )
+        logger.info(f"Issued ephemeral session token for organization {organization.id}")
+        return Response(
+            {
+                "session_token": plain_token,
+                "expires_at": expires_at.isoformat(),
+            },
+            status=status.HTTP_200_OK
+        )
+
+
 class QueueRecordingView(APIView):
     """
     Queue call recordings for processing via Cloud Tasks.
 
     This API view has the sole purpose of queueing a call processing task on a predefined Cloud Tasks Manager.
     The view expects a recording file in the provided data and uploads it to GCS before queueing.
-    Only API-token bearing requests should have permission to run this view.
+    Only ephemeral session tokens (issued by /processing/v1/start/) are accepted. This endpoint is routed
+    directly to Cloud Run (bypassing the API Gateway) to remove the 32 MB request size limitation.
     """
     serializer_class = QueueRecordingSerializer
-    authentication_classes = [OrganizationAPIKeyAuthentication]
+    authentication_classes = [EphemeralTokenAuthentication]
     permission_classes = [IsAuthenticatedOrganization]
 
     def post(self, request):
