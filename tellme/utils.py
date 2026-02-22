@@ -245,6 +245,38 @@ def add_missing_endpoints(schema):
         }
     }
 
+    # Add the session token issuance endpoint — goes through the API Gateway (unlike /queue and /ws/audiohook/).
+    # Clients call this once with their long-lived Org API Key to receive a short-lived ephemeral token.
+    schema['paths']['/processing/v1/start'] = {
+        'get': {
+            'operationId': 'processing_v1_start',
+            'tags': ['processing'],
+            'summary': 'Issue Ephemeral Session Token',
+            'description': (
+                'Authenticates with the Organization API Key and returns a short-lived session token. '
+                'The token is used to authenticate direct Cloud Run calls to /processing/v1/queue/ '
+                'and /ws/audiohook/, which bypass the API Gateway.'
+            ),
+            'security': [{'OrganizationApiKeyAuth': []}],
+            'responses': {
+                '200': {
+                    'description': 'Ephemeral session token issued',
+                    'content': {
+                        'application/json': {
+                            'schema': {
+                                'type': 'object',
+                                'properties': {
+                                    'session_token': {'type': 'string'},
+                                    'expires_at': {'type': 'string', 'format': 'date-time'},
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
 def add_cors_configuration(schema):
     """
@@ -362,14 +394,18 @@ def remove_internal_endpoints(schema):
     if 'paths' not in schema:
         return
 
-    # List of internal endpoints to remove
+    # List of internal endpoints to remove — either because they are invoked directly by Cloud Tasks
+    # (process, summarize, create_ticket) or because they are routed directly to Cloud Run via the
+    # Load Balancer, bypassing the API Gateway entirely (queue, ws/audiohook).
     internal_endpoints = [
         '/processing/v1/process',
         '/processing/v1/process/',
         '/processing/v1/summarize',
-        '/processing/v1/summarize/'
+        '/processing/v1/summarize/',
         '/processing/v1/create_ticket',
-        '/processing/v1/create_ticket/'
+        '/processing/v1/create_ticket/',
+        '/processing/v1/queue',
+        '/processing/v1/queue/',
     ]
 
     # Remove internal endpoints from the schema

@@ -20,13 +20,12 @@ from tellme.call_processing.consumers import AudioHookConsumer
 
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
-    # WebSocket support temporarily disabled due to Google Cloud API Gateway limitations
-    # API Gateway does not support WebSocket connections as of December 2025
-    # See: https://cloud.google.com/api-gateway/docs/limitations
-    #
-    # "websocket": AuthMiddlewareStack(
-    #     URLRouter([
-    #         path("ws/audiohook/", AudioHookConsumer.as_asgi()),
-    #     ])
-    # ),
+    # WebSocket traffic for /ws/audiohook/ is routed directly to Cloud Run via the Load Balancer,
+    # bypassing the API Gateway (which does not support WebSockets).
+    # Authentication is handled by EphemeralTokenAuthentication inside AudioHookConsumer.
+    "websocket": AuthMiddlewareStack(
+        URLRouter([
+            path("ws/audiohook/", AudioHookConsumer.as_asgi()),
+        ])
+    ),
 })
