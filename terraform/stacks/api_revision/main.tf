@@ -133,7 +133,7 @@ module "cloud_run_v2" {
 
   max_instance_request_concurrency = var.max_concurrent_requests
 
-  ingress = "INGRESS_TRAFFIC_ALL"
+  ingress = "INGRESS_TRAFFIC_LOAD_BALANCER"
   members = [
    "serviceAccount:${google_service_account.app.email}",  # API Gateway can invoke
    "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com",  # Cloud Tasks can invoke

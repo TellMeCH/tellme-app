@@ -27,6 +27,29 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block known malicious IP ranges"
   }
 
+  # /processing/v1/start rate limit — stricter, as this is the token-issuance gate
+  rule {
+    action   = "throttle"
+    priority = "1050"
+    match {
+      expr {
+        expression = "request.path.matches('/processing/v1/start.*')"
+      }
+    }
+    description = "Strict rate limiting for ephemeral token issuance endpoint"
+
+    rate_limit_options {
+      conform_action = "allow"
+      exceed_action  = "deny(429)"
+      enforce_on_key = "IP"
+
+      rate_limit_threshold {
+        count        = 10
+        interval_sec = 60
+      }
+    }
+  }
+
   # Processing endpoints rate limit
   rule {
     action   = "throttle"
@@ -327,6 +350,35 @@ resource "google_compute_backend_service" "admin_backend" {
   ]
 }
 
+# Backend service for direct Cloud Run access (no API Gateway, no IAP)
+# Used for /processing/v1/queue/ (large file uploads) and /ws/audiohook/ (WebSocket streaming).
+# Cloud Armor still applies via the security_policy attachment.
+resource "google_compute_backend_service" "processing_direct_backend" {
+  name                            = "tellme-processing-direct-backend"
+  project                         = var.project_id
+  description                     = "Backend service for direct Cloud Run access (bypasses API Gateway)"
+  connection_draining_timeout_sec = 300
+  enable_cdn                      = false
+  load_balancing_scheme           = "EXTERNAL_MANAGED"
+  protocol                        = "HTTPS"
+
+  security_policy = google_compute_security_policy.api_security_policy.id
+
+  # Same Cloud Run NEG used by admin_backend — no IAP
+  backend {
+    group = google_compute_region_network_endpoint_group.cloud_run_neg.id
+  }
+
+  log_config {
+    enable      = true
+    sample_rate = 1.0
+  }
+
+  custom_request_headers = [
+    "X-Forwarded-Proto: https"
+  ]
+}
+
 # Grant IAP access to specified members
 resource "google_iap_web_backend_service_iam_binding" "admin_iap_access" {
   project             = var.project_id
@@ -381,6 +433,23 @@ resource "google_compute_url_map" "api_url_map" {
       route_action {
         weighted_backend_services {
           backend_service = google_compute_backend_service.admin_backend.id
+          weight          = 100
+        }
+      }
+    }
+
+    # Route direct Cloud Run paths — bypasses API Gateway to remove its size/WebSocket limitations.
+    # Cloud Armor (WAF, DDoS, rate limiting) still applies via processing_direct_backend.
+    path_rule {
+      paths = [
+        "/processing/v1/queue",
+        "/processing/v1/queue/",
+        "/ws/audiohook",
+        "/ws/audiohook/",
+      ]
+      route_action {
+        weighted_backend_services {
+          backend_service = google_compute_backend_service.processing_direct_backend.id
           weight          = 100
         }
       }
