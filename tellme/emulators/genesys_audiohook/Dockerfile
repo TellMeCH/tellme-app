@@ -1,5 +1,5 @@
 # docker remove genesys_audiohook_emulator; docker build -t genesys_audiohook_emulator ./genesys_audiohook_emulator;
-# docker run --rm -it --network=tell_me_app-network -v "":/app/data -e AUDIOHOOK_WS_URL=ws://django:8080/ws/audiohook/ -e WAV_FILE=/app/data/sample_chde_call.wav -e API_KEY= -e AGENT_ID= genesys_audiohook_emulator
+# docker run --rm -it --network=tell_me_app-network -v "":/app/data -e AUDIOHOOK_WS_URL=ws://django:8080/ws/audiohook/ -e WAV_FILE=/app/data/sample_chde_call.wav -e SESSION_TOKEN= -e AGENT_ID= genesys_audiohook_emulator
 
 # Start from any recent Python image
 FROM python:3.12-slim

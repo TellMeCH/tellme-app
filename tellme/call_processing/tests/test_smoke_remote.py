@@ -282,10 +282,24 @@ class TestSmokeTestCloudRunWithLogs:
             self.sample_file_mp3 = BytesIO(f.read())
             self.sample_file_mp3.name = "sample_recording.mp3"
 
+    def _get_ephemeral_token(self) -> str:
+        """
+        Exchange the long-lived Org API Key for a short-lived ephemeral session token.
+        Calls GET /processing/v1/start/ through the API Gateway and returns the raw token.
+        """
+        start_url = f"{self.cloud_run_host}/processing/v1/start/"
+        resp = requests.get(
+            start_url,
+            headers={"X-Tellme-Api-Key": f"X-API-KEY {self.__api_key_plain}"}
+        )
+        resp.raise_for_status()
+        return resp.json()["session_token"]
+
     def test_smoke_post_with_logs(self, exclude_customer_id=False, sample_file='wav'):
         """
-        Trigger the /queue endpoint, using X-API-KEY
+        Trigger the /queue endpoint using an ephemeral session token obtained from /processing/v1/start/.
         """
+        session_token = self._get_ephemeral_token()
         queue_url = f"{self.cloud_run_host}/processing/v1/queue/"
         trigger_timestamp = timezone.now().isoformat()
 
@@ -307,7 +321,7 @@ class TestSmokeTestCloudRunWithLogs:
             queue_url,
             data=data,
             files=files,
-            headers={"X-Tellme-Api-Key": f"X-API-KEY {self.__api_key_plain}"}
+            headers={"X-Tellme-Session-Token": f"Bearer {session_token}"}
         )
         assert response.status_code == 202, f"Unexpected status code: {response.status_code}"
         response_data = response.json()
@@ -525,11 +539,13 @@ class TestSmokeTestCloudRunWithLogs:
         assert customer.get('ticket_date') is not None, "Customer should have ticket_date set"
         assert 'atlassian.net' in customer['ticket_link'], "Ticket link should be a Jira URL"
 
-    @pytest.mark.skip(reason="WebSocket connections not supported by Google Cloud API Gateway")
     def test_smoke_audiohook_with_logs(self):
         """
-        Trigger the /process endpoint, this time using the Audiohook emulator
+        Trigger the /ws/audiohook/ endpoint using the Audiohook emulator with an ephemeral session token.
+        /ws/audiohook/ is routed directly to Cloud Run (bypassing the API Gateway) and authenticated
+        via X-Tellme-Session-Token rather than the long-lived Org API Key.
         """
+        session_token = self._get_ephemeral_token()
         audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
         trigger_timestamp = timezone.now().isoformat()
         emulator_image = "genesys_audiohook_emulator:latest"
@@ -538,7 +554,7 @@ class TestSmokeTestCloudRunWithLogs:
             "-v", f"{os.getcwd()}/tellme/call_processing/tests/resources:/app/data",
             "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
             "-e", f"WAV_FILE=/app/data/sample_recording.wav",
-            "-e", f"API_KEY={self.__api_key_plain}",
+            "-e", f"SESSION_TOKEN={session_token}",
             "-e", f"AGENT_ID={self.agent_id}",
             emulator_image
         ]
