@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime, timedelta
 from rest_framework.test import APIClient
 from tellme.call_miner.models import (
-    Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
+    Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation,
+    EphemeralProcessingToken
 )
 
 
@@ -375,6 +376,16 @@ def mock_langfuse():
     the mocks are in place BEFORE any modules import langfuse.
     """
     return _mock_langfuse_instance
+
+
+@pytest.fixture
+def ephemeral_token(setup_db):
+    """
+    Creates a valid EphemeralProcessingToken for the test organization and returns the raw token.
+    Use with: api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
+    """
+    org = setup_db[0]
+    return EphemeralProcessingToken.create_for_organization(org)
 
 
 @pytest.fixture

@@ -1,8 +1,9 @@
 import pytest
 from datetime import datetime, timedelta
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
-from tellme.call_miner.models import Conversation
+from tellme.call_miner.models import Conversation, EphemeralProcessingToken
 from django.core.files.uploadedfile import SimpleUploadedFile
 from tellme.call_miner.utils.queue_utils import create_summarization_task, check_summarization_tasks
 
@@ -23,12 +24,12 @@ class TestQueueView:
         }
 
     def test_queue_success(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
-                           setup_db):
+                           setup_db, ephemeral_token):
         """
         If the payload is valid, we should get a 202 response and a valid GCS URI in the response.
         A Cloud Task should also be created.
         """
-        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
 
         url = reverse("queue")
         response = api_client.post(url, data=valid_payload, format="multipart")
@@ -41,19 +42,49 @@ class TestQueueView:
     def test_unauthenticated_fails(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
                                    setup_db):
         """
-        If the caller is not authenticated with an API key, the call should be forbidden
+        If the caller provides no credentials, the call should be forbidden.
         """
+        url = reverse("queue")
+        response = api_client.post(url, data=valid_payload, format="multipart")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_org_api_key_is_rejected(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
+                                     setup_db):
+        """
+        The long-lived Org API Key is no longer accepted on /queue/. Callers must use an ephemeral
+        session token obtained from /processing/v1/start/ instead.
+        """
+        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
 
         url = reverse("queue")
         response = api_client.post(url, data=valid_payload, format="multipart")
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_queue_invalid_agent(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks, setup_db):
+    def test_expired_ephemeral_token_fails(self, api_client, valid_payload, mock_gcs_utils,
+                                           mock_cloud_tasks, setup_db):
+        """
+        An ephemeral token whose expires_at is in the past must be rejected with 403.
+        """
+        org = setup_db[0]
+        plain_token = EphemeralProcessingToken.create_for_organization(org)
+        EphemeralProcessingToken.objects.filter(organization=org).update(
+            expires_at=timezone.now() - timedelta(minutes=1)
+        )
+
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {plain_token}')
+        url = reverse("queue")
+        response = api_client.post(url, data=valid_payload, format="multipart")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_queue_invalid_agent(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
+                                 setup_db, ephemeral_token):
         """
         Agent does not exist in the DB, so the request is invalid.
         """
-        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
 
         current_payload = valid_payload.copy()
         current_payload["agent_id"] = 99999
@@ -64,13 +95,13 @@ class TestQueueView:
         mock_cloud_tasks.create_processing_task.assert_not_called()
 
     def test_check_agent_validity_timestamp_overlap(
-        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_cloud_tasks
+        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_cloud_tasks, ephemeral_token
     ):
         """
         If the agent already has a conversation that hasn't ended by the time the new call starts,
         check_agent_validity() should fail.
         """
-        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
 
         # Create a conversation that ends *after* 2024-01-01T12:00:00, such that the creation of a new one starting
         # at that time will be blocked
@@ -94,11 +125,11 @@ class TestQueueView:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Invalid agent. This agent's last call was still taking place" in response.data["message"]
 
-    def test_queue_missing_field(self, api_client, valid_payload, mock_cloud_tasks, setup_db):
+    def test_queue_missing_field(self, api_client, valid_payload, mock_cloud_tasks, setup_db, ephemeral_token):
         """
         If any required field is missing, the serializer should fail and return a 400.
         """
-        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
 
         for field in ['agent_id', 'timestamp', 'file']:
             current_payload = valid_payload.copy()
@@ -108,12 +139,13 @@ class TestQueueView:
             assert response.status_code == status.HTTP_400_BAD_REQUEST
             mock_cloud_tasks.create_processing_task.assert_not_called()
 
-    def test_queue_without_customer_id_succeeds(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks, setup_db):
+    def test_queue_without_customer_id_succeeds(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
+                                                setup_db, ephemeral_token):
         """
         Test that queue endpoint works correctly when customer_id is not provided.
         The pipeline should be able to generate a customer_id during processing.
         """
-        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
 
         # Remove customer_id from payload to test without it
         payload_without_customer = valid_payload.copy()
@@ -138,11 +170,12 @@ class TestQueueView:
 
         assert customer_id is None
 
-    def test_queue_mp3_file_success(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks, setup_db):
+    def test_queue_mp3_file_success(self, api_client, valid_payload, mock_gcs_utils, mock_cloud_tasks,
+                                    setup_db, ephemeral_token):
         """
         Test that the queue endpoint correctly handles MP3 files and preserves the .mp3 extension.
         """
-        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
 
         # Create payload with MP3 file
         mp3_payload = valid_payload.copy()
@@ -170,7 +203,7 @@ class TestQueueView:
         mock_cloud_tasks.assert_called_once()
 
     def test_queue_duration_overlap_validation(
-        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_cloud_tasks
+        self, api_client, setup_db, valid_payload, mock_gcs_utils, mock_cloud_tasks, ephemeral_token
     ):
         """
         Test duration-based overlap validation:
@@ -178,7 +211,7 @@ class TestQueueView:
         - But they must not have overlapping time ranges with existing calls
         - Tests both directions: new call starting during existing call, and existing call starting during new call
         """
-        api_client.credentials(HTTP_X_TELLME_API_KEY=f'X-API-KEY {setup_db[5]}')
+        api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
 
         # Create an existing conversation that runs from T+5min to T+7min
         base_time = valid_payload['timestamp']

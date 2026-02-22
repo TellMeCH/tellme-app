@@ -18,7 +18,7 @@ SAMPLE_RATE = 8000
 
 WEBSOCKET_URL = os.environ.get("AUDIOHOOK_WS_URL")
 WAV_FILE = os.environ.get("WAV_FILE")
-API_KEY = os.environ.get('API_KEY')
+SESSION_TOKEN = os.environ.get('SESSION_TOKEN')
 AGENT_ID = os.environ.get('AGENT_ID')
 
 
@@ -320,7 +320,7 @@ class AudioHookEmulator:
         5) done
         """
         print(f'Attempting the connection to {self.ws_url}')
-        async with websockets.connect(self.ws_url, additional_headers={'X-API-KEY': API_KEY}) as ws:
+        async with websockets.connect(self.ws_url, additional_headers={'X-Tellme-Session-Token': f'Bearer {SESSION_TOKEN}'}) as ws:
             # Create tasks: read messages & ping
             reader_task = asyncio.create_task(self.reader_loop(ws))
             pinger_task = asyncio.create_task(self.ping_loop(ws))

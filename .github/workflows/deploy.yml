@@ -237,6 +237,25 @@ jobs:
         run: |
           uv run python manage.py migrate
 
+      - name: Purge Expired Ephemeral Tokens
+        env:
+          DEBUG: 0
+          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
+          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
+          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
+          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
+          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
+          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
+          TICKETS_QUEUE_NAME: ${{ vars.TICKETS_QUEUE_NAME }}
+          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
+          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
+          CALL_PROCESSING_ENDPOINT: "None"
+          SUMMARIZATION_ENDPOINT: "None"
+          TICKETS_ENDPOINT: "None"
+          SERVICE_ACCOUNT_EMAIL: "None"
+        run: |
+          uv run python manage.py purge_ephemeral_tokens
+
       - name: Collect Static
         if: env.COLLECT_STATIC == 'true'
         env:
