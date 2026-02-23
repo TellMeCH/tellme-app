@@ -18,7 +18,6 @@ jobs:
 
     runs-on: ubuntu-latest
     outputs:
-      api_gateway_url: ${{ steps.terraform_apply.outputs.api_gateway_url }}
       cloud_run_url: ${{ steps.terraform_apply.outputs.cloud_run_url }}
       load_balancer_url: ${{ steps.terraform_apply.outputs.load_balancer_url }}
     env:
@@ -91,26 +90,6 @@ jobs:
             echo "Cloud SQL Proxy is not running."
             exit 1
           fi
-
-      - name: Generate OpenAPI Specification
-        env:
-          DEBUG: 0
-          SETTINGS_NAME: ${{ vars.SETTINGS_NAME }}
-          SQL_INSTANCE_NAME: ${{ vars.SQL_INSTANCE_NAME }}
-          DATABASE_NAME: ${{ vars.DATABASE_NAME }}
-          GS_BUCKET_NAME: ${{ secrets.GCP_PROJECT_ID }}_${{ vars.MEDIA_BUCKET }}
-          PROCESSING_QUEUE_NAME: ${{ vars.PROCESSING_QUEUE_NAME }}
-          SUMMARIZATION_QUEUE_NAME: ${{ vars.SUMMARIZATION_QUEUE_NAME }}
-          TICKETS_QUEUE_NAME: ${{ vars.TICKETS_QUEUE_NAME }}
-          CALL_PROCESSING_BUCKET: ${{ vars.CALL_PROCESSING_BUCKET }}
-          FRONTEND_PATH: ${{ secrets.FRONTEND_PATH }}
-          CALL_PROCESSING_ENDPOINT: "None"
-          SUMMARIZATION_ENDPOINT: "None"
-          TICKETS_ENDPOINT: "None"
-          SERVICE_ACCOUNT_EMAIL: "None"
-          ALLOWED_HOSTS: "127.0.0.1,localhost"
-        run: |
-          uv run python manage.py spectacular --color --file terraform/configs/spec.yaml
 
       - name: Login to Google Artifact Registry
         uses: docker/login-action@v3
