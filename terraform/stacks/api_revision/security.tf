@@ -10,6 +10,18 @@ resource "google_compute_security_policy" "api_security_policy" {
   description = "Security policy for TellMe API with DDoS protection and WAF rules"
 
 
+  # Block requests not targeting the expected domain (e.g. direct-IP scanners)
+  rule {
+    action   = "deny(403)"
+    priority = "100"
+    match {
+      expr {
+        expression = "!has(request.headers['host']) || request.headers['host'] != '${var.api_domain}'"
+      }
+    }
+    description = "Block direct-IP requests that bypass the domain (scanners, bots)"
+  }
+
   # Block known malicious IPs
   rule {
     action   = "deny(403)"
