@@ -98,7 +98,7 @@ graph TB
 * **External Zone**: Includes end-users and company developers. Developers operate under a "lightweight" BYOD scheme, with security compliance enforced by a **Mobile Device Management (MDM)** platform.
 * **Edge Layer**: The application frontend is hosted on **Cloudflare Workers**, providing a globally distributed entry point that minimizes latency.
 * **GCP Security Boundary**: All backend traffic is funneled through a **Global External HTTP(S) Load Balancer**. Entry is protected by **Cloud Armour**, which serves as a Web Application Firewall (WAF) to block SQL injection, Cross-Site Scripting (XSS), and malicious IP ranges.
-* **Application Layer**: The backend logic is fully containerized and hosted on **Cloud Run (Gen2)** within the `europe-west6` region.
+* **Application Layer**: The backend logic is fully containerized and hosted on **Cloud Run (Gen2)** within the `europe-west6` region. Cloud Run ingress is set to `INGRESS_TRAFFIC_ALL` because the API Gateway (ESPv2) makes direct outbound calls to the Cloud Run service URL — these calls do not transit the GCP Load Balancer and therefore cannot be admitted by a more restrictive ingress setting. Network-level restriction is instead enforced by Cloud Run's **IAM invocation policy** (`allow_unauthenticated = false`): anonymous requests to the Cloud Run URL are rejected with HTTP 403 before reaching Django. All legitimate callers (API Gateway service account, Cloud Tasks service account) present valid GCP OIDC tokens.
 
 ### 2. Security Controls & Redundancy
 
