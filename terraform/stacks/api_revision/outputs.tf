@@ -48,11 +48,6 @@ output "service_account_email" {
   value       = google_service_account.app.email
 }
 
-output "api_gateway_url" {
-  description = "The URL of the API Gateway"
-  value       = "https://${google_api_gateway_gateway.gateway.default_hostname}"
-}
-
 # Load Balancer outputs
 output "load_balancer_ip" {
   description = "IP address of the Load Balancer"
