@@ -254,11 +254,15 @@ resource "google_compute_managed_ssl_certificate" "api_ssl_cert" {
   }
 }
 
-# Backend service pointing to API Gateway (via Serverless NEG)
+# Backend service pointing directly to Cloud Run (via Serverless NEG).
+# Previously routed through the API Gateway (ESPv2). Removed in favour of direct
+# Cloud Run routing so that all backends use Serverless NEGs, enabling
+# INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER on Cloud Run (blocks public internet access).
+# Firebase JWT validation is handled by Django's FirebaseAuthentication class.
 resource "google_compute_backend_service" "api_backend" {
   name                            = "tellme-api-backend"
   project                         = var.project_id
-  description                     = "Backend service for TellMe API Gateway"
+  description                     = "Backend service for TellMe — direct Cloud Run Serverless NEG"
   connection_draining_timeout_sec = 300
   enable_cdn                      = false
   load_balancing_scheme           = "EXTERNAL_MANAGED"
@@ -266,9 +270,9 @@ resource "google_compute_backend_service" "api_backend" {
 
   security_policy = google_compute_security_policy.api_security_policy.id
 
-  # Pointing to API Gateway via Serverless NEG (no health checks needed)
+  # Pointing directly to Cloud Run via Serverless NEG
   backend {
-    group = google_compute_region_network_endpoint_group.api_gateway_neg.id
+    group = google_compute_region_network_endpoint_group.cloud_run_neg.id
   }
 
   log_config {
@@ -350,34 +354,6 @@ resource "google_compute_backend_service" "admin_backend" {
   ]
 }
 
-# Backend service for direct Cloud Run access (no API Gateway, no IAP)
-# Used for /processing/v1/queue/ (large file uploads) and /ws/audiohook/ (WebSocket streaming).
-# Cloud Armor still applies via the security_policy attachment.
-resource "google_compute_backend_service" "processing_direct_backend" {
-  name                            = "tellme-processing-direct-backend"
-  project                         = var.project_id
-  description                     = "Backend service for direct Cloud Run access (bypasses API Gateway)"
-  connection_draining_timeout_sec = 300
-  enable_cdn                      = false
-  load_balancing_scheme           = "EXTERNAL_MANAGED"
-  protocol                        = "HTTPS"
-
-  security_policy = google_compute_security_policy.api_security_policy.id
-
-  # Same Cloud Run NEG used by admin_backend — no IAP
-  backend {
-    group = google_compute_region_network_endpoint_group.cloud_run_neg.id
-  }
-
-  log_config {
-    enable      = true
-    sample_rate = 1.0
-  }
-
-  custom_request_headers = [
-    "X-Forwarded-Proto: https"
-  ]
-}
 
 # Grant IAP access to specified members
 resource "google_iap_web_backend_service_iam_binding" "admin_iap_access" {
@@ -387,23 +363,6 @@ resource "google_iap_web_backend_service_iam_binding" "admin_iap_access" {
   members             = var.iap_allowed_members
 }
 
-# Serverless Network Endpoint Group for API Gateway
-resource "google_compute_region_network_endpoint_group" "api_gateway_neg" {
-  provider              = google-beta
-  name                  = "tellme-api-gateway-neg"
-  project               = var.project_id
-  region                = var.gateway_region
-  network_endpoint_type = "SERVERLESS"
-
-  serverless_deployment {
-    platform = "apigateway.googleapis.com"
-    resource = google_api_gateway_gateway.gateway.gateway_id
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
 
 # URL Map for the Load Balancer
 resource "google_compute_url_map" "api_url_map" {
@@ -438,24 +397,7 @@ resource "google_compute_url_map" "api_url_map" {
       }
     }
 
-    # Route direct Cloud Run paths — bypasses API Gateway to remove its size/WebSocket limitations.
-    # Cloud Armor (WAF, DDoS, rate limiting) still applies via processing_direct_backend.
-    path_rule {
-      paths = [
-        "/processing/v1/queue",
-        "/processing/v1/queue/",
-        "/ws/audiohook",
-        "/ws/audiohook/",
-      ]
-      route_action {
-        weighted_backend_services {
-          backend_service = google_compute_backend_service.processing_direct_backend.id
-          weight          = 100
-        }
-      }
-    }
-
-    # Route all other traffic to API Gateway backend
+    # All other paths fall through to api_backend (direct Cloud Run Serverless NEG)
     path_rule {
       paths = ["/*"]
       route_action {
@@ -568,12 +510,12 @@ resource "google_compute_global_forwarding_rule" "api_http_forwarding_rule" {
 
 # The Complete Flow:
 # 1. Customer arrives at api.tell-me.ch (thanks to Cloudflare DNS)
-# 2. Neon sign (Forwarding Rule) directs them to IP address
+# 2. Neon sign (Forwarding Rule) directs them to the IP address
 # 3. Fancy doorman (HTTPS Proxy) checks their SSL credentials
-# 4. Seating chart (URL Map) decides which kitchen (Backend Service):
-#    - /admin requests → IAP-protected Cloud Run backend
-#    - All other requests → API Gateway backend
-# 5. Kitchen manager (Backend Service) picks a chef from the list (NEG)
-# 6. For /admin: IAP checks authentication, then Cloud Run serves directly
-#    For /api: API Gateway validates and routes to Cloud Run
-# 7. Bouncer (Cloud Armour) kicks out troublemakers throughout
+# 4. Bouncer (Cloud Armour) inspects every request for WAF, rate limiting, and DDoS threats
+# 5. Seating chart (URL Map) decides which kitchen (Backend Service):
+#    - /admin/** → IAP-protected Cloud Run backend (Google account auth required)
+#    - Everything else → api_backend (direct Cloud Run Serverless NEG)
+# 6. Cloud Run only accepts requests from the Load Balancer (INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER)
+#    so the direct Cloud Run URL is unreachable from the public internet
+# 7. Django handles all application-level authentication (Firebase JWT, ephemeral tokens, processing key)
