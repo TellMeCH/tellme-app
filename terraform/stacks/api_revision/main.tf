@@ -133,11 +133,12 @@ module "cloud_run_v2" {
 
   max_instance_request_concurrency = var.max_concurrent_requests
 
-  ingress = "INGRESS_TRAFFIC_ALL"
+  ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
   members = [
-   "serviceAccount:${google_service_account.app.email}",  # API Gateway can invoke
-   "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com",  # Cloud Tasks can invoke
-   "serviceAccount:service-${data.google_project.current.number}@gcp-sa-iap.iam.gserviceaccount.com"  # IAP can invoke
+   "allUsers",                                                                                                   # LB Serverless NEGs do not inject OIDC tokens; Django auth is the gate for all routes
+   "serviceAccount:${google_service_account.app.email}",                                                        # App service account (Cloud Tasks callbacks)
+   "serviceAccount:service-${data.google_project.current.number}@gcp-sa-cloudtasks.iam.gserviceaccount.com",  # Cloud Tasks
+   "serviceAccount:service-${data.google_project.current.number}@gcp-sa-iap.iam.gserviceaccount.com"          # IAP backend (admin)
   ]
 
   containers = [
@@ -190,49 +191,4 @@ module "cloud_run_v2" {
   ]
 }
 
-locals {
-  spec_rendered = templatefile("${path.module}/../../configs/spec.yaml", {
-    cloud_run_url = module.cloud_run_v2.service_uri
-  })
-  api_config_id = "cfg-${substr(sha256(local.spec_rendered), 0, 8)}"
-}
-
-resource "google_api_gateway_api" "api" {
-  provider = google-beta
-  project  = var.project_id
-  api_id   = "tellme-api"
-}
-
-resource "google_api_gateway_api_config" "cfg" {
-  provider      = google-beta
-  project       = var.project_id
-  api           = google_api_gateway_api.api.api_id
-  api_config_id = local.api_config_id
-
-  openapi_documents {
-    document {
-      path     = "../../configs/spec.yaml"
-      contents = base64encode(local.spec_rendered)
-    }
-  }
-
-  gateway_config {
-    backend_config {
-      google_service_account = google_service_account.app.email
-    }
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "google_api_gateway_gateway" "gateway" {
-  provider   = google-beta
-  project    = var.project_id
-  region     = var.gateway_region
-  gateway_id = "tellme-gateway"
-
-  api_config = google_api_gateway_api_config.cfg.name
-}
 

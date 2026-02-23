@@ -18,17 +18,6 @@ variable "region" {
   description = "GCP region"
 }
 
-variable "gateway_region" {
-  type        = string
-  description = "API Gateway region (only europe-west1 or europe-west2 supported)"
-  default     = "europe-west1"
-
-  validation {
-    condition     = contains(["europe-west1", "europe-west2"], var.gateway_region)
-    error_message = "Gateway region must be either europe-west1 or europe-west2."
-  }
-}
-
 
 variable "min_instance_count" {
   type        = number
