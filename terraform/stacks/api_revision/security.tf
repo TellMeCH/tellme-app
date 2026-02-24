@@ -22,6 +22,26 @@ resource "google_compute_security_policy" "api_security_policy" {
     description = "Block direct-IP requests that bypass the domain (scanners, bots)"
   }
 
+  # Block requests to paths outside known application namespaces
+  # Allowlist: /api/, /processing/, /admin, /health/, /ws/audiohook
+  # This stops internet scanners (zgrab, l9scan, etc.) from reaching Cloud Run
+  rule {
+    action   = "deny(403)"
+    priority = "300"
+    match {
+      expr {
+        expression = <<-EOF
+          !request.path.startsWith('/api/v1/') &&
+          !request.path.startsWith('/processing/v1/') &&
+          !request.path.startsWith('/admin') &&
+          !request.path.startsWith('/health/') &&
+          !request.path.startsWith('/ws/audiohook')
+        EOF
+      }
+    }
+    description = "Block requests to unknown paths (path allowlist)"
+  }
+
   # Block known malicious IPs
   rule {
     action   = "deny(403)"
@@ -166,7 +186,7 @@ resource "google_compute_security_policy" "api_security_policy" {
       expr {
         expression = <<-EOF
           has(request.headers['user-agent']) &&
-          request.headers['user-agent'].lower().matches('.*sqlmap.*|.*nikto.*|.*nessus.*|.*masscan.*|.*gobuster.*|.*dirb.*|.*burp.*')
+          request.headers['user-agent'].lower().matches('.*sqlmap.*|.*nikto.*|.*nessus.*|.*masscan.*|.*gobuster.*|.*dirb.*|.*burp.*|.*zgrab.*|.*l9scan.*|.*censys.*|.*scrapy.*|.*gptbot.*|.*semrushbot.*|.*ahrefsbot.*|.*mj12bot.*')
         EOF
       }
     }
