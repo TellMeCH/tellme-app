@@ -272,14 +272,16 @@ resource "google_compute_security_policy" "api_security_policy" {
   }
 }
 
-# SSL Certificate for the Load Balancer
-resource "google_compute_managed_ssl_certificate" "api_ssl_cert" {
-  name    = "tellme-api-ssl-cert"
-  project = var.project_id
-
-  managed {
-    domains = [var.api_domain]
-  }
+# Cloudflare Origin Certificate for the Load Balancer.
+# Issued by Cloudflare (SSL/TLS → Origin Server → Create Certificate, 15-year validity).
+# Replaces google_compute_managed_ssl_certificate whose HTTP-01 ACME renewal is
+# blocked by Cloudflare's orange-cloud proxy. name_prefix ensures a unique name on
+# each replacement since self-managed certs are immutable in GCP.
+resource "google_compute_ssl_certificate" "api_ssl_cert" {
+  name_prefix = "tellme-api-ssl-cert-"
+  project     = var.project_id
+  certificate = var.cf_origin_cert
+  private_key = var.cf_origin_key
 
   lifecycle {
     create_before_destroy = true
@@ -485,7 +487,7 @@ resource "google_compute_target_https_proxy" "api_https_proxy" {
   name             = "tellme-api-https-proxy"
   project          = var.project_id
   url_map          = google_compute_url_map.api_url_map.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.api_ssl_cert.id]
+  ssl_certificates = [google_compute_ssl_certificate.api_ssl_cert.id]
   ssl_policy       = google_compute_ssl_policy.api_ssl_policy.id
 }
 
