@@ -168,3 +168,15 @@ variable "iap_allowed_members" {
   type        = list(string)
   description = "List of members allowed to access /admin through IAP (format: user:email@domain.com or group:group@domain.com)"
 }
+
+# Cloudflare Origin Certificate
+variable "cf_origin_cert" {
+  type        = string
+  description = "Cloudflare Origin Certificate (PEM) for the Load Balancer"
+}
+
+variable "cf_origin_key" {
+  type        = string
+  description = "Cloudflare Origin Certificate private key (PEM)"
+  sensitive   = true
+}

@@ -145,6 +145,9 @@ jobs:
 
       - name: Terraform Plan
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
+        env:
+          TF_VAR_cf_origin_cert: ${{ secrets.CF_ORIGIN_CERT }}
+          TF_VAR_cf_origin_key: ${{ secrets.CF_ORIGIN_KEY }}
         run: |
           # Base terraform plan command
           PLAN_ARGS=(
@@ -183,6 +186,9 @@ jobs:
 
       - name: Terraform Apply
         working-directory: terraform/environments/${{ env.TELLME_ENV }}
+        env:
+          TF_VAR_cf_origin_cert: ${{ secrets.CF_ORIGIN_CERT }}
+          TF_VAR_cf_origin_key: ${{ secrets.CF_ORIGIN_KEY }}
         run: |
           terraform apply -auto-approve tfplan.bin
 

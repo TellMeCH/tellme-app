@@ -58,4 +58,6 @@ module "api_revision" {
   iap_client_id            = var.iap_client_id
   iap_client_secret        = var.iap_client_secret
   iap_allowed_members      = var.iap_allowed_members
+  cf_origin_cert           = var.cf_origin_cert
+  cf_origin_key            = var.cf_origin_key
 }
