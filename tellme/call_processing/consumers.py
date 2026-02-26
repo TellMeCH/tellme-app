@@ -1,44 +1,57 @@
+import asyncio
 import json
 import logging
 import os
 import datetime
 import tempfile
-import hashlib
-from channels.generic.websocket import WebsocketConsumer
-from rest_framework import exceptions
+import uuid
+from channels.generic.websocket import AsyncWebsocketConsumer
+from rest_framework.exceptions import AuthenticationFailed
 from django.utils import timezone
-from django.conf import settings
-from tellme.call_miner.models import EphemeralProcessingToken
 from tellme.call_processing.utils import audio_utils, processing_utils
+from tellme.call_processing.utils.audiohook_utils import (
+    verify_audiohook_signature,
+    get_org_from_audiohook_headers,
+    select_media,
+)
 
 logger = logging.getLogger('django')
 
 
-class AudioHookConsumer(WebsocketConsumer):
+class AudioHookConsumer(AsyncWebsocketConsumer):
     """
-    A Channels consumer that:
-     - Authenticates with an API key (replicating OrganizationAPIKeyAuthentication).
-     - Chooses the two-channel format in "opened".
-     - Checks "seq" in each incoming message.
-     - Streams audio to a GCS temp file, then moves it to a final bucket.
+    Async Django Channels consumer implementing the Genesys AudioHook protocol (v2).
+
+    Authentication:
+      - X-API-KEY header → hashed with HASH_KEY → OrganizationAPIKey → Organization
+      - HMAC-SHA256 signature verified against settings.CX_CLIENT_SECRET
+      - audiohook-organization-id header cross-validated against organization.cx_system_org_id
+
+    Why AsyncWebsocketConsumer?
+      Audio arrives continuously at ~100ms intervals while the server also handles
+      HMAC verification, DB lookups, and file I/O. The async variant handles all
+      concurrent connections on a single event loop thread: each `await` yields
+      control to other connections instead of blocking a thread for the full duration.
     """
-    AUDIOHOOK_CHANNELS = 2
+
     AUDIOHOOK_SAMPLE_RATE = 8000
-    MAXIMUM_ERROR_RETRIES = 5
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.org = None
         self.customer_id = None
+        self.customer_ani = None
         self.agent_id = None
+        self.conversation_id = None
+        self.language = 'en-us'
+        self.chosen_media = None
         self.connection_timestamp = None
-        self.server_seq = 0         # Outgoing seq for messages the app sends
-        self.last_client_seq = 0    # The last seq received from client (Genesys)
+        self.server_seq = 0
+        self.last_client_seq = 0
         self.session_id = None
         self.recording_started = False
         self.recording_closed = False
         self.error_close = False
-        self.error_retries = 0  # Number of times to wait until the client sends "close" after an error
         self.temp_file = None
         self.temp_file_path = None
 
@@ -46,264 +59,289 @@ class AudioHookConsumer(WebsocketConsumer):
         self.server_seq += 1
         return self.server_seq
 
-    @staticmethod
-    def authenticate_ephemeral_token_from_scope_headers(headers):
+    # Connection lifecycle
+    async def connect(self):
         """
-        Validate the ephemeral session token from WebSocket upgrade headers.
-        Reads the X-Tellme-Session-Token header with 'Bearer <token>' format,
-        hashes it, and checks against EphemeralProcessingToken in the DB.
+        Accept the WebSocket upgrade, then authenticate and resolve the organization.
+        The connection is always accepted first so that a 'disconnect' error message
+        can be sent back before closing if authentication fails.
         """
-        auth_header = None
-        for (name, value) in headers:
-            if name == b'x-tellme-session-token':
-                auth_header = value.decode('utf-8')
-                break
+        await self.accept()
 
-        if not auth_header:
-            raise exceptions.AuthenticationFailed("No X-Tellme-Session-Token header found.")
+        headers = dict(self.scope.get('headers', []))
 
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0] != 'Bearer':
-            raise exceptions.AuthenticationFailed("Invalid X-Tellme-Session-Token header format.")
+        # Extract the session ID immediately from the header (not from the first message)
+        raw_session_id = headers.get(b'audiohook-session-id', b'').decode('utf-8')
+        self.session_id = raw_session_id if raw_session_id else str(uuid.uuid4())
 
-        plain_token = parts[1]
-        logger.debug("Got session token from scope headers.")
-        token_hash = hashlib.sha256(
-            (settings.HASH_KEY + plain_token + settings.HASH_KEY).encode('utf-8')
-        ).hexdigest()
-
-        try:
-            ephemeral_token = EphemeralProcessingToken.objects.get(token_hash=token_hash)
-        except EphemeralProcessingToken.DoesNotExist:
-            raise exceptions.AuthenticationFailed("Invalid session token.")
-
-        if ephemeral_token.expires_at < timezone.now():
-            raise exceptions.AuthenticationFailed("Session token expired.")
-
-        return ephemeral_token.organization
-
-    def connect(self):
-        """
-        Called upon WebSocket connect. Fetch and verify the Authorization
-        header from scope, then accept or close the connection.
-        """
-        self.accept()
-        try:
-            self.org = self.authenticate_ephemeral_token_from_scope_headers(self.scope["headers"])
-            logger.info(f"Authenticated Organization: {self.org.id}")
-        except exceptions.AuthenticationFailed as e:
-            logger.warning(f"Authentication failed: {e}")
-            self.send_error('unauthorized', str(e))
+        # Verify HMAC-SHA256 signature (includes ≥500ms artificial delay on failure)
+        request_path = self.scope.get('path', '/ws/audiohook/')
+        authority = headers.get(b'host', b'').decode('utf-8')
+        str_headers = {k.decode(): v.decode() for k, v in headers.items()}
+        is_valid, reason = await verify_audiohook_signature(str_headers, request_path, authority)
+        if not is_valid:
+            logger.warning(f'AudioHook signature verification failed: {reason}')
+            await self.send_disconnect('unauthorized', reason)
             return
 
-        # Define connection timestamp
-        self.connection_timestamp = datetime.datetime.now(datetime.UTC)
+        # Resolve organization via API key + cx_system_org_id cross-validation
+        try:
+            self.org = await get_org_from_audiohook_headers(headers)
+        except AuthenticationFailed as e:
+            logger.warning(f'AudioHook org resolution failed: {e}')
+            await self.send_disconnect('unauthorized', str(e))
+            return
 
-        # Create a local temp file to store raw audio
-        tf = tempfile.NamedTemporaryFile(prefix="audiohook_", delete=False)
+        logger.info(f'AudioHook session {self.session_id}: authenticated org {self.org.id}')
+
+        self.connection_timestamp = datetime.datetime.now(datetime.UTC)
+        tf = tempfile.NamedTemporaryFile(prefix='audiohook_', delete=False)
         self.temp_file = tf
         self.temp_file_path = tf.name
-        logger.info(f"Created local temp file: {self.temp_file_path}")
+        logger.info(f'AudioHook session {self.session_id}: temp file {self.temp_file_path}')
 
-    def handle_open(self, message):
-        """
-        Handle Genesys' 'open' message: pick the 2-channel media format from 'media',
-        set the customer ID, and  then respond with 'opened'.
-        """
-        self.recording_started = True
+    async def disconnect(self, code):
+        """Called when the WebSocket connection is closed for any reason."""
+        if not self.recording_closed:
+            await asyncio.get_event_loop().run_in_executor(None, self._finalize_recording_sync)
 
-        # Extract the customer ID from the message
-        self.customer_id = message['parameters'].get('participant', {'id': None}).get('id')
+    # Message routing
+    async def receive(self, text_data=None, bytes_data=None):
+        if text_data is not None:
+            await self._handle_protocol_message(text_data)
+        elif bytes_data is not None:
+            await self._handle_audio_frame(bytes_data)
 
-        # Extract the agent ID from the message (Fake, to see how Genesys provides this)
-        self.agent_id = message['parameters'].get('agent', {'id': None}).get('id')
-
-        # Of the offered media, select the configuration that offers 2 channels. If no such option exist, select
-        # the first configuration in the offered media
-        chosen = []
-        options = message['parameters'].get('media', [])
-        for opt in options:
-            if len(opt.get('channels', [])) == 2:
-                chosen = [opt]
-                break
-        if not chosen and len(options) > 0:
-            chosen = [options[0]]
-
-        opened = {
-            "version": "2",
-            "type": "opened",
-            "seq": self.increment_server_seq(),
-            "clientseq": self.last_client_seq,
-            "id": self.session_id,
-            "parameters": {
-                "startPaused": False,
-                "media": chosen,
-            }
-        }
-        self.send(text_data=json.dumps(opened))
-        logger.info(f"Sent 'opened', chosen media={chosen}")
-
-    def handle_ping(self):
-        """
-        Handle Genesys' 'ping' message responding with 'pong'.
-        """
-        pong_msg = {
-            "version": "2",
-            "type": "pong",
-            "seq": self.increment_server_seq(),
-            "clientseq": self.last_client_seq,
-            "id": self.session_id,
-            "parameters": {}
-        }
-        self.send(text_data=json.dumps(pong_msg))
-        logger.debug("Responded with 'pong'.")
-
-    def handle_close(self, message):
-        """
-        Handle Genesys' 'close' message by responding with 'closed' and finalizing the recording.
-        """
-        reason = message["parameters"].get("reason", "end")
-        logger.info(f"Received 'close' with reason={reason}")
-
-        self.recording_closed = True
-        closed_msg = {
-            "version": "2",
-            "type": "closed",
-            "seq": self.increment_server_seq(),
-            "clientseq": self.last_client_seq,
-            "id": self.session_id,
-            "parameters": {}
-        }
-        self.send(text_data=json.dumps(closed_msg))
-        logger.info("Sent 'closed' response.")
-
-        # Now finalize
-        self.finalize_recording()
-        self.disconnect(200)
-        self.close()
-
-    def handle_protocol_message(self, raw_text):
-        """
-        Parse the incoming JSON message (e.g. 'open', 'ping', 'close'),
-        check seq, and respond accordingly.
-        """
+    async def _handle_protocol_message(self, raw_text: str):
         try:
             message = json.loads(raw_text)
         except json.JSONDecodeError:
-            logger.warning("Invalid JSON from client.")
-            self.send_error("error", "Invalid JSON")
+            logger.warning(f'AudioHook session {self.session_id}: invalid JSON from client')
+            await self.send_disconnect('error', 'Invalid JSON')
             return
 
-        msg_type = message.get("type")
-        seq = message.get("seq")
-
-        # Check that seq is equal to last_client_seq + 1
+        seq = message.get('seq')
         if not isinstance(seq, int) or seq != self.last_client_seq + 1:
-            logger.error(f"Out-of-order seq: got={seq}, expected={self.last_client_seq + 1}")
-            self.send_error("error", "Out-of-order seq")
+            logger.error(
+                f'AudioHook session {self.session_id}: out-of-order seq '
+                f'got={seq}, expected={self.last_client_seq + 1}'
+            )
+            await self.send_disconnect('error', 'Out-of-order seq')
             return
         self.last_client_seq = seq
 
-        self.session_id = message.get("id", self.session_id)
+        msg_type = message.get('type')
 
-        # Dispatch based on msg_type. If an error has occurred, only accept 'close'
+        # After a disconnect has been sent, only a 'close' can proceed normally.
+        # All other message types are silently ignored; the client should send 'close' once it processes the disconnect.
         if msg_type == 'close':
-            self.handle_close(message)
+            await self._handle_close(message)
+        elif self.error_close:
+            pass
+        elif msg_type == 'open':
+            await self._handle_open(message)
+        elif msg_type == 'ping':
+            await self._handle_ping()
+        elif msg_type == 'update':
+            await self._handle_update(message)
+        elif msg_type == 'discarded':
+            await self._handle_discarded(message)
+        elif msg_type == 'error':
+            await self._handle_error(message)
+        elif msg_type in ('paused', 'resumed'):
+            # AudioHook Monitor: acknowledge receipt but take no action
+            pass
         else:
-            if not self.error_close:
-                if msg_type == "open":
-                    self.handle_open(message)
-                elif msg_type == "ping":
-                    self.handle_ping()
-                else:
-                    logger.info(f"Unhandled msg_type='{msg_type}', ignoring.")
-            else:
-                # If disconnect has been sent, and the connection has not yet been closed, simply send 'disconnect'
-                # again, until a maximum retry count is met
-                self.send_error('error', 'Expected "close" message.')
-                self.error_retries += 1
+            logger.info(f'AudioHook session {self.session_id}: ignoring unknown type {msg_type!r}')
 
-                if self.error_retries > self.MAXIMUM_ERROR_RETRIES:
-                    self.finalize_recording()
-                    self.disconnect(400)
-                    self.close()
+    # Protocol message handlers
+    async def _handle_open(self, message):
+        params = message.get('parameters', {})
 
-    def handle_audio_frame(self, data: bytes):
-        """
-        Append the incoming audio chunk to the local temp file, unless already closed or an error has occurred.
-        """
+        # Validate organizationId in the message body matches the header-derived org
+        incoming_org_id = params.get('organizationId', '')
+        if str(self.org.cx_system_org_id) != incoming_org_id:
+            logger.warning(
+                f'AudioHook session {self.session_id}: organizationId mismatch '
+                f'header={self.org.cx_system_org_id}, body={incoming_org_id}'
+            )
+            await self.send_disconnect('unauthorized', 'organizationId mismatch')
+            return
+
+        self.conversation_id = params.get('conversationId')
+        participant = params.get('participant', {})
+        self.customer_id = participant.get('id')
+        self.customer_ani = participant.get('ani')
+        self.language = params.get('language', 'en-us')
+
+        # Agent ID from customConfig (no native agent field in the AudioHook protocol)
+        custom_config = params.get('customConfig') or {}
+        self.agent_id = custom_config.get('agent_id')
+
+        chosen = select_media(params.get('media', []))
+        if not chosen:
+            await self.send_disconnect('error', 'No acceptable media format offered')
+            return
+
+        self.chosen_media = chosen
+        self.recording_started = True
+
+        await self.send(text_data=json.dumps({
+            'version': '2',
+            'type': 'opened',
+            'seq': self.increment_server_seq(),
+            'clientseq': self.last_client_seq,
+            'id': self.session_id,
+            'parameters': {
+                'startPaused': False,
+                'media': [chosen],
+            },
+        }))
+        logger.info(
+            f'AudioHook session {self.session_id}: opened with media={chosen}, '
+            f'customer={self.customer_id}, agent={self.agent_id}'
+        )
+
+    async def _handle_ping(self):
+        await self.send(text_data=json.dumps({
+            'version': '2',
+            'type': 'pong',
+            'seq': self.increment_server_seq(),
+            'clientseq': self.last_client_seq,
+            'id': self.session_id,
+            'parameters': {},
+        }))
+        logger.debug(f'AudioHook session {self.session_id}: pong sent')
+
+    async def _handle_close(self, message):
+        reason = message.get('parameters', {}).get('reason', 'end')
+        logger.info(f'AudioHook session {self.session_id}: received close reason={reason}')
+
+        self.recording_closed = True
+        await self.send(text_data=json.dumps({
+            'version': '2',
+            'type': 'closed',
+            'seq': self.increment_server_seq(),
+            'clientseq': self.last_client_seq,
+            'id': self.session_id,
+            'parameters': {},
+        }))
+        logger.info(f'AudioHook session {self.session_id}: sent closed')
+
+        await asyncio.get_event_loop().run_in_executor(None, self._finalize_recording_sync)
+        await self.close()
+
+    async def _handle_update(self, message):
+        self.language = message.get('parameters', {}).get('language', self.language)
+        await self.send(text_data=json.dumps({
+            'version': '2',
+            'type': 'updated',
+            'seq': self.increment_server_seq(),
+            'clientseq': self.last_client_seq,
+            'id': self.session_id,
+            'parameters': {},
+        }))
+        logger.info(f'AudioHook session {self.session_id}: language updated to {self.language}')
+
+    async def _handle_discarded(self, message):
+        params = message.get('parameters', {})
+        logger.info(
+            f'AudioHook session {self.session_id}: audio discarded '
+            f"start={params.get('start')}, discarded={params.get('discarded')}"
+        )
+        # No response required for AudioHook Monitor
+
+    async def _handle_error(self, message):
+        params = message.get('parameters', {})
+        logger.error(
+            f'AudioHook session {self.session_id}: client error '
+            f"code={params.get('code')}, message={params.get('message')}"
+        )
+        # No response required; client will send close
+
+    async def _handle_audio_frame(self, data: bytes):
         if not self.recording_closed and not self.error_close:
             if self.temp_file:
                 self.temp_file.write(data)
             else:
-                logger.warning("No temp file open to write audio data.")
+                logger.warning(f'AudioHook session {self.session_id}: no temp file open')
         else:
-            logger.warning("Received audio after 'close' was requested, ignoring.")
+            logger.warning(f'AudioHook session {self.session_id}: audio received after close, ignoring')
 
-    def receive(self, text_data=None, bytes_data=None):
+    # Error signalling
+    async def send_disconnect(self, reason: str, info: str = ''):
         """
-        Called each time the server receives a message from the client.
+        Send a 'disconnect' message to the client.
+        reason must be one of: 'completed', 'unauthorized', 'error'
+        After calling this, self.error_close is set so further non-close messages are ignored.
         """
-        if text_data is not None:
-            self.handle_protocol_message(text_data)
-        elif bytes_data is not None:
-            self.handle_audio_frame(bytes_data)
+        await self.send(text_data=json.dumps({
+            'version': '2',
+            'type': 'disconnect',
+            'seq': self.increment_server_seq(),
+            'clientseq': self.last_client_seq,
+            'id': self.session_id or '',
+            'parameters': {'reason': reason, 'info': info},
+        }))
+        self.error_close = True
+        logger.error(f'AudioHook session {self.session_id}: sent disconnect reason={reason} info={info!r}')
 
-    def finalize_recording(self):
+    # Recording finalization (runs in a thread pool executor)
+    def _finalize_recording_sync(self):
         """
-        After closing, upload and rename the temporary file to GCS, remove the local temp file,
-        and optionally create a Cloud Task to further process.
+        Close the temp file, encode the audio as WAV, upload to GCS, and create a
+        Cloud Task for processing. Runs synchronously in a thread pool so the event
+        loop is not blocked during I/O.
         """
         if not self.recording_started:
-            logger.info("Recording never started; skipping finalize.")
+            logger.info(f'AudioHook session {self.session_id}: recording never started, skipping finalize')
             return
 
         if self.temp_file:
             self.temp_file.close()
 
-        if self.temp_file_path and os.path.exists(self.temp_file_path):
-            size_bytes = os.path.getsize(self.temp_file_path)
-            logger.info(f"Local file size: {size_bytes} bytes")
-        else:
-            logger.warning("No audio data received.")
+        if not self.temp_file_path or not os.path.exists(self.temp_file_path):
+            logger.warning(f'AudioHook session {self.session_id}: no audio data received')
             return
 
-        if not self.error_close and size_bytes > 0:
-            # Encode as WAV with linear PCM and proper headers
-            # Note to self: examine whether this takes too long/blocks the consumer
-            wav_data = audio_utils.decode_mulaw_file_to_wav(
-                self.temp_file_path,
-                channels=self.AUDIOHOOK_CHANNELS,
-                sample_rate=self.AUDIOHOOK_SAMPLE_RATE
-            )
+        size_bytes = os.path.getsize(self.temp_file_path)
+        logger.info(f'AudioHook session {self.session_id}: local file size {size_bytes} bytes')
 
-            # Upload to GCS and create Task
-            blob_name = f"{self.org.id}/{self.customer_id}_{self.agent_id}_{self.connection_timestamp.isoformat()}.wav"
+        channels = len(self.chosen_media.get('channels', [])) if self.chosen_media else 2
+        audio_format = self.chosen_media.get('format', 'PCMU') if self.chosen_media else 'PCMU'
+
+        if not self.error_close and size_bytes > 0:
+            if audio_format == 'PCMU':
+                wav_data = audio_utils.decode_mulaw_file_to_wav(
+                    self.temp_file_path,
+                    channels=channels,
+                    sample_rate=self.AUDIOHOOK_SAMPLE_RATE,
+                )
+            else:
+                logger.warning(
+                    f'AudioHook session {self.session_id}: unsupported format {audio_format}, skipping upload'
+                )
+                os.remove(self.temp_file_path)
+                return
+
+            # customer_id falls back to the ANI if no UUID participant ID was provided
+            customer_ref = self.customer_id or self.customer_ani or 'unknown'
+            blob_name = (
+                f'{self.org.id}/{customer_ref}_{self.agent_id}_'
+                f'{self.connection_timestamp.isoformat()}.wav'
+            )
             message, status_code = processing_utils.upload_file_and_create_processing_task(
-                blob_name, self.agent_id, self.customer_id, self.org.id, self.connection_timestamp, logger,
-                True, wav_data  # Note to self: Consider whether checking agent validity is reasonable
+                blob_name,
+                self.agent_id,
+                customer_ref,
+                self.org.id,
+                self.connection_timestamp,
+                logger,
+                True,
+                wav_data,
             )
             logger.info(message['message'])
 
         # Remove local file
         os.remove(self.temp_file_path)
-        logger.info(f"Removed local temp file {self.temp_file_path}")
-
-    def send_error(self, reason: str, message: str):
-        """
-        Send a synchronous 'error' message to Genesys.
-        """
-        error_msg = {
-            "version": "2",
-            "type": "disconnect",
-            "seq": self.increment_server_seq(),
-            "clientseq": self.last_client_seq,
-            "id": self.session_id or "",
-            "parameters": {
-                "reason": reason,
-                "info": message
-            }
-        }
-        self.send(text_data=json.dumps(error_msg))
-        self.error_close = True
-        logger.error(f"Sent 'error' with reason={reason}, message={message}")
+        logger.info(f'AudioHook session {self.session_id}: removed temp file {self.temp_file_path}')
