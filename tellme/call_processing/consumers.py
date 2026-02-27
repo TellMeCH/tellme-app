@@ -156,6 +156,39 @@ class AudioHookConsumer(AsyncWebsocketConsumer):
 
     # Protocol message handlers
     async def _handle_open(self, message):
+        """
+        Handle the AudioHook 'open' message sent by Genesys at session start.
+
+        Expected parameters for TellMe integration:
+          parameters.organizationId   (str, required)
+              UUID string matching the Organization.cx_system_org_id configured in TellMe.
+              Set in Genesys: AudioHook integration → Advanced → Custom Configuration → organizationId.
+
+          parameters.participant.id   (str, optional)
+              Genesys participant UUID for the customer leg of the call.
+              Used as the customer reference when looking up / creating a Customer record.
+
+          parameters.participant.ani  (str, optional)
+              Caller's phone number (E.164). Fallback customer reference when participant.id is absent.
+
+          parameters.conversationId   (str, optional)
+              Genesys conversation UUID. Stored on the TellMe Conversation for cross-system traceability.
+
+          parameters.language         (str, optional, default 'en-us')
+              BCP-47 language tag, e.g. 'de-ch'. Overrides the Organization default during transcription.
+
+          parameters.customConfig     (object, optional)
+              Arbitrary key/value pairs passed through from the Genesys integration config.
+              TellMe reads the following keys:
+                agent_id  (int, required for processing)
+                    Integer primary key of the TellMe Agent record that handled the call.
+                    Obtain from `python manage.py create_sample_data` output or the Django admin.
+                    Set in Genesys: AudioHook integration → Advanced → Custom Configuration
+                    as {"agent_id": <integer>}.
+
+          parameters.media            (array, required)
+              List of offered media formats. TellMe accepts PCMU at 8000 Hz, stereo or mono.
+        """
         params = message.get('parameters', {})
 
         # Validate organizationId in the message body matches the header-derived org

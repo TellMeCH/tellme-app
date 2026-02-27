@@ -420,11 +420,9 @@ class Command(BaseCommand):
             self.stdout.write('Creating Organization API Key for Processing')
             plain_key = OrganizationAPIKey.create_key(org, name='test_key')
             self.stdout.write(f'Created API Key for {org.name}: {plain_key}')
+            self.stdout.write(f'  [OpenParameters] organizationId = {org.cx_system_org_id}')
+            self.stdout.write(f'  [OpenParameters] customConfig = {{"agent_id": {manager.id}}}')
         except Exception as e:
             raise CommandError(f'Failed to create Organization API Key: {e}')
 
         self.stdout.write(self.style.SUCCESS('Successfully created expanded sample data'))
-        self.stdout.write('')
-        self.stdout.write(self.style.WARNING('AudioHook reference-implementation test config:'))
-        self.stdout.write(f'  [OpenParameters] organizationId = {org.cx_system_org_id}')
-        self.stdout.write(f'  [Authentication] apiKey         = {plain_key}')
