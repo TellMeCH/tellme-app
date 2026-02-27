@@ -90,11 +90,19 @@ class TestAudioHookConsumer:
 
     @pytest.mark.asyncio
     @override_settings(CX_CLIENT_SECRET=TEST_CX_CLIENT_SECRET)
-    async def test_stream_success(self, audiohook_plain_key, audiohook_org, mock_gcs_utils, mock_cloud_tasks):
-        """Full happy-path: connect → open → audio frames → close → GCS upload + Cloud Task."""
+    async def test_stream_success(self, audiohook_plain_key, audiohook_org):
+        """Full happy-path: connect → open → audio frames → close → processing pipeline triggered."""
         header_list, session_id = _make_headers(audiohook_plain_key, TEST_CX_ORG_UUID)
 
-        with patch('tellme.call_processing.utils.audio_utils.decode_mulaw_file_to_wav', return_value=b'WAV'):
+        # Patch at the boundary the consumer actually crosses: it calls
+        # processing_utils.upload_file_and_create_processing_task(...) directly.
+        # Mocking that function avoids all cross-module import-path ambiguity that makes
+        # lower-level mocks (gcs_utils.upload_to_gcs, create_processing_task) unreliable
+        # in the thread-pool executor context.  The processing pipeline internals are
+        # covered by test_queue.py.
+        with patch('tellme.call_processing.consumers.audio_utils.decode_mulaw_file_to_wav', return_value=b'WAV'), \
+             patch('tellme.call_processing.consumers.processing_utils.upload_file_and_create_processing_task',
+                   return_value=({'message': 'queued'}, 202)) as mock_process:
             communicator = WebsocketCommunicator(AudioHookConsumer.as_asgi(), WS_PATH, headers=header_list)
             connected, _ = await communicator.connect()
             assert connected is True
@@ -118,12 +126,12 @@ class TestAudioHookConsumer:
             assert closed['type'] == 'closed'
             assert closed['seq'] == 2
 
-            # Allow the thread-pool executor (finalize_recording) to complete before asserting mocks.
+            # Allow the thread-pool executor (_finalize_recording_sync) to complete.
             await asyncio.sleep(0.2)
             await communicator.disconnect()
 
-        mock_gcs_utils[0].assert_called_once()
-        mock_cloud_tasks.assert_called_once()
+            # Assert inside the with-block: patches are still active, no race with __exit__.
+            mock_process.assert_called_once()
 
     @pytest.mark.asyncio
     @override_settings(CX_CLIENT_SECRET=TEST_CX_CLIENT_SECRET)
