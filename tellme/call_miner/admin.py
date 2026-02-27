@@ -30,6 +30,11 @@ class OrganizationAdmin(admin.ModelAdmin):
             'fields': ('ticket_server', 'ticket_account', 'ticket_project', 'ticket_api_key'),
             'description': 'Configure Jira integration for automatic ticket creation.'
         }),
+        ('CX System Integration', {
+            'fields': ('cx_system_org_id',),
+            'description': 'External CX platform organization UUID (e.g. Genesys Cloud org ID). '
+                           'Must match the Audiohook-Organization-Id header sent by the CX system.'
+        }),
     )
 
     def has_jira_key(self, obj):

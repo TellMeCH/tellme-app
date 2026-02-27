@@ -75,6 +75,7 @@ jobs:
           echo "OPENAI_API_KEY=fake_key" >> .env
           echo "MAILER_API_KEY=fake_key" >> .env
           echo "HASH_KEY=fake_key" >> .env
+          echo "CX_CLIENT_SECRET=fake_key" >> .env
           echo "SEARCH_ENGINE_ID=fake_key" >> .env
           echo "SEARCH_API_KEY=fake_key" >> .env
           echo "FIREBASE_WEB_API_KEY=fake_key" >> .env
