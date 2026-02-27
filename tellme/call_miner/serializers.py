@@ -402,6 +402,7 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
             'url', 'name', 'conversation_count', 'max_user_count', 'max_topic_count', 'created', 'updated',
             'transcription_method', 'enrichment_method', 'revenue_search_prefix', 'language', 'employee_count',
             'ticket_server', 'ticket_account', 'ticket_project', 'ticket_api_key',
+            'cx_system_org_id',
         ]
         read_only_fields = ['ticket_key_encrypted']
 

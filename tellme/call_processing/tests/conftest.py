@@ -107,6 +107,18 @@ def mock_cloud_tasks():
         mock_create.return_value = None
         yield mock_create
 
+
+@pytest.fixture
+def mock_agent_validity():
+    """
+    Mocks out db_handler.check_agent_validity to return a passing result.
+    Required for consumer tests that run _finalize_recording_sync in a thread-pool
+    executor, where an inner with-patch() context in the async test method is not
+    reliably visible to the executor thread.
+    """
+    with patch("tellme.call_processing.utils.db_handler.check_agent_validity", return_value=(True, "OK")) as mock:
+        yield mock
+
 @pytest.fixture
 def mock_summarization_tasks():
     """

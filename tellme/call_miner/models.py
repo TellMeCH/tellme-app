@@ -586,6 +586,12 @@ class Organization(models.Model, ConversationTrendMixin):
     ticket_account = models.EmailField(max_length=255, null=True)
     ticket_key_encrypted = models.CharField(max_length=512, null=True)
     ticket_project = models.CharField(max_length=100, null=True)
+    cx_system_org_id = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="External CX system organization UUID (e.g. Genesys Cloud org ID)",
+    )
 
     def __str__(self):
         return self.name

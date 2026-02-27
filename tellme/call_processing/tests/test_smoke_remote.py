@@ -2,6 +2,7 @@ import os
 import re
 import json
 import time
+import uuid
 import pytest
 import requests
 import logging
@@ -219,6 +220,16 @@ class TestSmokeTestCloudRunWithLogs:
         # Extract the Org ID
         self.org_id = re.search(r"/organizations/([^/]+)/", org_json["url"]).group(1)
         logger.info(f"Created test organization {self.org_id}")
+
+        # Assign a CX system org UUID so the AudioHook endpoint can validate the header
+        self.__cx_org_id = str(uuid.uuid4())
+        patch_resp = requests.patch(
+            f"{self.cloud_run_host}/api/v1/organizations/{self.org_id}/",
+            json={"cx_system_org_id": self.__cx_org_id},
+            headers=self.superuser_headers,
+        )
+        patch_resp.raise_for_status()
+        logger.info(f"Set cx_system_org_id={self.__cx_org_id} on test organization {self.org_id}")
 
         # Create Organization API Key
         apikey_data = {
@@ -541,11 +552,10 @@ class TestSmokeTestCloudRunWithLogs:
 
     def test_smoke_audiohook_with_logs(self):
         """
-        Trigger the /ws/audiohook/ endpoint using the Audiohook emulator with an ephemeral session token.
+        Trigger the /ws/audiohook/ endpoint using the AudioHook emulator.
         /ws/audiohook/ is routed directly to Cloud Run (bypassing the API Gateway) and authenticated
-        via X-Tellme-Session-Token rather than the long-lived Org API Key.
+        via HMAC-SHA256 HTTP Signatures (RFC 8941) using the Org API Key and CX_CLIENT_SECRET.
         """
-        session_token = self._get_ephemeral_token()
         audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
         trigger_timestamp = timezone.now().isoformat()
         emulator_image = "genesys_audiohook_emulator:latest"
@@ -554,7 +564,9 @@ class TestSmokeTestCloudRunWithLogs:
             "-v", f"{os.getcwd()}/tellme/call_processing/tests/resources:/app/data",
             "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
             "-e", f"WAV_FILE=/app/data/sample_recording.wav",
-            "-e", f"SESSION_TOKEN={session_token}",
+            "-e", f"API_KEY={self.__api_key_plain}",
+            "-e", f"CX_CLIENT_SECRET={settings.CX_CLIENT_SECRET}",
+            "-e", f"CX_ORG_ID={self.__cx_org_id}",
             "-e", f"AGENT_ID={self.agent_id}",
             emulator_image
         ]
