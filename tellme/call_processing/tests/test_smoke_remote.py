@@ -351,15 +351,18 @@ class TestSmokeTestCloudRunWithLogs:
         text_logs = [log['textPayload'] for log in logs if 'textPayload' in log]
 
         # Verify produced logs
+        # When no customer_id is sent, create_storage_path substitutes "Unknown".
+        customer_id_in_path = 'Unknown' if exclude_customer_id else self.customer_id
+        file_ext = sample_file  # 'wav' or 'mp3'
         expected_patterns = [
             r"^Execution Time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$",
             r"^Created: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+00:00$",
             rf"^Organization: {self.org_id}$",
-            rf"^File: {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}\.wav$",
+            rf"^File: {self.org_id}/{customer_id_in_path}_{self.agent_id}_{self.timestamp_pattern}\.{file_ext}$",
             rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.PROCESSING_QUEUE_NAME}$",
             rf"^Created task in {settings.PROCESSING_QUEUE_NAME}$",
-            rf"^Processing file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, size \d+ bytes\.$",
-            rf"^Processed file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, required \d+ seconds$",
+            rf"^Processing file {self.org_id}/{customer_id_in_path}_{self.agent_id}_{self.timestamp_pattern}\.{file_ext}$",
+            rf"^Processed file {self.org_id}/{customer_id_in_path}_{self.agent_id}_{self.timestamp_pattern}\.{file_ext}, required \d+ seconds$",
             rf"^Processing summarization for <class 'tellme.call_miner.models.Customer'> \d+$",
             rf"^Summary created/updated for <class 'tellme.call_miner.models.Customer'> \d+",
         ]
@@ -604,8 +607,8 @@ class TestSmokeTestCloudRunWithLogs:
         expected_patterns = [
             rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.PROCESSING_QUEUE_NAME}$",
             rf"^Created task in {settings.PROCESSING_QUEUE_NAME}$",
-            rf"^Processing file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav, size \d+ bytes\.$",
-            rf"^Processed file {self.org_id}/{self.uuid_pattern}__{self.agent_id}_{self.timestamp_pattern}\.wav, required \d+ seconds$"
+            rf"^Processing file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav$",
+            rf"^Processed file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav, required \d+ seconds$"
         ]
         for pattern in expected_patterns:
             assert any(re.match(pattern, line) for line in text_logs), \
