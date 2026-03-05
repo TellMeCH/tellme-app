@@ -364,6 +364,11 @@ jobs:
             -f ./tellme/emulators/genesys_audiohook/Dockerfile \
             ./tellme/emulators/genesys_audiohook
 
+      - name: Build Audiohook protocol tester image
+        run: |
+          docker build -t genesys_audiohook_protocol_tester:latest \
+            -f ./tellme/emulators/genesys_audiohook/Dockerfile.reference \
+            ./tellme/emulators/genesys_audiohook
 
       - name: Run Remote Smoke Tests
         env:
