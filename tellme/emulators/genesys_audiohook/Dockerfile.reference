@@ -1,0 +1,90 @@
+# Dockerfile for the Genesys AudioHook reference implementation test runner.
+# Runs the audiohook-reference-implementation-main npm test suite against a live
+# TellMe /ws/audiohook/ endpoint to validate protocol compliance.
+#
+# Build (from the repo root):
+#   docker build -t genesys_audiohook_protocol_tester \
+#                -f tellme/emulators/genesys_audiohook/Dockerfile.reference \
+#                tellme/emulators/genesys_audiohook/
+#
+# Run:
+#   docker run --rm \
+#     -e AUDIOHOOK_WS_URL=wss://<host>/ws/audiohook/ \
+#     -e API_KEY=<plain_org_api_key> \
+#     -e CLIENT_SECRET=<base64_hmac_secret> \
+#     -e ORG_UUID=<genesys_org_uuid> \
+#     -e AGENT_ID=<agent_id> \
+#     genesys_audiohook_protocol_tester
+
+ARG NODE_VERSION=18
+
+FROM node:${NODE_VERSION}-slim
+
+# python3 is needed to run the audiohook_test.py entrypoint
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ------------------------------------------------------------------
+# Install npm dependencies (layered for Docker cache efficiency)
+# ------------------------------------------------------------------
+
+# Root-level dependencies (jest, ts-jest, CDK, configparser, uuid…)
+COPY audiohook-reference-implementation-main/package.json \
+     audiohook-reference-implementation-main/package-lock.json \
+     audiohook-reference-implementation-main/
+RUN npm install --prefix audiohook-reference-implementation-main
+
+# App-level dependencies (audiohook protocol library, fastify, AWS SDKs…)
+COPY audiohook-reference-implementation-main/app/package.json \
+     audiohook-reference-implementation-main/app/package-lock.json \
+     audiohook-reference-implementation-main/app/
+RUN npm install --prefix audiohook-reference-implementation-main/app
+
+# Client-level dependencies (ws, wav, commander…)
+COPY audiohook-reference-implementation-main/client/package.json \
+     audiohook-reference-implementation-main/client/package-lock.json \
+     audiohook-reference-implementation-main/client/
+RUN npm install --prefix audiohook-reference-implementation-main/client
+
+# ------------------------------------------------------------------
+# Copy TypeScript / Jest configuration
+# ------------------------------------------------------------------
+COPY audiohook-reference-implementation-main/tsconfig.json \
+     audiohook-reference-implementation-main/jest.config.js \
+     audiohook-reference-implementation-main/
+
+COPY audiohook-reference-implementation-main/app/tsconfig.json \
+     audiohook-reference-implementation-main/app/
+
+COPY audiohook-reference-implementation-main/client/tsconfig.json \
+     audiohook-reference-implementation-main/client/
+
+# ------------------------------------------------------------------
+# Copy source files required by the test suite
+# ------------------------------------------------------------------
+
+# CDK stack imported by audiohook-fargate-api.test.ts (test.skip)
+COPY audiohook-reference-implementation-main/lib/ \
+     audiohook-reference-implementation-main/lib/
+
+# Test files (audiohook-api-messages.test.ts + helpers + WAV fixture)
+COPY audiohook-reference-implementation-main/test/ \
+     audiohook-reference-implementation-main/test/
+
+# Audiohook protocol library (imported by api-test-utils.ts)
+COPY audiohook-reference-implementation-main/app/audiohook/ \
+     audiohook-reference-implementation-main/app/audiohook/
+
+# Client utilities: tone/WAV media sources and WebSocket wrapper
+COPY audiohook-reference-implementation-main/client/src/ \
+     audiohook-reference-implementation-main/client/src/
+
+# ------------------------------------------------------------------
+# Entrypoint: writes testconfig.cfg from env vars, then runs npm test
+# ------------------------------------------------------------------
+COPY audiohook_test.py .
+
+ENTRYPOINT ["python3", "audiohook_test.py"]
