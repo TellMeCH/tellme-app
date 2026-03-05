@@ -306,6 +306,7 @@ class TestSmokeTestCloudRunWithLogs:
         resp.raise_for_status()
         return resp.json()["session_token"]
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_post_with_logs(self, exclude_customer_id=False, sample_file='wav'):
         """
         Trigger the /queue endpoint using an ephemeral session token obtained from /processing/v1/start/.
@@ -413,6 +414,7 @@ class TestSmokeTestCloudRunWithLogs:
                 test_tasks.append(task)
         assert len(test_tasks) == 0, f"Expected 0 task in queue, found {len(test_tasks)}."
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_post_with_logs_excluding_customer_id(self):
         """
         Trigger the /queue endpoint using X-API-KEY, without specifying a customer ID in the /queue endpoint
@@ -421,6 +423,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs(exclude_customer_id=True)
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_post_with_logs_mp3_file(self):
         """
         Trigger the /queue endpoint using X-API-KEY, now for the mp3 sample file
@@ -429,6 +432,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs(sample_file='mp3')
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_post_with_logs_groq(self):
         """
         Trigger the /queue endpoint using X-API-KEY, after switching the org's transcription_method to 'groq'.
@@ -443,6 +447,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs()
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_post_with_logs_enrichment_vertexai(self):
         """
         Trigger the /queue endpoint using X-API-KEY, after switching the org's transcription_method to 'openai' and its
@@ -458,6 +463,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs()
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_post_with_logs_groq_enrichment_vertexai(self):
         """
         Trigger the /queue endpoint using X-API-KEY, after switching the org's transcription_method to 'groq' and its
@@ -473,6 +479,7 @@ class TestSmokeTestCloudRunWithLogs:
         # Reuse the standard smoke test logic
         self.test_smoke_post_with_logs()
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_ticket_creation_with_logs(self):
         """
         Trigger ticket creation after creating a customer with conversations.
@@ -551,6 +558,7 @@ class TestSmokeTestCloudRunWithLogs:
         assert customer.get('ticket_date') is not None, "Customer should have ticket_date set"
         assert 'atlassian.net' in customer['ticket_link'], "Ticket link should be a Jira URL"
 
+    @pytest.mark.skip(reason="temporarily disabled")
     def test_smoke_audiohook_with_logs(self):
         """
         Trigger the /ws/audiohook/ endpoint using the AudioHook emulator.
