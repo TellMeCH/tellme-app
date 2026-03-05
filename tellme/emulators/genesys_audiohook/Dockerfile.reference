@@ -66,13 +66,12 @@ COPY audiohook-reference-implementation-main/client/tsconfig.json \
 # Copy source files required by the test suite
 # ------------------------------------------------------------------
 
-# CDK stack imported by audiohook-fargate-api.test.ts (test.skip)
-COPY audiohook-reference-implementation-main/lib/ \
-     audiohook-reference-implementation-main/lib/
-
 # Test files (audiohook-api-messages.test.ts + helpers + WAV fixture)
+# audiohook-fargate-api.test.ts is excluded: it is always test.skip and imports
+# lib/audiohook-fargate-stack.ts (CDK code) which is not present in this image.
 COPY audiohook-reference-implementation-main/test/ \
      audiohook-reference-implementation-main/test/
+RUN rm audiohook-reference-implementation-main/test/audiohook-fargate-api.test.ts
 
 # Audiohook protocol library (imported by api-test-utils.ts)
 COPY audiohook-reference-implementation-main/app/audiohook/ \
