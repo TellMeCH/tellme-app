@@ -646,6 +646,66 @@ class TestSmokeTestCloudRunWithLogs:
                 test_tasks.append(task)
         assert len(test_tasks) == 0, f"Expected 0 tasks in queue, found {len(test_tasks)}."
 
+    def test_smoke_audiohook_protocol(self):
+        """
+        Runs the Genesys AudioHook reference implementation test suite against /ws/audiohook/.
+
+        The suite (audiohook-reference-implementation-main) validates protocol compliance by
+        opening real WebSocket connections and exercising the full message exchange: open/opened
+        handshake, ping/pong, update, discard, error, pause/resume, and close messages.
+
+        Feature flags written to testconfig.cfg:
+          doubleChannel=true         -- double-channel open/media tests run
+          singleChannel=false        -- single-channel tests skipped
+          transcriptionConnector=false -- transcript-connector tests skipped
+
+        The test asserts that every test in the Jest suite either passes or is skipped (no failures).
+        Server-side log verification is not performed here; protocol correctness is self-validated
+        by the Jest assertions inside the Docker container.
+        """
+        audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
+        protocol_tester_image = "genesys_audiohook_protocol_tester:latest"
+
+        docker_cmd = [
+            "docker", "run", "--rm",
+            "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
+            "-e", f"API_KEY={self.__api_key_plain}",
+            "-e", f"CLIENT_SECRET={settings.CX_CLIENT_SECRET}",
+            "-e", f"ORG_UUID={self.__cx_org_id}",
+            "-e", f"AGENT_ID={self.agent_id}",
+            protocol_tester_image,
+        ]
+
+        logger.info("Running AudioHook protocol tester Docker cmd")
+        result = subprocess.run(
+            docker_cmd,
+            capture_output=True,
+            text=True,
+        )
+
+        combined_output = result.stdout + result.stderr
+        logger.info(f"Protocol tester output:\n{combined_output}")
+
+        if result.returncode != 0:
+            logger.error(f"Protocol tester container failed:\n{combined_output}")
+            pytest.fail(
+                f"AudioHook protocol test suite exited with code {result.returncode}.\n"
+                f"Output:\n{combined_output}"
+            )
+
+        # Extra guard: Jest may exit 0 in edge cases even when failures are present
+        if re.search(r"Tests:.*\bfailed\b", combined_output):
+            pytest.fail(
+                f"AudioHook protocol test suite reported test failures.\n"
+                f"Output:\n{combined_output}"
+            )
+
+        logger.info("All AudioHook protocol tests passed or were skipped.")
+
+        # Wait for server-side WebSocket sessions opened during the npm test run to close
+        # before teardown attempts to delete the organisation; open sessions can cause 500 errors.
+        time.sleep(10)
+
     def teardown_method(self):
         # Delete the GCS blob
         if hasattr(self, "uploaded_gcs_uri"):
