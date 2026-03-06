@@ -1,6 +1,7 @@
 import time
 import hashlib
 import os
+import uuid
 from datetime import datetime, timedelta, date
 import random
 from django.conf import settings
@@ -124,13 +125,19 @@ class Command(BaseCommand):
         TOPIC_DATA, SUGGESTED_TOPIC_DATA, CONVERSATION_DATA = self.get_industry_data(industry)
         try:
             self.stdout.write('Creating Sample Organizations')
+            # Fixed UUID so the AudioHook reference-implementation test suite can be pointed
+            # at this org without any manual setup. Set [OpenParameters] organizationId to
+            # this value in testconfig.cfg when running the reference impl tests locally.
+            AUDIOHOOK_TEST_ORG_ID = uuid.UUID('deadbeef-dead-4bee-dead-beefdeadbeef')
+
             org = Organization(
                 name='ACME Org',
                 max_user_count=20,
                 transcription_method='groq',
                 enrichment_method='vertexai',
                 language='de',
-                revenue_search_prefix='pkz.ch/de/'
+                revenue_search_prefix='pkz.ch/de/',
+                cx_system_org_id=AUDIOHOOK_TEST_ORG_ID,
             )
             org.save()
 
@@ -413,9 +420,9 @@ class Command(BaseCommand):
             self.stdout.write('Creating Organization API Key for Processing')
             plain_key = OrganizationAPIKey.create_key(org, name='test_key')
             self.stdout.write(f'Created API Key for {org.name}: {plain_key}')
+            self.stdout.write(f'  [OpenParameters] organizationId = {org.cx_system_org_id}')
+            self.stdout.write(f'  [OpenParameters] customConfig = {{"agent_id": {manager.id}}}')
         except Exception as e:
             raise CommandError(f'Failed to create Organization API Key: {e}')
 
-        self.stdout.write(
-            self.style.SUCCESS('Successfully created expanded sample data')
-        )
+        self.stdout.write(self.style.SUCCESS('Successfully created expanded sample data'))

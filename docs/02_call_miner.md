@@ -2,7 +2,6 @@
 
 The Django app `call_miner` is meant to organize and serve the data model shown below:
 
-![Application Data Model](images/Application_Data_Model.drawio.svg)
 
 ## Core Models
 
@@ -76,6 +75,11 @@ All core entities (Agent, Customer, Topic, Organization) inherit:
   - 90-day expiration
   - Maximum 3 keys per organization
   - Named keys for easy management
+- **EphemeralProcessingToken**: Short-lived tokens for call recording ingestion
+  - SHA-256 hashed storage (same scheme as OrganizationAPIKey)
+  - 15-minute TTL; issued by `GET /processing/v1/start/` in exchange for a valid API key
+  - Used to authenticate `/processing/v1/queue/` and `/ws/audiohook/` requests
+  - Expired tokens are purged on every deployment via the `purge_ephemeral_tokens` management command
 
 ## Key Relationships
 - Users can be employees in multiple organizations (via Employee model)

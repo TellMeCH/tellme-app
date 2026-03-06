@@ -2,6 +2,7 @@ import os
 import re
 import json
 import time
+import uuid
 import pytest
 import requests
 import logging
@@ -220,6 +221,16 @@ class TestSmokeTestCloudRunWithLogs:
         self.org_id = re.search(r"/organizations/([^/]+)/", org_json["url"]).group(1)
         logger.info(f"Created test organization {self.org_id}")
 
+        # Assign a CX system org UUID so the AudioHook endpoint can validate the header
+        self.__cx_org_id = str(uuid.uuid4())
+        patch_resp = requests.patch(
+            f"{self.cloud_run_host}/api/v1/organizations/{self.org_id}/",
+            json={"cx_system_org_id": self.__cx_org_id},
+            headers=self.superuser_headers,
+        )
+        patch_resp.raise_for_status()
+        logger.info(f"Set cx_system_org_id={self.__cx_org_id} on test organization {self.org_id}")
+
         # Create Organization API Key
         apikey_data = {
             "name": self.api_key_name,
@@ -282,10 +293,24 @@ class TestSmokeTestCloudRunWithLogs:
             self.sample_file_mp3 = BytesIO(f.read())
             self.sample_file_mp3.name = "sample_recording.mp3"
 
+    def _get_ephemeral_token(self) -> str:
+        """
+        Exchange the long-lived Org API Key for a short-lived ephemeral session token.
+        Calls GET /processing/v1/start/ through the API Gateway and returns the raw token.
+        """
+        start_url = f"{self.cloud_run_host}/processing/v1/start/"
+        resp = requests.get(
+            start_url,
+            headers={"X-Tellme-Api-Key": f"X-API-KEY {self.__api_key_plain}"}
+        )
+        resp.raise_for_status()
+        return resp.json()["session_token"]
+
     def test_smoke_post_with_logs(self, exclude_customer_id=False, sample_file='wav'):
         """
-        Trigger the /queue endpoint, using X-API-KEY
+        Trigger the /queue endpoint using an ephemeral session token obtained from /processing/v1/start/.
         """
+        session_token = self._get_ephemeral_token()
         queue_url = f"{self.cloud_run_host}/processing/v1/queue/"
         trigger_timestamp = timezone.now().isoformat()
 
@@ -307,7 +332,7 @@ class TestSmokeTestCloudRunWithLogs:
             queue_url,
             data=data,
             files=files,
-            headers={"X-Tellme-Api-Key": f"X-API-KEY {self.__api_key_plain}"}
+            headers={"X-Tellme-Session-Token": f"Bearer {session_token}"}
         )
         assert response.status_code == 202, f"Unexpected status code: {response.status_code}"
         response_data = response.json()
@@ -316,7 +341,7 @@ class TestSmokeTestCloudRunWithLogs:
 
         # Retrieve logs for /queue and /process
         log_filter = self.generate_logs_filter(trigger_timestamp)
-        waiting_filter = log_filter + '\ntextPayload =~ ".*Summary created/updated for <class \'tellme\.call_miner\.models\.Customer\'>.*"'
+        waiting_filter = log_filter + '\ntextPayload =~ ".*Summary created/updated for <class \'tellme\\.call_miner\\.models\\.Customer\'>.*"'
         logs = self.retrieve_logs_with_timeout(
             retrieval_query=log_filter,
             waiting_query=waiting_filter,
@@ -326,23 +351,24 @@ class TestSmokeTestCloudRunWithLogs:
         text_logs = [log['textPayload'] for log in logs if 'textPayload' in log]
 
         # Verify produced logs
+        # When no customer_id is sent, create_storage_path substitutes "Unknown".
+        customer_id_in_path = 'Unknown' if exclude_customer_id else self.customer_id
+        file_ext = sample_file  # 'wav' or 'mp3'
         expected_patterns = [
             r"^Execution Time: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$",
             r"^Created: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\+00:00$",
             rf"^Organization: {self.org_id}$",
-            rf"^File: {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}\.wav$",
+            rf"^File: {self.org_id}/{customer_id_in_path}_{self.agent_id}_{self.timestamp_pattern}\.{file_ext}$",
             rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.PROCESSING_QUEUE_NAME}$",
             rf"^Created task in {settings.PROCESSING_QUEUE_NAME}$",
-            rf"^Processing file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, size \d+ bytes\.$",
-            rf"^Processed file {self.org_id}/{self.customer_id}_{self.agent_id}_{self.timestamp_pattern}.wav, required \d+ seconds$",
+            rf"^Processing file {self.org_id}/{customer_id_in_path}_{self.agent_id}_{self.timestamp_pattern}\.{file_ext}$",
+            rf"^Processed file {self.org_id}/{customer_id_in_path}_{self.agent_id}_{self.timestamp_pattern}\.{file_ext}, required \d+ seconds$",
             rf"^Processing summarization for <class 'tellme.call_miner.models.Customer'> \d+$",
             rf"^Summary created/updated for <class 'tellme.call_miner.models.Customer'> \d+",
         ]
         for pattern in expected_patterns:
-            assert (
-                any(re.match(pattern, line) for line in text_logs),
+            assert any(re.match(pattern, line) for line in text_logs), \
                 f"Could not find expected pattern {pattern} in execution logs"
-            )
 
         # Verify conversation creation with a GET call
         resp = requests.get(
@@ -525,10 +551,11 @@ class TestSmokeTestCloudRunWithLogs:
         assert customer.get('ticket_date') is not None, "Customer should have ticket_date set"
         assert 'atlassian.net' in customer['ticket_link'], "Ticket link should be a Jira URL"
 
-    @pytest.mark.skip(reason="WebSocket connections not supported by Google Cloud API Gateway")
     def test_smoke_audiohook_with_logs(self):
         """
-        Trigger the /process endpoint, this time using the Audiohook emulator
+        Trigger the /ws/audiohook/ endpoint using the AudioHook emulator.
+        /ws/audiohook/ is routed directly to Cloud Run (bypassing the API Gateway) and authenticated
+        via HMAC-SHA256 HTTP Signatures (RFC 8941) using the Org API Key and CX_CLIENT_SECRET.
         """
         audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
         trigger_timestamp = timezone.now().isoformat()
@@ -539,6 +566,8 @@ class TestSmokeTestCloudRunWithLogs:
             "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
             "-e", f"WAV_FILE=/app/data/sample_recording.wav",
             "-e", f"API_KEY={self.__api_key_plain}",
+            "-e", f"CX_CLIENT_SECRET={settings.CX_CLIENT_SECRET}",
+            "-e", f"CX_ORG_ID={self.__cx_org_id}",
             "-e", f"AGENT_ID={self.agent_id}",
             emulator_image
         ]
@@ -578,14 +607,12 @@ class TestSmokeTestCloudRunWithLogs:
         expected_patterns = [
             rf"^Creating task in queue with parent projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/{settings.REGION}/queues/{settings.PROCESSING_QUEUE_NAME}$",
             rf"^Created task in {settings.PROCESSING_QUEUE_NAME}$",
-            rf"^Processing file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav, size \d+ bytes\.$",
-            rf"^Processed file {self.org_id}/{self.uuid_pattern}__{self.agent_id}_{self.timestamp_pattern}\.wav, required \d+ seconds$"
+            rf"^Processing file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav$",
+            rf"^Processed file {self.org_id}/{self.uuid_pattern}_{self.agent_id}_{self.timestamp_pattern}\.wav, required \d+ seconds$"
         ]
         for pattern in expected_patterns:
-            assert (
-                any(re.match(pattern, line) for line in text_logs),
+            assert any(re.match(pattern, line) for line in text_logs), \
                 f"Could not find expected pattern {pattern} in execution logs"
-            )
 
         # Verify conversation creation with a GET call
         resp = requests.get(
@@ -619,6 +646,66 @@ class TestSmokeTestCloudRunWithLogs:
                 test_tasks.append(task)
         assert len(test_tasks) == 0, f"Expected 0 tasks in queue, found {len(test_tasks)}."
 
+    def test_smoke_audiohook_protocol(self):
+        """
+        Runs the Genesys AudioHook reference implementation test suite against /ws/audiohook/.
+
+        The suite (audiohook-reference-implementation-main) validates protocol compliance by
+        opening real WebSocket connections and exercising the full message exchange: open/opened
+        handshake, ping/pong, update, discard, error, pause/resume, and close messages.
+
+        Feature flags written to testconfig.cfg:
+          doubleChannel=true         -- double-channel open/media tests run
+          singleChannel=false        -- single-channel tests skipped
+          transcriptionConnector=false -- transcript-connector tests skipped
+
+        The test asserts that every test in the Jest suite either passes or is skipped (no failures).
+        Server-side log verification is not performed here; protocol correctness is self-validated
+        by the Jest assertions inside the Docker container.
+        """
+        audiohook_ws_url = f"{self.cloud_run_host.replace('https://', 'wss://')}/ws/audiohook/"
+        protocol_tester_image = "genesys_audiohook_protocol_tester:latest"
+
+        docker_cmd = [
+            "docker", "run", "--rm",
+            "-e", f"AUDIOHOOK_WS_URL={audiohook_ws_url}",
+            "-e", f"API_KEY={self.__api_key_plain}",
+            "-e", f"CLIENT_SECRET={settings.CX_CLIENT_SECRET}",
+            "-e", f"ORG_UUID={self.__cx_org_id}",
+            "-e", f"AGENT_ID={self.agent_id}",
+            protocol_tester_image,
+        ]
+
+        logger.info("Running AudioHook protocol tester Docker cmd")
+        result = subprocess.run(
+            docker_cmd,
+            capture_output=True,
+            text=True,
+        )
+
+        combined_output = result.stdout + result.stderr
+        logger.info(f"Protocol tester output:\n{combined_output}")
+
+        if result.returncode != 0:
+            logger.error(f"Protocol tester container failed:\n{combined_output}")
+            pytest.fail(
+                f"AudioHook protocol test suite exited with code {result.returncode}.\n"
+                f"Output:\n{combined_output}"
+            )
+
+        # Extra guard: Jest may exit 0 in edge cases even when failures are present
+        if re.search(r"Tests:.*\bfailed\b", combined_output):
+            pytest.fail(
+                f"AudioHook protocol test suite reported test failures.\n"
+                f"Output:\n{combined_output}"
+            )
+
+        logger.info("All AudioHook protocol tests passed or were skipped.")
+
+        # Wait for server-side WebSocket sessions opened during the npm test run to close
+        # before teardown attempts to delete the organisation; open sessions can cause 500 errors.
+        time.sleep(10)
+
     def teardown_method(self):
         # Delete the GCS blob
         if hasattr(self, "uploaded_gcs_uri"):
@@ -633,7 +720,10 @@ class TestSmokeTestCloudRunWithLogs:
         client = tasks_v2.CloudTasksClient()
         parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.PROCESSING_QUEUE_NAME)
         for task in client.list_tasks(parent=parent):
-            body = json.loads(task.http_request.body.decode("utf-8"))
+            raw = task.http_request.body
+            if not raw:
+                continue
+            body = json.loads(raw.decode("utf-8"))
             if (body.get("organization_id") == self.org_id) or (body.get("agent_id") == self.agent_id):
                 client.delete_task(name=task.name)
                 logger.info(f"Deleted test task referencing org/agent: {task.name}")

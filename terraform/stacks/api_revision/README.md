@@ -33,7 +33,7 @@ graph TB
     end
 
     subgraph Routing_Layer [Request Routing Layer]
-        AGW[API Gateway Backend<br/>/api/**, /health, /schema]
+        AppBackend[App Backend Service<br/>/* — all non-admin routes]
         IAPBackend[IAP Backend Service<br/>/admin, /admin/**]
     end
 
@@ -58,8 +58,8 @@ graph TB
     CFW --> SSL
     SSL --> LB
     LB --> CA
-    CA -."/api/** traffic".-> AGW
-    AGW --> CloudRun
+    CA -."/api/**, /processing/**, /* traffic".-> AppBackend
+    AppBackend --> CloudRun
 
     %% Admin path
     AdminUser --> SSL
@@ -78,7 +78,7 @@ graph TB
 
     %% Styling
     style CA fill:#ffebee
-    style AGW fill:#f3e5f5
+    style AppBackend fill:#f3e5f5
     style IAPBackend fill:#fff3e0
     style LB fill:#e1f5ff
     style CloudRun fill:#e8f5e9
@@ -91,17 +91,17 @@ graph TB
 * **External Zone**: Includes end-users and company developers. Developers operate under a "lightweight" BYOD scheme, with security compliance enforced by a **Mobile Device Management (MDM)** platform.
 * **Edge Layer**: The application frontend is hosted on **Cloudflare Workers**, providing a globally distributed entry point that minimizes latency.
 * **GCP Security Boundary**: All backend traffic is funneled through a **Global External HTTP(S) Load Balancer**. Entry is protected by **Cloud Armour**, which serves as a Web Application Firewall (WAF) to block SQL injection, Cross-Site Scripting (XSS), and malicious IP ranges.
-* **Application Layer**: The backend logic is fully containerized and hosted on **Cloud Run (Gen2)** within the `europe-west6` region.
+* **Application Layer**: The backend logic is fully containerized and hosted on **Cloud Run (Gen2)** within the `europe-west6` region. Cloud Run ingress is set to `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER`, which means the direct Cloud Run service URL is unreachable from the public internet — only traffic arriving via the GCP Global Load Balancer is admitted. All application-level authentication is handled by Django (Firebase JWT, ephemeral tokens, processing pipeline key).
 
 ### 2. Security Controls & Redundancy
 
 * **Encryption**: All external communications are encrypted using **TLS 1.2+**. The Load Balancer enforces security headers, including **HSTS**, **X-Content-Type-Options** (nosniff), and **X-Frame-Options** (DENY).
 * **Access Control**:
-  * **API Access**: User identity for API endpoints is managed via **Firebase Authentication**. The API Gateway validates Firebase JWTs before routing requests to Cloud Run.
+  * **API Access**: User identity for API endpoints is managed via **Firebase Authentication**, validated by Django's `FirebaseAuthentication` class on every request.
   * **Admin Access**: The Django admin interface (`/admin`) is protected by **Google Identity-Aware Proxy (IAP)**, which requires Google account authentication and IAM role membership (`roles/iap.httpsResourceAccessor`). This provides enterprise-grade access control with centralized identity management.
   * **Service Access**: Internal service access is strictly governed by **GCP IAM roles**, ensuring that the backend service account has the minimum necessary permissions to access databases, buckets, and secrets.
 * **Web Application Firewall**: **Cloud Armour** provides layered protection with distinct security policies for API and admin traffic:
-  * **API Traffic Protection** (`/api/**`): Full WAF rule enforcement including SQLi, XSS, LFI, RCE, rate limiting, malicious IP blocking, and suspicious user agent detection
+  * **All Traffic Protection**: Full WAF rule enforcement for every route via the single `api_backend` Backend Service — SQLi, XSS, LFI, RCE, rate limiting, malicious IP blocking, and suspicious user agent detection. `/processing/v1/start` has an additional dedicated rate-limit rule (10 req/min per IP, priority 1050) to prevent ephemeral token generation abuse.
   * **Admin Traffic Protection** (`/admin/**`): Applies all WAF rules **except** SQL injection detection, which is bypassed to prevent false positives on Google IAP's OAuth callback tokens. Admin traffic is still protected by:
     - IP blocking and rate limiting (Priority 200-1150)
     - XSS protection (Priority 1300)
@@ -119,11 +119,11 @@ graph TB
 
 The architecture implements two distinct routing paths based on the request type:
 
-#### API Request Pipeline (/api/**)
-* **Authentication**: Users authenticate via **Firebase Authentication** and obtain a Firebase token.
-* **Request Flow**: Authenticated requests from the Cloudflare-hosted frontend reach the GCP Load Balancer.
-* **Security Inspection**: After WAF inspection by Cloud Armour, the **Load Balancer** routes `/api/**` traffic to the **API Gateway**.
-* **Token Validation**: The API Gateway validates the Firebase JWT before invoking the Cloud Run backend.
+#### API & Processing Request Pipeline (all routes except /admin)
+* **Authentication**: Users authenticate via **Firebase Authentication** and obtain a Firebase token. Processing clients obtain a short-lived ephemeral token from `GET /processing/v1/start` using their Organisation API Key.
+* **Request Flow**: Requests from the Cloudflare-hosted frontend (or customer servers) reach the GCP Load Balancer.
+* **Security Inspection**: Cloud Armour applies WAF rules, rate limits, and DDoS protection before the Load Balancer routes traffic to the **App Backend Service** (direct Cloud Run Serverless NEG).
+* **Token Validation**: Django validates every token independently — Firebase JWTs via `FirebaseAuthentication`, ephemeral tokens via `EphemeralTokenAuthentication`, and the processing pipeline key via header comparison.
 
 #### Admin Request Pipeline (/admin, /admin/**)
 * **Authentication**: Admin users authenticate via **Google IAP (Identity-Aware Proxy)** using their Google accounts.
@@ -135,7 +135,6 @@ The architecture implements two distinct routing paths based on the request type
   4. **SQLi checks bypassed** (Priority 1800) to prevent false positives on IAP OAuth tokens
 * **Routing**: The **Load Balancer** routes `/admin/**` traffic to the **IAP Backend Service**.
 * **IAP Verification**: IAP validates the user's Google identity and checks IAM permissions (`roles/iap.httpsResourceAccessor`) before allowing direct access to Cloud Run.
-* **Bypass API Gateway**: Admin traffic bypasses the API Gateway entirely, going directly from IAP to Cloud Run.
 * **Security Model**: Multi-layer defense combining IAP authentication, selective WAF protection, and Django's built-in security controls.
 
 #### Resource Integration

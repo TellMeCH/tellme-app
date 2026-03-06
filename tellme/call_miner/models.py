@@ -586,6 +586,12 @@ class Organization(models.Model, ConversationTrendMixin):
     ticket_account = models.EmailField(max_length=255, null=True)
     ticket_key_encrypted = models.CharField(max_length=512, null=True)
     ticket_project = models.CharField(max_length=100, null=True)
+    cx_system_org_id = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="External CX system organization UUID (e.g. Genesys Cloud org ID)",
+    )
 
     def __str__(self):
         return self.name
@@ -671,6 +677,53 @@ class OrganizationAPIKey(models.Model):
 
         # Return the plaintext so the caller can store it securely
         return plain_key
+
+
+class EphemeralProcessingToken(models.Model):
+    """
+    Short-lived token issued by /processing/v1/start/ in exchange for an Organization API Key.
+    Used to authenticate direct calls to /processing/v1/queue/ and /ws/audiohook/, which bypass
+    the API Gateway and therefore cannot carry the long-lived Org API Key.
+    """
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='ephemeral_tokens'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    TOKEN_TTL_MINUTES = 15
+
+    class Meta:
+        verbose_name = 'Ephemeral Processing Token'
+        verbose_name_plural = 'Ephemeral Processing Tokens'
+
+    def __str__(self):
+        return f"{self.organization.name} - expires {self.expires_at.isoformat()}"
+
+    @classmethod
+    def create_for_organization(cls, organization, ttl_minutes=TOKEN_TTL_MINUTES):
+        """
+        Generate a new ephemeral token for the given organization.
+
+        :param organization: The Organization instance
+        :param ttl_minutes: Token lifetime in minutes (default: TOKEN_TTL_MINUTES)
+        :return: The plaintext token (to be returned to the caller once and never stored)
+        """
+        plain_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(
+            (settings.HASH_KEY + plain_token + settings.HASH_KEY).encode('utf-8')
+        ).hexdigest()
+
+        cls.objects.create(
+            token_hash=token_hash,
+            organization=organization,
+            expires_at=timezone.now() + datetime.timedelta(minutes=ttl_minutes)
+        )
+
+        return plain_token
 
 
 class Topic(MetaSummaryAbstractModel, ConversationStatsAbstractModel, ConversationTrendMixin):

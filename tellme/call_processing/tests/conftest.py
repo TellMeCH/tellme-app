@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime, timedelta
 from rest_framework.test import APIClient
 from tellme.call_miner.models import (
-    Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation
+    Organization, User, Agent, Topic, SuggestedTopic, Customer, OrganizationAPIKey, Conversation,
+    EphemeralProcessingToken
 )
 
 
@@ -105,6 +106,18 @@ def mock_cloud_tasks():
     with patch("tellme.call_processing.utils.processing_utils.create_processing_task") as mock_create:
         mock_create.return_value = None
         yield mock_create
+
+
+@pytest.fixture
+def mock_agent_validity():
+    """
+    Mocks out db_handler.check_agent_validity to return a passing result.
+    Required for consumer tests that run _finalize_recording_sync in a thread-pool
+    executor, where an inner with-patch() context in the async test method is not
+    reliably visible to the executor thread.
+    """
+    with patch("tellme.call_processing.utils.db_handler.check_agent_validity", return_value=(True, "OK")) as mock:
+        yield mock
 
 @pytest.fixture
 def mock_summarization_tasks():
@@ -375,6 +388,16 @@ def mock_langfuse():
     the mocks are in place BEFORE any modules import langfuse.
     """
     return _mock_langfuse_instance
+
+
+@pytest.fixture
+def ephemeral_token(setup_db):
+    """
+    Creates a valid EphemeralProcessingToken for the test organization and returns the raw token.
+    Use with: api_client.credentials(HTTP_X_TELLME_SESSION_TOKEN=f'Bearer {ephemeral_token}')
+    """
+    org = setup_db[0]
+    return EphemeralProcessingToken.create_for_organization(org)
 
 
 @pytest.fixture

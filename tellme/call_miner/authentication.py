@@ -1,5 +1,3 @@
-import json
-import base64
 import logging
 from rest_framework import authentication, exceptions
 from django.contrib.auth import get_user_model
@@ -31,43 +29,22 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
             id_token = auth_header[len(self.HEADER_SCHEMA):]
             logger.debug("Got ID Token")
 
-            if settings.TELLME_ENV == 'dev':
-                try:
-                    decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
-                    uid = decoded_token['uid']
-                    user_email = decoded_token['email']
-                    email_verified = decoded_token.get('email_verified', False)
-                    logger.debug("Successfully decoded token")
+            try:
+                decoded_token = firebase_auth.verify_id_token(id_token, check_revoked=True)
+                uid = decoded_token['uid']
+                user_email = decoded_token['email']
+                email_verified = decoded_token.get('email_verified', False)
+                logger.debug("Successfully decoded token")
 
-                except firebase_exceptions.FirebaseError as e:
-                    logger.warning("Invalid Firebase token", exc_info=True)
-                    raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
-                except firebase_auth.RevokedIdTokenError as e:
-                    logger.warning("JWT token has been revoked", exc_info=True)
-                    raise exceptions.AuthenticationFailed(f'Revoked Firebase token - {e}')
-                except Exception as e:
-                    logger.warning("Unknown exception while verifying token", exc_info=True)
-                    raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
-
-            else:  # Staging and Prod
-                user_info_encoded = request.headers.get('x-apigateway-api-userinfo')
-                if not user_info_encoded:
-                    logger.warning("User info header missing", exc_info=True)
-                    raise exceptions.AuthenticationFailed("User info header missing")
-
-                try:
-                    decoded_bytes = base64.urlsafe_b64decode(user_info_encoded + "==")
-                    user_info = json.loads(decoded_bytes.decode("utf-8"))
-                    uid = user_info.get("user_id")
-                    user_email = user_info.get("email")
-                    email_verified = user_info.get("email_verified", False)
-                    logger.debug("Successfully decoded header")
-                    if not uid:
-                        logger.warning("No UID found in token", exc_info=True)
-                        raise exceptions.AuthenticationFailed("No UID found in token")
-                except Exception as e:
-                    logger.warning("Unknown exception while decoding user info header", exc_info=True)
-                    raise exceptions.AuthenticationFailed(f'Invalid User Info Header - {e}')
+            except firebase_exceptions.FirebaseError as e:
+                logger.warning("Invalid Firebase token", exc_info=True)
+                raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
+            except firebase_auth.RevokedIdTokenError as e:
+                logger.warning("JWT token has been revoked", exc_info=True)
+                raise exceptions.AuthenticationFailed(f'Revoked Firebase token - {e}')
+            except Exception as e:
+                logger.warning("Unknown exception while verifying token", exc_info=True)
+                raise exceptions.AuthenticationFailed(f'Invalid Firebase token - {e}')
 
             User = get_user_model()
             try:

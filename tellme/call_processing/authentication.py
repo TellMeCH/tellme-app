@@ -4,7 +4,7 @@ from rest_framework import authentication, exceptions
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.conf import settings
-from tellme.call_miner.models import OrganizationAPIKey
+from tellme.call_miner.models import OrganizationAPIKey, EphemeralProcessingToken
 
 logger = logging.getLogger(__name__)
 
@@ -80,4 +80,44 @@ class ProcessingKeyAuthentication(authentication.BaseAuthentication):
                     f'Invalid API token. Probably processing pipeline account has not been created. - {e}'
                 )
         return None
+
+
+class EphemeralTokenAuthentication(authentication.BaseAuthentication):
+    """
+    Authenticates requests carrying a short-lived session token issued by /processing/v1/start/.
+    Expected header format: 'X-Tellme-Session-Token: Bearer <token>'
+
+    Used by endpoints that bypass the API Gateway (direct Cloud Run access), specifically
+    /processing/v1/queue/ and /ws/audiohook/.
+    """
+    KEYWORD = 'Bearer'
+
+    def authenticate(self, request):
+        auth_header = request.META.get('HTTP_X_TELLME_SESSION_TOKEN', None)
+        if not auth_header:
+            logger.debug("No X-Tellme-Session-Token header found")
+            return None
+
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0] != self.KEYWORD:
+            logger.debug("Invalid X-Tellme-Session-Token header format")
+            return None
+
+        plain_token = parts[1]
+        token_hash = hashlib.sha256(
+            (settings.HASH_KEY + plain_token + settings.HASH_KEY).encode('utf-8')
+        ).hexdigest()
+
+        try:
+            ephemeral_token = EphemeralProcessingToken.objects.get(token_hash=token_hash)
+        except EphemeralProcessingToken.DoesNotExist:
+            logger.debug("No matching ephemeral token found")
+            raise exceptions.AuthenticationFailed("Invalid session token.")
+
+        if ephemeral_token.expires_at < timezone.now():
+            logger.debug(f"Ephemeral token expired at {ephemeral_token.expires_at}")
+            raise exceptions.AuthenticationFailed("Session token expired.")
+
+        logger.debug(f"Ephemeral token authenticated for organization {ephemeral_token.organization.id}")
+        return ephemeral_token.organization, None
 
