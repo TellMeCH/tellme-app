@@ -720,7 +720,10 @@ class TestSmokeTestCloudRunWithLogs:
         client = tasks_v2.CloudTasksClient()
         parent = client.queue_path(settings.GOOGLE_CLOUD_PROJECT, settings.REGION, settings.PROCESSING_QUEUE_NAME)
         for task in client.list_tasks(parent=parent):
-            body = json.loads(task.http_request.body.decode("utf-8"))
+            raw = task.http_request.body
+            if not raw:
+                continue
+            body = json.loads(raw.decode("utf-8"))
             if (body.get("organization_id") == self.org_id) or (body.get("agent_id") == self.agent_id):
                 client.delete_task(name=task.name)
                 logger.info(f"Deleted test task referencing org/agent: {task.name}")
