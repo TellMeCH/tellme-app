@@ -70,7 +70,7 @@ jobs:
           sleep 10
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -345,7 +345,7 @@ jobs:
           echo '${{ steps.secrets.outputs.firebase_key }}' > /tmp/firebase-service-account.json
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
