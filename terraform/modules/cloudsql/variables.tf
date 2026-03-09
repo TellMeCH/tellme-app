@@ -81,3 +81,8 @@ variable "enable_automated_backups" {
   default     = false
 }
 
+variable "tellme_env" {
+  type        = string
+  description = "Environment name (dev/staging/prod). Used to gate prod-only resources such as Backup DR."
+}
+

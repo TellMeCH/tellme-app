@@ -31,7 +31,8 @@ locals {
     "identitytoolkit.googleapis.com",
     "iap.googleapis.com",
     "apikeys.googleapis.com",
-    "cloudbilling.googleapis.com"
+    "cloudbilling.googleapis.com",
+    "backupdr.googleapis.com"
   ]
 }
 

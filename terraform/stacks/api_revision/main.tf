@@ -90,6 +90,7 @@ module "cloudsql" {
   activate_alerts          = var.activate_alerts
   alert_email_addresses    = var.alert_email_addresses
   enable_automated_backups = var.enable_automated_backups
+  tellme_env               = var.tellme_env
 }
 
 # Cloud Tasks module
