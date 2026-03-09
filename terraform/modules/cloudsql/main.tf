@@ -2,7 +2,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 5.0"
+      version = ">= 6.0"
     }
     postgresql = {
       source  = "cyrilgdn/postgresql"
@@ -159,6 +159,74 @@ resource "postgresql_default_privileges" "app_user_future_sequences" {
   privileges  = ["USAGE", "SELECT", "UPDATE"]
 
   depends_on = [postgresql_role.app_user]
+}
+
+# ==============================================================================
+# Google Cloud Backup and DR Service (Enhanced Backups) — Production Only
+# ==============================================================================
+# ISO 27001-aligned immutable weekly backups, created only when tellme_env == "prod".
+#
+#   Vault       ← enforces 30-day minimum retention (WORM / immutability)
+#   Plan        ← weekly schedule (Sunday 02:00–06:00 UTC), 30-day retention
+#   Association ← links this Cloud SQL instance to the plan
+#
+# Required API: backupdr.googleapis.com (enabled via environments/infra/projects.tf)
+# ==============================================================================
+
+resource "google_backup_dr_backup_vault" "cloudsql_vault" {
+  count    = var.tellme_env == "prod" ? 1 : 0
+  project  = var.project_id
+  location = var.region
+
+  backup_vault_id = "${var.instance_name}-backup-vault"
+
+  # Enforced minimum retention satisfies ISO 27001 immutability requirement.
+  # Backups cannot be deleted before this duration expires (30 days = 2 592 000 s).
+  backup_minimum_enforced_retention_duration = "2592000s"
+
+  labels = {
+    environment = var.tellme_env
+    managed_by  = "terraform"
+  }
+}
+
+resource "google_backup_dr_backup_plan" "cloudsql_plan" {
+  count          = var.tellme_env == "prod" ? 1 : 0
+  project        = var.project_id
+  location       = var.region
+  backup_plan_id = "${var.instance_name}-backup-plan"
+  resource_type  = "cloudsql.googleapis.com/Instance"
+  backup_vault   = google_backup_dr_backup_vault.cloudsql_vault[0].id
+
+  backup_rules {
+    rule_id               = "weekly-sunday"
+    backup_retention_days = 30
+
+    standard_schedule {
+      recurrence_type = "WEEKLY"
+      days_of_week    = ["SUNDAY"]
+      time_zone       = "UTC"
+
+      # Window: 02:00–06:00 UTC every Sunday (low-traffic period)
+      backup_window {
+        start_hour_of_day = 2
+        end_hour_of_day   = 6
+      }
+    }
+  }
+}
+
+resource "google_backup_dr_backup_plan_association" "cloudsql_association" {
+  count                      = var.tellme_env == "prod" ? 1 : 0
+  project                    = var.project_id
+  location                   = var.region
+  backup_plan_association_id = "${var.instance_name}-bpa"
+  resource_type              = "cloudsql.googleapis.com/Instance"
+
+  # Full GCP resource name for the Cloud SQL instance.
+  resource = "//sqladmin.googleapis.com/projects/${var.project_id}/instances/${google_sql_database_instance.postgres_instance.name}"
+
+  backup_plan = google_backup_dr_backup_plan.cloudsql_plan[0].name
 }
 
 # ==============================================================================
