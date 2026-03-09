@@ -227,6 +227,14 @@ resource "google_project_iam_member" "monitoring_notification_channel_editor" {
   member  = "serviceAccount:${google_service_account.github[each.key].email}"
 }
 
+# Backup DR admin (for creating vaults, plans, and associations)
+resource "google_project_iam_member" "backupdr_admin" {
+  for_each = local.sa_envs
+  project = module.project[each.key].project_id
+  role    = "roles/backupdr.admin"
+  member  = "serviceAccount:${google_service_account.github[each.key].email}"
+}
+
 # Monitoring Alert Policy Editor (for database alerts)
 resource "google_project_iam_member" "monitoring_alert_policy_editor" {
   for_each = local.sa_envs
