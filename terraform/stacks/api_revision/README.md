@@ -14,6 +14,7 @@ graph TB
         EndUser[End Users]
         AdminUser[App Superusers]
         Devs[Developers - BYOD w/ MDM]
+        Genesys[Genesys CX Platform<br/>AudioHook Client]
     end
 
     subgraph Edge_Zone [Edge Layer: Cloudflare]
@@ -22,7 +23,7 @@ graph TB
 
     subgraph Identity_Layer [ID & Access Management]
         Firebase[Firebase Auth<br/>API Users]
-        GoogleIAP[Google IAP<br/>App Superusers]
+        GoogleIAP[Google IAP<br/>App Superusers] 
         IAM[GCP IAM & WIF<br/>CI/CD]
     end
 
@@ -53,6 +54,7 @@ graph TB
     EndUser --> CFW
     AdminUser --> GoogleIAP
     Devs --> IAM
+    Genesys --> SSL
 
     %% API path
     CFW --> SSL
@@ -66,6 +68,9 @@ graph TB
     CA -."/admin/** traffic".-> IAPBackend
     IAPBackend --> GoogleIAP
     IAPBackend --> CloudRun
+
+    %% AudioHook path
+    CA --"/ws/audiohook/ (WSS)"--> AppBackend
 
     %% CI/CD path
     IAM -.WIF OIDC.-> CloudRun
@@ -99,6 +104,7 @@ graph TB
 * **Access Control**:
   * **API Access**: User identity for API endpoints is managed via **Firebase Authentication**, validated by Django's `FirebaseAuthentication` class on every request.
   * **Admin Access**: The Django admin interface (`/admin`) is protected by **Google Identity-Aware Proxy (IAP)**, which requires Google account authentication and IAM role membership (`roles/iap.httpsResourceAccessor`). This provides enterprise-grade access control with centralized identity management.
+  * **AudioHook Access**: The `/ws/audiohook/` WebSocket endpoint is authenticated via **HMAC-SHA256 HTTP Signatures (RFC 8941)**. Each request must carry a signature computed from the Organisation API Key and a shared `CX_CLIENT_SECRET`. Django validates the signature on every connection upgrade before any audio data is accepted.
   * **Service Access**: Internal service access is strictly governed by **GCP IAM roles**, ensuring that the backend service account has the minimum necessary permissions to access databases, buckets, and secrets.
 * **Web Application Firewall**: **Cloud Armour** provides layered protection with distinct security policies for API and admin traffic:
   * **All Traffic Protection**: Full WAF rule enforcement for every route via the single `api_backend` Backend Service — SQLi, XSS, LFI, RCE, rate limiting, malicious IP blocking, and suspicious user agent detection. `/processing/v1/start` has an additional dedicated rate-limit rule (10 req/min per IP, priority 1050) to prevent ephemeral token generation abuse.
@@ -124,6 +130,13 @@ The architecture implements two distinct routing paths based on the request type
 * **Request Flow**: Requests from the Cloudflare-hosted frontend (or customer servers) reach the GCP Load Balancer.
 * **Security Inspection**: Cloud Armour applies WAF rules, rate limits, and DDoS protection before the Load Balancer routes traffic to the **App Backend Service** (direct Cloud Run Serverless NEG).
 * **Token Validation**: Django validates every token independently — Firebase JWTs via `FirebaseAuthentication`, ephemeral tokens via `EphemeralTokenAuthentication`, and the processing pipeline key via header comparison.
+
+#### AudioHook WebSocket Pipeline (/ws/audiohook/)
+* **Caller**: The Genesys CX platform connects directly to `wss://api.tell-me.ch/ws/audiohook/` to stream call audio in real time.
+* **Transport**: Standard WebSocket upgrade over TLS 1.2+ — the same Load Balancer and SSL termination used by all other traffic. There is no separate endpoint or direct Cloud Run URL; the connection must arrive via the Load Balancer.
+* **WAF**: Cloud Armour explicitly allowlists `/ws/audiohook` in its path allowlist rule (priority 300) and applies the full WAF rule set (SQLi, XSS, LFI, RCE, rate limiting, DDoS protection) before the connection reaches Cloud Run.
+* **Authentication**: Django validates an **HMAC-SHA256 HTTP Signature (RFC 8941)** on the WebSocket upgrade request. The signature is computed by Genesys from the Organisation API Key (`apiKey` header) and a shared `CX_CLIENT_SECRET`. The `cx_system_org_id` in the open message is matched against the organisation record to bind the session to the correct tenant.
+* **Cloud Run IAM**: Cloud Run is configured with `allUsers` as invoker because Serverless NEGs cannot inject OIDC tokens. The HMAC validation in Django is the sole authentication gate for this endpoint.
 
 #### Admin Request Pipeline (/admin, /admin/**)
 * **Authentication**: Admin users authenticate via **Google IAP (Identity-Aware Proxy)** using their Google accounts.
