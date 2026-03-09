@@ -195,7 +195,7 @@ resource "google_backup_dr_backup_plan" "cloudsql_plan" {
   project        = var.project_id
   location       = var.region
   backup_plan_id = "${var.instance_name}-backup-plan"
-  resource_type  = "cloudsql.googleapis.com/Instance"
+  resource_type  = "sqladmin.googleapis.com/Instance"
   backup_vault   = google_backup_dr_backup_vault.cloudsql_vault[0].id
 
   backup_rules {
@@ -221,7 +221,7 @@ resource "google_backup_dr_backup_plan_association" "cloudsql_association" {
   project                    = var.project_id
   location                   = var.region
   backup_plan_association_id = "${var.instance_name}-bpa"
-  resource_type              = "cloudsql.googleapis.com/Instance"
+  resource_type              = "sqladmin.googleapis.com/Instance"
 
   # Full GCP resource name for the Cloud SQL instance.
   resource = "//sqladmin.googleapis.com/projects/${var.project_id}/instances/${google_sql_database_instance.postgres_instance.name}"
