@@ -207,10 +207,10 @@ resource "google_backup_dr_backup_plan" "cloudsql_plan" {
       days_of_week    = ["SUNDAY"]
       time_zone       = "UTC"
 
-      # Window: 02:00–06:00 UTC every Sunday (low-traffic period)
+      # Window: 02:00–08:00 UTC every Sunday (min 6 h required by Backup DR)
       backup_window {
         start_hour_of_day = 2
-        end_hour_of_day   = 6
+        end_hour_of_day   = 8
       }
     }
   }
