@@ -3,4 +3,4 @@ google-cloud-secret-manager
 functions-framework
 pandas
 django-environ
-langfuse<3.0.0
+langfuse<5.0.0
