@@ -28,7 +28,7 @@ dependencies = [
     "daphne>=4.2.1",
     "django-cors-headers>=4.9.0",
     "groq>=0.31.1",
-    "google-genai>=1.38.0",
+    "google-genai>=1.72.0",
     "mailersend<2.0.0",
     "python-dateutil>=2.9.0.post0",
     "dateparser>=1.2.2",
