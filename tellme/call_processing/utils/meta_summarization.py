@@ -36,11 +36,14 @@ MODEL_TOKEN_LIMITS = {
     # Note: Initial context is 1M, distinct from the 2M limit of 1.5 Pro.
     "vertex_ai/gemini-3-pro-preview": 1048576,
 
-    # --- Google Gemini 2.5 Family (Current Stable) ---
-    # The production standard as of late 2025.
+    # --- Google Gemini 3.1 Family (Current) ---
+    "vertex_ai/gemini-3-flash-preview": 1048576,
+    "vertex_ai/gemini-3.1-flash-lite-preview": 1048576,
+
+    # --- Google Gemini 2.5 Family ---
     "vertex_ai/gemini-2.5-pro": 1048576,
     "vertex_ai/gemini-2.5-flash": 1048576,
-    "vertex_ai/gemini-2.5-flash-lite": 1048576, # High throughput, lower cost
+    "vertex_ai/gemini-2.5-flash-lite": 1048576,
 
     # --- Google Gemini Previous Generations ---
     # Kept for legacy compatibility; 1.5 Pro still offers the largest context (2M).
