@@ -22,7 +22,7 @@ TRANSCRIPTION_MODEL_NAME_DEEPGRAM: str = 'whisper-medium'
 TRANSCRIPTION_MODEL_NAME_GROQ: str = 'whisper-large-v3'
 
 DIARIZATION_CONFIG = {
-    "model": "vertex_ai/gemini-2.5-flash-lite",
+    "model": "vertex_ai/gemini-3.1-flash-lite-preview",
     "fallback_model": "openai/gpt-4o-mini",
     "temperature": 0.2
 }
@@ -91,7 +91,7 @@ ENRICHMENT_PIPELINE = [
         "uses_redacted": False,
         "to_compile": [],
         "config": {
-            "model": {"openai": "gpt-4o-mini", "vertexai": "vertex_ai/gemini-2.5-flash-lite"},
+            "model": {"openai": "gpt-4o-mini", "vertexai": "vertex_ai/gemini-3.1-flash-lite-preview"},
             "temperature": 0.2,
             "response_format": {
                 "type": "json_schema",
@@ -222,7 +222,7 @@ ENRICHMENT_PIPELINE = [
         "uses_redacted": True,
         "to_compile": ["topics_string", "suggested_string", "organization_language"],
         "config": {
-            "model": {"openai": "gpt-4o-mini", "vertexai": "vertex_ai/gemini-2.5-flash-lite"},
+            "model": {"openai": "gpt-4o-mini", "vertexai": "vertex_ai/gemini-3.1-flash-lite-preview"},
             "temperature": 0.2,
             "response_format": {
                 "type": "json_schema",
@@ -280,7 +280,7 @@ ENRICHMENT_PIPELINE = [
 ]
 
 # Meta-summarization fallback model (Gemini backup for OpenAI)
-META_SUMMARIZATION_MODEL_GEMINI: str = 'vertex_ai/gemini-2.5-flash'
+META_SUMMARIZATION_MODEL_GEMINI: str = 'vertex_ai/gemini-3-flash-preview'
 
 SUMMARIZER_PROMPTS = {
     'summary_mining': """
