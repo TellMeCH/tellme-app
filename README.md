@@ -8,6 +8,8 @@ TellMe aims to help companies understand their customer base by analyzing custom
 Using AI, call recordings are transcribed, clustered, and summarized, to provide insights at the level of the company, the customer, or the topic cluster.
 This application provides endpoints to serve this data according to different user roles, as well as the routines for processing every call and storing its results.
 Its CI/CD is designed to deploy the application to GCP's Cloud Run, where a frontend will be able to reach it.
+
+This project is not currently active.
 ---
 
 ## Local Execution
