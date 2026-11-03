@@ -51,7 +51,7 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-django>=4.11.1",
     "pytest-mock>=3.15.1",
-    "pytz>=2025.2",
+    "pytz>=2026.1.post1",
 ]
 
 [tool.hatch.build.targets.wheel]
