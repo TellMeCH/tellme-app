@@ -33,7 +33,7 @@
     "uuid": "8.3.2"
   },
   "devDependencies": {
-    "@aws-sdk/client-transcribe-streaming": "3.529.0",
+    "@aws-sdk/client-transcribe-streaming": "3.1003.0",
     "@types/aws-sdk": "2.7.0",
     "@types/bytebuffer": "5.0.44",
     "@types/jest": "28.1.8",
